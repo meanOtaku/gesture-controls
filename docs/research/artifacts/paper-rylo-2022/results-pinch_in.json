@@ -1,0 +1,5592 @@
+{
+ "trees": {
+  "17": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 115,
+     "gestures": 128,
+     "falseActivations": 59,
+     "perHour": 103.95172511035818,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 44,
+      "unlabelled": 2,
+      "still": 1,
+      "pinch_hold": 11,
+      "pinch_out": 1
+     },
+     "unseenCaught": 54,
+     "unseenGestures": 66,
+     "medianLatencyMs": 910.759703
+    },
+    {
+     "threshold": 0.35,
+     "caught": 113,
+     "gestures": 128,
+     "falseActivations": 43,
+     "perHour": 75.7614267753458,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 33,
+      "pinch_hold": 9,
+      "unlabelled": 1
+     },
+     "unseenCaught": 52,
+     "unseenGestures": 66,
+     "medianLatencyMs": 919.125852
+    },
+    {
+     "threshold": 0.4,
+     "caught": 112,
+     "gestures": 128,
+     "falseActivations": 28,
+     "perHour": 49.333022086271676,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 20,
+      "pinch_hold": 7,
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.581345
+    },
+    {
+     "threshold": 0.45,
+     "caught": 110,
+     "gestures": 128,
+     "falseActivations": 24,
+     "perHour": 42.28544750251858,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 17,
+      "pinch_hold": 6,
+      "unlabelled": 1
+     },
+     "unseenCaught": 49,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.581345
+    },
+    {
+     "threshold": 0.5,
+     "caught": 108,
+     "gestures": 128,
+     "falseActivations": 16,
+     "perHour": 28.190298335012386,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 10,
+      "pinch_hold": 5,
+      "unlabelled": 1
+     },
+     "unseenCaught": 47,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.7107055
+    },
+    {
+     "threshold": 0.55,
+     "caught": 103,
+     "gestures": 128,
+     "falseActivations": 15,
+     "perHour": 26.428404689074114,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 9,
+      "pinch_hold": 5,
+      "unlabelled": 1
+     },
+     "unseenCaught": 42,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.594811
+    },
+    {
+     "threshold": 0.6,
+     "caught": 99,
+     "gestures": 128,
+     "falseActivations": 10,
+     "perHour": 17.61893645938274,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 7,
+      "pinch_hold": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 39,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.8266
+    },
+    {
+     "threshold": 0.65,
+     "caught": 94,
+     "gestures": 128,
+     "falseActivations": 4,
+     "perHour": 7.0475745837530965,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 34,
+     "unseenGestures": 66,
+     "medianLatencyMs": 934.6866465
+    },
+    {
+     "threshold": 0.7,
+     "caught": 91,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5237872918765483,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 31,
+     "unseenGestures": 66,
+     "medianLatencyMs": 935.546693
+    },
+    {
+     "threshold": 0.75,
+     "caught": 89,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 29,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.8266
+    },
+    {
+     "threshold": 0.8,
+     "caught": 84,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 25,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.400794
+    },
+    {
+     "threshold": 0.85,
+     "caught": 78,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 20,
+     "unseenGestures": 66,
+     "medianLatencyMs": 929.288082
+    },
+    {
+     "threshold": 0.9,
+     "caught": 68,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 12,
+     "unseenGestures": 66,
+     "medianLatencyMs": 924.6035375
+    },
+    {
+     "threshold": 0.95,
+     "caught": 55,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 8,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.206777
+    },
+    {
+     "threshold": 0.96,
+     "caught": 48,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 3,
+     "unseenGestures": 66,
+     "medianLatencyMs": 928.3690725
+    },
+    {
+     "threshold": 0.97,
+     "caught": 43,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 1,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.206777
+    },
+    {
+     "threshold": 0.98,
+     "caught": 31,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.478162
+    },
+    {
+     "threshold": 0.99,
+     "caught": 21,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.684528
+    },
+    {
+     "threshold": 0.995,
+     "caught": 11,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.478162
+    },
+    {
+     "threshold": 0.999,
+     "caught": 3,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.478162
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.75,
+     "caught": 89,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 29,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.8266
+    },
+    "5.0": {
+     "threshold": 0.7,
+     "caught": 91,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5237872918765483,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 31,
+     "unseenGestures": 66,
+     "medianLatencyMs": 935.546693
+    },
+    "10.0": {
+     "threshold": 0.65,
+     "caught": 94,
+     "gestures": 128,
+     "falseActivations": 4,
+     "perHour": 7.0475745837530965,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 34,
+     "unseenGestures": 66,
+     "medianLatencyMs": 934.6866465
+    }
+   },
+   "seconds": 63,
+   "features": 2733,
+   "trainMoments": 3569
+  },
+  "18": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 112,
+     "gestures": 128,
+     "falseActivations": 56,
+     "perHour": 98.66604417254335,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 43,
+      "unlabelled": 2,
+      "still": 1,
+      "pinch_hold": 9,
+      "pinch_out": 1
+     },
+     "unseenCaught": 52,
+     "unseenGestures": 66,
+     "medianLatencyMs": 892.7885100000001
+    },
+    {
+     "threshold": 0.35,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 41,
+     "perHour": 72.23763948346924,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 33,
+      "pinch_hold": 6,
+      "pinch_out": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 893.406967
+    },
+    {
+     "threshold": 0.4,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 33,
+     "perHour": 58.14249031596305,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 26,
+      "pinch_hold": 6,
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 893.8266
+    },
+    {
+     "threshold": 0.45,
+     "caught": 108,
+     "gestures": 128,
+     "falseActivations": 22,
+     "perHour": 38.761660210642034,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 15,
+      "pinch_hold": 6,
+      "unlabelled": 1
+     },
+     "unseenCaught": 48,
+     "unseenGestures": 66,
+     "medianLatencyMs": 908.990848
+    },
+    {
+     "threshold": 0.5,
+     "caught": 105,
+     "gestures": 128,
+     "falseActivations": 17,
+     "perHour": 29.952191980950662,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 11,
+      "pinch_hold": 5,
+      "unlabelled": 1
+     },
+     "unseenCaught": 45,
+     "unseenGestures": 66,
+     "medianLatencyMs": 917.999872
+    },
+    {
+     "threshold": 0.55,
+     "caught": 101,
+     "gestures": 128,
+     "falseActivations": 13,
+     "perHour": 22.904617397197566,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 8,
+      "pinch_hold": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 41,
+     "unseenGestures": 66,
+     "medianLatencyMs": 918.482365
+    },
+    {
+     "threshold": 0.6,
+     "caught": 95,
+     "gestures": 128,
+     "falseActivations": 9,
+     "perHour": 15.857042813444469,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 7,
+      "pinch_hold": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 36,
+     "unseenGestures": 66,
+     "medianLatencyMs": 919.125852
+    },
+    {
+     "threshold": 0.65,
+     "caught": 94,
+     "gestures": 128,
+     "falseActivations": 4,
+     "perHour": 7.0475745837530965,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 35,
+     "unseenGestures": 66,
+     "medianLatencyMs": 921.302007
+    },
+    {
+     "threshold": 0.7,
+     "caught": 90,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5237872918765483,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 31,
+     "unseenGestures": 66,
+     "medianLatencyMs": 921.302007
+    },
+    {
+     "threshold": 0.75,
+     "caught": 85,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 27,
+     "unseenGestures": 66,
+     "medianLatencyMs": 919.125852
+    },
+    {
+     "threshold": 0.8,
+     "caught": 82,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 23,
+     "unseenGestures": 66,
+     "medianLatencyMs": 911.2026805
+    },
+    {
+     "threshold": 0.85,
+     "caught": 77,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 19,
+     "unseenGestures": 66,
+     "medianLatencyMs": 906.260924
+    },
+    {
+     "threshold": 0.9,
+     "caught": 70,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 14,
+     "unseenGestures": 66,
+     "medianLatencyMs": 912.130398
+    },
+    {
+     "threshold": 0.95,
+     "caught": 53,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 4,
+     "unseenGestures": 66,
+     "medianLatencyMs": 906.260924
+    },
+    {
+     "threshold": 0.96,
+     "caught": 52,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 4,
+     "unseenGestures": 66,
+     "medianLatencyMs": 912.130398
+    },
+    {
+     "threshold": 0.97,
+     "caught": 45,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 3,
+     "unseenGestures": 66,
+     "medianLatencyMs": 916.105792
+    },
+    {
+     "threshold": 0.98,
+     "caught": 37,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 2,
+     "unseenGestures": 66,
+     "medianLatencyMs": 919.125852
+    },
+    {
+     "threshold": 0.99,
+     "caught": 20,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 912.130398
+    },
+    {
+     "threshold": 0.995,
+     "caught": 9,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 917.999872
+    },
+    {
+     "threshold": 0.999,
+     "caught": 2,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 863.6034525
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.75,
+     "caught": 85,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 27,
+     "unseenGestures": 66,
+     "medianLatencyMs": 919.125852
+    },
+    "5.0": {
+     "threshold": 0.7,
+     "caught": 90,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5237872918765483,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 31,
+     "unseenGestures": 66,
+     "medianLatencyMs": 921.302007
+    },
+    "10.0": {
+     "threshold": 0.65,
+     "caught": 94,
+     "gestures": 128,
+     "falseActivations": 4,
+     "perHour": 7.0475745837530965,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 35,
+     "unseenGestures": 66,
+     "medianLatencyMs": 921.302007
+    }
+   },
+   "seconds": 63,
+   "features": 2733,
+   "trainMoments": 3569
+  }
+ },
+ "trees+spectral": {
+  "17": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 112,
+     "gestures": 128,
+     "falseActivations": 33,
+     "perHour": 58.14249031596305,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 26,
+      "pinch_hold": 6,
+      "unlabelled": 1
+     },
+     "unseenCaught": 53,
+     "unseenGestures": 66,
+     "medianLatencyMs": 905.63043
+    },
+    {
+     "threshold": 0.35,
+     "caught": 113,
+     "gestures": 128,
+     "falseActivations": 26,
+     "perHour": 45.80923479439513,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 20,
+      "pinch_hold": 5,
+      "unlabelled": 1
+     },
+     "unseenCaught": 53,
+     "unseenGestures": 66,
+     "medianLatencyMs": 906.260924
+    },
+    {
+     "threshold": 0.4,
+     "caught": 113,
+     "gestures": 128,
+     "falseActivations": 17,
+     "perHour": 29.952191980950662,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 12,
+      "pinch_hold": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 53,
+     "unseenGestures": 66,
+     "medianLatencyMs": 906.846866
+    },
+    {
+     "threshold": 0.45,
+     "caught": 110,
+     "gestures": 128,
+     "falseActivations": 15,
+     "perHour": 26.428404689074114,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 11,
+      "pinch_hold": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 50,
+     "unseenGestures": 66,
+     "medianLatencyMs": 909.623286
+    },
+    {
+     "threshold": 0.5,
+     "caught": 108,
+     "gestures": 128,
+     "falseActivations": 16,
+     "perHour": 28.190298335012386,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 11,
+      "pinch_hold": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 48,
+     "unseenGestures": 66,
+     "medianLatencyMs": 909.623286
+    },
+    {
+     "threshold": 0.55,
+     "caught": 106,
+     "gestures": 128,
+     "falseActivations": 14,
+     "perHour": 24.666511043135838,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 8,
+      "pinch_hold": 5,
+      "unlabelled": 1
+     },
+     "unseenCaught": 46,
+     "unseenGestures": 66,
+     "medianLatencyMs": 909.623286
+    },
+    {
+     "threshold": 0.6,
+     "caught": 103,
+     "gestures": 128,
+     "falseActivations": 6,
+     "perHour": 10.571361875629645,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 3,
+      "pinch_hold": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 43,
+     "unseenGestures": 66,
+     "medianLatencyMs": 909.647756
+    },
+    {
+     "threshold": 0.65,
+     "caught": 103,
+     "gestures": 128,
+     "falseActivations": 3,
+     "perHour": 5.285680937814822,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 43,
+     "unseenGestures": 66,
+     "medianLatencyMs": 909.647756
+    },
+    {
+     "threshold": 0.7,
+     "caught": 99,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 39,
+     "unseenGestures": 66,
+     "medianLatencyMs": 917.999872
+    },
+    {
+     "threshold": 0.75,
+     "caught": 96,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 36,
+     "unseenGestures": 66,
+     "medianLatencyMs": 924.6035375
+    },
+    {
+     "threshold": 0.8,
+     "caught": 92,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 33,
+     "unseenGestures": 66,
+     "medianLatencyMs": 931.6585494999999
+    },
+    {
+     "threshold": 0.85,
+     "caught": 80,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 24,
+     "unseenGestures": 66,
+     "medianLatencyMs": 931.6585494999999
+    },
+    {
+     "threshold": 0.9,
+     "caught": 71,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 18,
+     "unseenGestures": 66,
+     "medianLatencyMs": 932.583566
+    },
+    {
+     "threshold": 0.95,
+     "caught": 51,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 7,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.684528
+    },
+    {
+     "threshold": 0.96,
+     "caught": 45,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 6,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.053617
+    },
+    {
+     "threshold": 0.97,
+     "caught": 39,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 2,
+     "unseenGestures": 66,
+     "medianLatencyMs": 935.000064
+    },
+    {
+     "threshold": 0.98,
+     "caught": 31,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 1,
+     "unseenGestures": 66,
+     "medianLatencyMs": 942.457279
+    },
+    {
+     "threshold": 0.99,
+     "caught": 15,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 935.000064
+    },
+    {
+     "threshold": 0.995,
+     "caught": 9,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 919.125852
+    },
+    {
+     "threshold": 0.999,
+     "caught": 4,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 887.062958
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.7,
+     "caught": 99,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 39,
+     "unseenGestures": 66,
+     "medianLatencyMs": 917.999872
+    },
+    "5.0": {
+     "threshold": 0.7,
+     "caught": 99,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 39,
+     "unseenGestures": 66,
+     "medianLatencyMs": 917.999872
+    },
+    "10.0": {
+     "threshold": 0.65,
+     "caught": 103,
+     "gestures": 128,
+     "falseActivations": 3,
+     "perHour": 5.285680937814822,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 43,
+     "unseenGestures": 66,
+     "medianLatencyMs": 909.647756
+    }
+   },
+   "seconds": 66,
+   "features": 2949,
+   "trainMoments": 3569
+  },
+  "18": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 42,
+     "perHour": 73.99953312940752,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 33,
+      "pinch_hold": 7,
+      "unlabelled": 1,
+      "pinch_out": 1
+     },
+     "unseenCaught": 52,
+     "unseenGestures": 66,
+     "medianLatencyMs": 896.207113
+    },
+    {
+     "threshold": 0.35,
+     "caught": 113,
+     "gestures": 128,
+     "falseActivations": 29,
+     "perHour": 51.094915732209955,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 23,
+      "pinch_hold": 5,
+      "unlabelled": 1
+     },
+     "unseenCaught": 53,
+     "unseenGestures": 66,
+     "medianLatencyMs": 899.172199
+    },
+    {
+     "threshold": 0.4,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 21,
+     "perHour": 36.99976656470376,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 16,
+      "pinch_hold": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 899.172199
+    },
+    {
+     "threshold": 0.45,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 16,
+     "perHour": 28.190298335012386,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 12,
+      "pinch_hold": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 904.999936
+    },
+    {
+     "threshold": 0.5,
+     "caught": 109,
+     "gestures": 128,
+     "falseActivations": 15,
+     "perHour": 26.428404689074114,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 10,
+      "pinch_hold": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 49,
+     "unseenGestures": 66,
+     "medianLatencyMs": 904.999936
+    },
+    {
+     "threshold": 0.55,
+     "caught": 107,
+     "gestures": 128,
+     "falseActivations": 11,
+     "perHour": 19.380830105321017,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 7,
+      "pinch_hold": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 47,
+     "unseenGestures": 66,
+     "medianLatencyMs": 904.999936
+    },
+    {
+     "threshold": 0.6,
+     "caught": 103,
+     "gestures": 128,
+     "falseActivations": 6,
+     "perHour": 10.571361875629645,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 4,
+      "pinch_hold": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 43,
+     "unseenGestures": 66,
+     "medianLatencyMs": 906.846866
+    },
+    {
+     "threshold": 0.65,
+     "caught": 101,
+     "gestures": 128,
+     "falseActivations": 3,
+     "perHour": 5.285680937814822,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 41,
+     "unseenGestures": 66,
+     "medianLatencyMs": 906.846866
+    },
+    {
+     "threshold": 0.7,
+     "caught": 100,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 40,
+     "unseenGestures": 66,
+     "medianLatencyMs": 908.6544525
+    },
+    {
+     "threshold": 0.75,
+     "caught": 97,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 37,
+     "unseenGestures": 66,
+     "medianLatencyMs": 916.144437
+    },
+    {
+     "threshold": 0.8,
+     "caught": 91,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 31,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.684528
+    },
+    {
+     "threshold": 0.85,
+     "caught": 85,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 27,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.684528
+    },
+    {
+     "threshold": 0.9,
+     "caught": 72,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 18,
+     "unseenGestures": 66,
+     "medianLatencyMs": 918.562862
+    },
+    {
+     "threshold": 0.95,
+     "caught": 54,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 8,
+     "unseenGestures": 66,
+     "medianLatencyMs": 913.823814
+    },
+    {
+     "threshold": 0.96,
+     "caught": 51,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 7,
+     "unseenGestures": 66,
+     "medianLatencyMs": 917.999872
+    },
+    {
+     "threshold": 0.97,
+     "caught": 42,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 3,
+     "unseenGestures": 66,
+     "medianLatencyMs": 921.40519
+    },
+    {
+     "threshold": 0.98,
+     "caught": 33,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 1,
+     "unseenGestures": 66,
+     "medianLatencyMs": 919.125852
+    },
+    {
+     "threshold": 0.99,
+     "caught": 22,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 1,
+     "unseenGestures": 66,
+     "medianLatencyMs": 926.829608
+    },
+    {
+     "threshold": 0.995,
+     "caught": 9,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 919.125852
+    },
+    {
+     "threshold": 0.999,
+     "caught": 3,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.206777
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.7,
+     "caught": 100,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 40,
+     "unseenGestures": 66,
+     "medianLatencyMs": 908.6544525
+    },
+    "5.0": {
+     "threshold": 0.7,
+     "caught": 100,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 40,
+     "unseenGestures": 66,
+     "medianLatencyMs": 908.6544525
+    },
+    "10.0": {
+     "threshold": 0.65,
+     "caught": 101,
+     "gestures": 128,
+     "falseActivations": 3,
+     "perHour": 5.285680937814822,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 41,
+     "unseenGestures": 66,
+     "medianLatencyMs": 906.846866
+    }
+   },
+   "seconds": 69,
+   "features": 2949,
+   "trainMoments": 3569
+  }
+ },
+ "trees@25": {
+  "17": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 113,
+     "gestures": 128,
+     "falseActivations": 70,
+     "perHour": 123.3209066872843,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 53,
+      "unlabelled": 3,
+      "still": 1,
+      "pinch_hold": 13
+     },
+     "unseenCaught": 52,
+     "unseenGestures": 66,
+     "medianLatencyMs": 907.710089
+    },
+    {
+     "threshold": 0.35,
+     "caught": 110,
+     "gestures": 128,
+     "falseActivations": 53,
+     "perHour": 93.37154363465811,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 40,
+      "still": 1,
+      "pinch_hold": 11,
+      "unlabelled": 1
+     },
+     "unseenCaught": 49,
+     "unseenGestures": 66,
+     "medianLatencyMs": 911.6641764999999
+    },
+    {
+     "threshold": 0.4,
+     "caught": 108,
+     "gestures": 128,
+     "falseActivations": 42,
+     "perHour": 73.99254401237059,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 31,
+      "pinch_hold": 10,
+      "unlabelled": 1
+     },
+     "unseenCaught": 47,
+     "unseenGestures": 66,
+     "medianLatencyMs": 911.6641764999999
+    },
+    {
+     "threshold": 0.45,
+     "caught": 104,
+     "gestures": 128,
+     "falseActivations": 30,
+     "perHour": 52.851817151693275,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 20,
+      "pinch_hold": 9,
+      "unlabelled": 1
+     },
+     "unseenCaught": 43,
+     "unseenGestures": 66,
+     "medianLatencyMs": 911.6641764999999
+    },
+    {
+     "threshold": 0.5,
+     "caught": 100,
+     "gestures": 128,
+     "falseActivations": 25,
+     "perHour": 44.0431809597444,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 16,
+      "pinch_hold": 8,
+      "unlabelled": 1
+     },
+     "unseenCaught": 39,
+     "unseenGestures": 66,
+     "medianLatencyMs": 914.912517
+    },
+    {
+     "threshold": 0.55,
+     "caught": 95,
+     "gestures": 128,
+     "falseActivations": 19,
+     "perHour": 33.47281752940574,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 10,
+      "pinch_hold": 8,
+      "unlabelled": 1
+     },
+     "unseenCaught": 35,
+     "unseenGestures": 66,
+     "medianLatencyMs": 919.260079
+    },
+    {
+     "threshold": 0.6,
+     "caught": 90,
+     "gestures": 128,
+     "falseActivations": 16,
+     "perHour": 28.187635814236412,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 7,
+      "pinch_hold": 7,
+      "unlabelled": 2
+     },
+     "unseenCaught": 30,
+     "unseenGestures": 66,
+     "medianLatencyMs": 921.4723035
+    },
+    {
+     "threshold": 0.65,
+     "caught": 88,
+     "gestures": 128,
+     "falseActivations": 10,
+     "perHour": 17.617272383897756,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 5,
+      "pinch_hold": 3,
+      "unlabelled": 2
+     },
+     "unseenCaught": 28,
+     "unseenGestures": 66,
+     "medianLatencyMs": 921.4723035
+    },
+    {
+     "threshold": 0.7,
+     "caught": 85,
+     "gestures": 128,
+     "falseActivations": 8,
+     "perHour": 14.093817907118206,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 3,
+      "pinch_hold": 3,
+      "unlabelled": 2
+     },
+     "unseenCaught": 25,
+     "unseenGestures": 66,
+     "medianLatencyMs": 919.260079
+    },
+    {
+     "threshold": 0.75,
+     "caught": 80,
+     "gestures": 128,
+     "falseActivations": 3,
+     "perHour": 5.285181715169327,
+     "repeats": 0,
+     "falseOn": {
+      "pinch_hold": 1,
+      "unlabelled": 2
+     },
+     "unseenCaught": 21,
+     "unseenGestures": 66,
+     "medianLatencyMs": 918.6299755
+    },
+    {
+     "threshold": 0.8,
+     "caught": 76,
+     "gestures": 128,
+     "falseActivations": 3,
+     "perHour": 5.285181715169327,
+     "repeats": 0,
+     "falseOn": {
+      "pinch_hold": 1,
+      "unlabelled": 2
+     },
+     "unseenCaught": 17,
+     "unseenGestures": 66,
+     "medianLatencyMs": 921.4723035
+    },
+    {
+     "threshold": 0.85,
+     "caught": 73,
+     "gestures": 128,
+     "falseActivations": 3,
+     "perHour": 5.285181715169327,
+     "repeats": 0,
+     "falseOn": {
+      "pinch_hold": 1,
+      "unlabelled": 2
+     },
+     "unseenCaught": 15,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.684528
+    },
+    {
+     "threshold": 0.9,
+     "caught": 64,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5234544767795515,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 2
+     },
+     "unseenCaught": 8,
+     "unseenGestures": 66,
+     "medianLatencyMs": 918.6299755
+    },
+    {
+     "threshold": 0.95,
+     "caught": 51,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 3,
+     "unseenGestures": 66,
+     "medianLatencyMs": 924.030472
+    },
+    {
+     "threshold": 0.96,
+     "caught": 43,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 2,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.684528
+    },
+    {
+     "threshold": 0.97,
+     "caught": 33,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 924.030472
+    },
+    {
+     "threshold": 0.98,
+     "caught": 29,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 924.030472
+    },
+    {
+     "threshold": 0.99,
+     "caught": 21,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.206777
+    },
+    {
+     "threshold": 0.995,
+     "caught": 11,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.206777
+    },
+    {
+     "threshold": 0.999,
+     "caught": 2,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 935.000064
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.95,
+     "caught": 51,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 3,
+     "unseenGestures": 66,
+     "medianLatencyMs": 924.030472
+    },
+    "5.0": {
+     "threshold": 0.9,
+     "caught": 64,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5234544767795515,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 2
+     },
+     "unseenCaught": 8,
+     "unseenGestures": 66,
+     "medianLatencyMs": 918.6299755
+    },
+    "10.0": {
+     "threshold": 0.75,
+     "caught": 80,
+     "gestures": 128,
+     "falseActivations": 3,
+     "perHour": 5.285181715169327,
+     "repeats": 0,
+     "falseOn": {
+      "pinch_hold": 1,
+      "unlabelled": 2
+     },
+     "unseenCaught": 21,
+     "unseenGestures": 66,
+     "medianLatencyMs": 918.6299755
+    }
+   },
+   "seconds": 62,
+   "features": 2733,
+   "trainMoments": 3573
+  },
+  "18": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 112,
+     "gestures": 128,
+     "falseActivations": 68,
+     "perHour": 119.79745221050476,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 4,
+      "everyday_noise": 51,
+      "still": 1,
+      "pinch_hold": 12
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 890.0458905
+    },
+    {
+     "threshold": 0.35,
+     "caught": 110,
+     "gestures": 128,
+     "falseActivations": 55,
+     "perHour": 96.89499811143767,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 40,
+      "unlabelled": 3,
+      "pinch_hold": 12
+     },
+     "unseenCaught": 49,
+     "unseenGestures": 66,
+     "medianLatencyMs": 891.572635
+    },
+    {
+     "threshold": 0.4,
+     "caught": 109,
+     "gestures": 128,
+     "falseActivations": 47,
+     "perHour": 82.80118020431946,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 35,
+      "unlabelled": 2,
+      "pinch_hold": 10
+     },
+     "unseenCaught": 48,
+     "unseenGestures": 66,
+     "medianLatencyMs": 893.053617
+    },
+    {
+     "threshold": 0.45,
+     "caught": 105,
+     "gestures": 128,
+     "falseActivations": 30,
+     "perHour": 52.851817151693275,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 20,
+      "pinch_hold": 9,
+      "unlabelled": 1
+     },
+     "unseenCaught": 44,
+     "unseenGestures": 66,
+     "medianLatencyMs": 893.053617
+    },
+    {
+     "threshold": 0.5,
+     "caught": 100,
+     "gestures": 128,
+     "falseActivations": 26,
+     "perHour": 45.80490819813417,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 16,
+      "pinch_hold": 9,
+      "unlabelled": 1
+     },
+     "unseenCaught": 39,
+     "unseenGestures": 66,
+     "medianLatencyMs": 894.413332
+    },
+    {
+     "threshold": 0.55,
+     "caught": 94,
+     "gestures": 128,
+     "falseActivations": 22,
+     "perHour": 38.75799924457507,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 12,
+      "pinch_hold": 9,
+      "unlabelled": 1
+     },
+     "unseenCaught": 34,
+     "unseenGestures": 66,
+     "medianLatencyMs": 894.413332
+    },
+    {
+     "threshold": 0.6,
+     "caught": 90,
+     "gestures": 128,
+     "falseActivations": 17,
+     "perHour": 29.94936305262619,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 9,
+      "pinch_hold": 6,
+      "pinch_out": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 30,
+     "unseenGestures": 66,
+     "medianLatencyMs": 895.204717
+    },
+    {
+     "threshold": 0.65,
+     "caught": 87,
+     "gestures": 128,
+     "falseActivations": 13,
+     "perHour": 22.902454099067086,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 7,
+      "pinch_hold": 4,
+      "unlabelled": 2
+     },
+     "unseenCaught": 27,
+     "unseenGestures": 66,
+     "medianLatencyMs": 901.176249
+    },
+    {
+     "threshold": 0.7,
+     "caught": 84,
+     "gestures": 128,
+     "falseActivations": 8,
+     "perHour": 14.093817907118206,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 3,
+      "pinch_hold": 3,
+      "unlabelled": 2
+     },
+     "unseenCaught": 24,
+     "unseenGestures": 66,
+     "medianLatencyMs": 902.4789794999999
+    },
+    {
+     "threshold": 0.75,
+     "caught": 80,
+     "gestures": 128,
+     "falseActivations": 4,
+     "perHour": 7.046908953559103,
+     "repeats": 0,
+     "falseOn": {
+      "pinch_hold": 2,
+      "unlabelled": 2
+     },
+     "unseenCaught": 21,
+     "unseenGestures": 66,
+     "medianLatencyMs": 902.4789794999999
+    },
+    {
+     "threshold": 0.8,
+     "caught": 78,
+     "gestures": 128,
+     "falseActivations": 3,
+     "perHour": 5.285181715169327,
+     "repeats": 0,
+     "falseOn": {
+      "pinch_hold": 1,
+      "unlabelled": 2
+     },
+     "unseenCaught": 19,
+     "unseenGestures": 66,
+     "medianLatencyMs": 904.247659
+    },
+    {
+     "threshold": 0.85,
+     "caught": 75,
+     "gestures": 128,
+     "falseActivations": 3,
+     "perHour": 5.285181715169327,
+     "repeats": 0,
+     "falseOn": {
+      "pinch_hold": 1,
+      "unlabelled": 2
+     },
+     "unseenCaught": 17,
+     "unseenGestures": 66,
+     "medianLatencyMs": 901.176249
+    },
+    {
+     "threshold": 0.9,
+     "caught": 65,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7617272383897757,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 9,
+     "unseenGestures": 66,
+     "medianLatencyMs": 895.000064
+    },
+    {
+     "threshold": 0.95,
+     "caught": 49,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7617272383897757,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 4,
+     "unseenGestures": 66,
+     "medianLatencyMs": 903.78171
+    },
+    {
+     "threshold": 0.96,
+     "caught": 44,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7617272383897757,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 4,
+     "unseenGestures": 66,
+     "medianLatencyMs": 904.247659
+    },
+    {
+     "threshold": 0.97,
+     "caught": 32,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 1,
+     "unseenGestures": 66,
+     "medianLatencyMs": 904.247659
+    },
+    {
+     "threshold": 0.98,
+     "caught": 24,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 905.4872660000001
+    },
+    {
+     "threshold": 0.99,
+     "caught": 13,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 944.172391
+    },
+    {
+     "threshold": 0.995,
+     "caught": 7,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 975.000064
+    },
+    {
+     "threshold": 0.999,
+     "caught": 2,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 898.291436
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.9,
+     "caught": 65,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7617272383897757,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 9,
+     "unseenGestures": 66,
+     "medianLatencyMs": 895.000064
+    },
+    "5.0": {
+     "threshold": 0.9,
+     "caught": 65,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7617272383897757,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 9,
+     "unseenGestures": 66,
+     "medianLatencyMs": 895.000064
+    },
+    "10.0": {
+     "threshold": 0.75,
+     "caught": 80,
+     "gestures": 128,
+     "falseActivations": 4,
+     "perHour": 7.046908953559103,
+     "repeats": 0,
+     "falseOn": {
+      "pinch_hold": 2,
+      "unlabelled": 2
+     },
+     "unseenCaught": 21,
+     "unseenGestures": 66,
+     "medianLatencyMs": 902.4789794999999
+    }
+   },
+   "seconds": 63,
+   "features": 2733,
+   "trainMoments": 3573
+  }
+ },
+ "trees@100": {
+  "17": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 118,
+     "gestures": 128,
+     "falseActivations": 37,
+     "perHour": 65.19338318749112,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 31,
+      "pinch_hold": 5,
+      "unlabelled": 1
+     },
+     "unseenCaught": 57,
+     "unseenGestures": 66,
+     "medianLatencyMs": 915.039608
+    },
+    {
+     "threshold": 0.35,
+     "caught": 116,
+     "gestures": 128,
+     "falseActivations": 30,
+     "perHour": 52.85949988174956,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 25,
+      "pinch_hold": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 55,
+     "unseenGestures": 66,
+     "medianLatencyMs": 915.039608
+    },
+    {
+     "threshold": 0.4,
+     "caught": 115,
+     "gestures": 128,
+     "falseActivations": 18,
+     "perHour": 31.715699929049734,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 14,
+      "pinch_hold": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 54,
+     "unseenGestures": 66,
+     "medianLatencyMs": 920.999936
+    },
+    {
+     "threshold": 0.45,
+     "caught": 114,
+     "gestures": 128,
+     "falseActivations": 17,
+     "perHour": 29.95371659965808,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 12,
+      "pinch_hold": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 53,
+     "unseenGestures": 66,
+     "medianLatencyMs": 922.342232
+    },
+    {
+     "threshold": 0.5,
+     "caught": 112,
+     "gestures": 128,
+     "falseActivations": 11,
+     "perHour": 19.38181662330817,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 7,
+      "pinch_hold": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 924.6035375
+    },
+    {
+     "threshold": 0.55,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 6,
+     "perHour": 10.571899976349911,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 5,
+      "unlabelled": 1
+     },
+     "unseenCaught": 50,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.684528
+    },
+    {
+     "threshold": 0.6,
+     "caught": 108,
+     "gestures": 128,
+     "falseActivations": 5,
+     "perHour": 8.809916646958259,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 47,
+     "unseenGestures": 66,
+     "medianLatencyMs": 922.342232
+    },
+    {
+     "threshold": 0.65,
+     "caught": 104,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5239666587833036,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 43,
+     "unseenGestures": 66,
+     "medianLatencyMs": 924.6035375
+    },
+    {
+     "threshold": 0.7,
+     "caught": 99,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5239666587833036,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 40,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.206777
+    },
+    {
+     "threshold": 0.75,
+     "caught": 94,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 35,
+     "unseenGestures": 66,
+     "medianLatencyMs": 934.1034205
+    },
+    {
+     "threshold": 0.8,
+     "caught": 89,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 30,
+     "unseenGestures": 66,
+     "medianLatencyMs": 929.003586
+    },
+    {
+     "threshold": 0.85,
+     "caught": 79,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 20,
+     "unseenGestures": 66,
+     "medianLatencyMs": 920.999936
+    },
+    {
+     "threshold": 0.9,
+     "caught": 72,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 13,
+     "unseenGestures": 66,
+     "medianLatencyMs": 912.3283365
+    },
+    {
+     "threshold": 0.95,
+     "caught": 60,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 9,
+     "unseenGestures": 66,
+     "medianLatencyMs": 912.3283365
+    },
+    {
+     "threshold": 0.96,
+     "caught": 54,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 9,
+     "unseenGestures": 66,
+     "medianLatencyMs": 910.184825
+    },
+    {
+     "threshold": 0.97,
+     "caught": 47,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 5,
+     "unseenGestures": 66,
+     "medianLatencyMs": 920.999936
+    },
+    {
+     "threshold": 0.98,
+     "caught": 43,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 2,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.684528
+    },
+    {
+     "threshold": 0.99,
+     "caught": 30,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 919.499904
+    },
+    {
+     "threshold": 0.995,
+     "caught": 17,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 920.999936
+    },
+    {
+     "threshold": 0.999,
+     "caught": 3,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 935.000064
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.75,
+     "caught": 94,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 35,
+     "unseenGestures": 66,
+     "medianLatencyMs": 934.1034205
+    },
+    "5.0": {
+     "threshold": 0.65,
+     "caught": 104,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5239666587833036,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 43,
+     "unseenGestures": 66,
+     "medianLatencyMs": 924.6035375
+    },
+    "10.0": {
+     "threshold": 0.6,
+     "caught": 108,
+     "gestures": 128,
+     "falseActivations": 5,
+     "perHour": 8.809916646958259,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 47,
+     "unseenGestures": 66,
+     "medianLatencyMs": 922.342232
+    }
+   },
+   "seconds": 76,
+   "features": 2733,
+   "trainMoments": 3568
+  },
+  "18": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 116,
+     "gestures": 128,
+     "falseActivations": 39,
+     "perHour": 68.71734984627442,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 33,
+      "pinch_hold": 5,
+      "unlabelled": 1
+     },
+     "unseenCaught": 55,
+     "unseenGestures": 66,
+     "medianLatencyMs": 917.5128924999999
+    },
+    {
+     "threshold": 0.35,
+     "caught": 115,
+     "gestures": 128,
+     "falseActivations": 29,
+     "perHour": 51.0975165523579,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 24,
+      "pinch_hold": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 54,
+     "unseenGestures": 66,
+     "medianLatencyMs": 916.54342
+    },
+    {
+     "threshold": 0.4,
+     "caught": 114,
+     "gestures": 128,
+     "falseActivations": 19,
+     "perHour": 33.47768325844138,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 15,
+      "pinch_hold": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 53,
+     "unseenGestures": 66,
+     "medianLatencyMs": 917.5128924999999
+    },
+    {
+     "threshold": 0.45,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 17,
+     "perHour": 29.95371659965808,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 12,
+      "pinch_hold": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 50,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.515524
+    },
+    {
+     "threshold": 0.5,
+     "caught": 110,
+     "gestures": 128,
+     "falseActivations": 12,
+     "perHour": 21.143799952699823,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 9,
+      "pinch_hold": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 49,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.6000260000001
+    },
+    {
+     "threshold": 0.55,
+     "caught": 110,
+     "gestures": 128,
+     "falseActivations": 7,
+     "perHour": 12.333883305741562,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 5,
+      "pinch_hold": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 49,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.6000260000001
+    },
+    {
+     "threshold": 0.6,
+     "caught": 107,
+     "gestures": 128,
+     "falseActivations": 3,
+     "perHour": 5.285949988174956,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 46,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.515524
+    },
+    {
+     "threshold": 0.65,
+     "caught": 102,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5239666587833036,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 41,
+     "unseenGestures": 66,
+     "medianLatencyMs": 924.342232
+    },
+    {
+     "threshold": 0.7,
+     "caught": 99,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 40,
+     "unseenGestures": 66,
+     "medianLatencyMs": 930.733533
+    },
+    {
+     "threshold": 0.75,
+     "caught": 93,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 34,
+     "unseenGestures": 66,
+     "medianLatencyMs": 930.733533
+    },
+    {
+     "threshold": 0.8,
+     "caught": 87,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 28,
+     "unseenGestures": 66,
+     "medianLatencyMs": 924.999936
+    },
+    {
+     "threshold": 0.85,
+     "caught": 78,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 19,
+     "unseenGestures": 66,
+     "medianLatencyMs": 918.7251515
+    },
+    {
+     "threshold": 0.9,
+     "caught": 74,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 16,
+     "unseenGestures": 66,
+     "medianLatencyMs": 911.1989515
+    },
+    {
+     "threshold": 0.95,
+     "caught": 56,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 9,
+     "unseenGestures": 66,
+     "medianLatencyMs": 912.805394
+    },
+    {
+     "threshold": 0.96,
+     "caught": 53,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 8,
+     "unseenGestures": 66,
+     "medianLatencyMs": 913.934779
+    },
+    {
+     "threshold": 0.97,
+     "caught": 47,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 5,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.684528
+    },
+    {
+     "threshold": 0.98,
+     "caught": 37,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 2,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.515524
+    },
+    {
+     "threshold": 0.99,
+     "caught": 22,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 1,
+     "unseenGestures": 66,
+     "medianLatencyMs": 930.0
+    },
+    {
+     "threshold": 0.995,
+     "caught": 12,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 1,
+     "unseenGestures": 66,
+     "medianLatencyMs": 909.2034515
+    },
+    {
+     "threshold": 0.999,
+     "caught": 1,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 872.206841
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.7,
+     "caught": 99,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 40,
+     "unseenGestures": 66,
+     "medianLatencyMs": 930.733533
+    },
+    "5.0": {
+     "threshold": 0.65,
+     "caught": 102,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5239666587833036,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 41,
+     "unseenGestures": 66,
+     "medianLatencyMs": 924.342232
+    },
+    "10.0": {
+     "threshold": 0.6,
+     "caught": 107,
+     "gestures": 128,
+     "falseActivations": 3,
+     "perHour": 5.285949988174956,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 46,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.515524
+    }
+   },
+   "seconds": 70,
+   "features": 2733,
+   "trainMoments": 3568
+  }
+ },
+ "trees+spectral@100": {
+  "17": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 112,
+     "gestures": 128,
+     "falseActivations": 21,
+     "perHour": 37.00164991722469,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 16,
+      "unlabelled": 2,
+      "pinch_hold": 3
+     },
+     "unseenCaught": 52,
+     "unseenGestures": 66,
+     "medianLatencyMs": 915.9673255
+    },
+    {
+     "threshold": 0.35,
+     "caught": 114,
+     "gestures": 128,
+     "falseActivations": 17,
+     "perHour": 29.95371659965808,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 13,
+      "pinch_hold": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 54,
+     "unseenGestures": 66,
+     "medianLatencyMs": 918.2411185
+    },
+    {
+     "threshold": 0.4,
+     "caught": 113,
+     "gestures": 128,
+     "falseActivations": 13,
+     "perHour": 22.905783282091473,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 10,
+      "pinch_hold": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 53,
+     "unseenGestures": 66,
+     "medianLatencyMs": 925.522547
+    },
+    {
+     "threshold": 0.45,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 9,
+     "perHour": 15.857849964524867,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 7,
+      "pinch_hold": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 918.482365
+    },
+    {
+     "threshold": 0.5,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 7,
+     "perHour": 12.333883305741562,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 5,
+      "pinch_hold": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 918.482365
+    },
+    {
+     "threshold": 0.55,
+     "caught": 112,
+     "gestures": 128,
+     "falseActivations": 3,
+     "perHour": 5.285949988174956,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 52,
+     "unseenGestures": 66,
+     "medianLatencyMs": 922.0024559999999
+    },
+    {
+     "threshold": 0.6,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5239666587833036,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 918.482365
+    },
+    {
+     "threshold": 0.65,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 924.234084
+    },
+    {
+     "threshold": 0.7,
+     "caught": 107,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 47,
+     "unseenGestures": 66,
+     "medianLatencyMs": 925.522547
+    },
+    {
+     "threshold": 0.75,
+     "caught": 103,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 44,
+     "unseenGestures": 66,
+     "medianLatencyMs": 925.522547
+    },
+    {
+     "threshold": 0.8,
+     "caught": 102,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 42,
+     "unseenGestures": 66,
+     "medianLatencyMs": 929.3187290000001
+    },
+    {
+     "threshold": 0.85,
+     "caught": 96,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 38,
+     "unseenGestures": 66,
+     "medianLatencyMs": 918.2411185
+    },
+    {
+     "threshold": 0.9,
+     "caught": 83,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 27,
+     "unseenGestures": 66,
+     "medianLatencyMs": 917.999872
+    },
+    {
+     "threshold": 0.95,
+     "caught": 64,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 14,
+     "unseenGestures": 66,
+     "medianLatencyMs": 895.6052855
+    },
+    {
+     "threshold": 0.96,
+     "caught": 56,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 11,
+     "unseenGestures": 66,
+     "medianLatencyMs": 905.890983
+    },
+    {
+     "threshold": 0.97,
+     "caught": 52,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 9,
+     "unseenGestures": 66,
+     "medianLatencyMs": 909.3799795
+    },
+    {
+     "threshold": 0.98,
+     "caught": 47,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 7,
+     "unseenGestures": 66,
+     "medianLatencyMs": 913.934779
+    },
+    {
+     "threshold": 0.99,
+     "caught": 30,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 2,
+     "unseenGestures": 66,
+     "medianLatencyMs": 910.9675175
+    },
+    {
+     "threshold": 0.995,
+     "caught": 18,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 1,
+     "unseenGestures": 66,
+     "medianLatencyMs": 929.364662
+    },
+    {
+     "threshold": 0.999,
+     "caught": 2,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 959.5644625
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.65,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 924.234084
+    },
+    "5.0": {
+     "threshold": 0.65,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 924.234084
+    },
+    "10.0": {
+     "threshold": 0.55,
+     "caught": 112,
+     "gestures": 128,
+     "falseActivations": 3,
+     "perHour": 5.285949988174956,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 52,
+     "unseenGestures": 66,
+     "medianLatencyMs": 922.0024559999999
+    }
+   },
+   "seconds": 67,
+   "features": 2949,
+   "trainMoments": 3568
+  },
+  "18": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 20,
+     "perHour": 35.239666587833035,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 16,
+      "unlabelled": 2,
+      "pinch_hold": 2
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 929.722681
+    },
+    {
+     "threshold": 0.35,
+     "caught": 113,
+     "gestures": 128,
+     "falseActivations": 18,
+     "perHour": 31.715699929049734,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 14,
+      "pinch_hold": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 53,
+     "unseenGestures": 66,
+     "medianLatencyMs": 930.000128
+    },
+    {
+     "threshold": 0.4,
+     "caught": 113,
+     "gestures": 128,
+     "falseActivations": 12,
+     "perHour": 21.143799952699823,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 10,
+      "pinch_hold": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 53,
+     "unseenGestures": 66,
+     "medianLatencyMs": 930.000128
+    },
+    {
+     "threshold": 0.45,
+     "caught": 112,
+     "gestures": 128,
+     "falseActivations": 7,
+     "perHour": 12.333883305741562,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 6,
+      "unlabelled": 1
+     },
+     "unseenCaught": 52,
+     "unseenGestures": 66,
+     "medianLatencyMs": 931.1655535
+    },
+    {
+     "threshold": 0.5,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 5,
+     "perHour": 8.809916646958259,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 932.330979
+    },
+    {
+     "threshold": 0.55,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5239666587833036,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 932.330979
+    },
+    {
+     "threshold": 0.6,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5239666587833036,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 932.330979
+    },
+    {
+     "threshold": 0.65,
+     "caught": 110,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 50,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.2050830000001
+    },
+    {
+     "threshold": 0.7,
+     "caught": 107,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 47,
+     "unseenGestures": 66,
+     "medianLatencyMs": 932.583566
+    },
+    {
+     "threshold": 0.75,
+     "caught": 104,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 45,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.2050830000001
+    },
+    {
+     "threshold": 0.8,
+     "caught": 102,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 42,
+     "unseenGestures": 66,
+     "medianLatencyMs": 934.617985
+    },
+    {
+     "threshold": 0.85,
+     "caught": 96,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 39,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.5166885
+    },
+    {
+     "threshold": 0.9,
+     "caught": 83,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 26,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.206777
+    },
+    {
+     "threshold": 0.95,
+     "caught": 64,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 14,
+     "unseenGestures": 66,
+     "medianLatencyMs": 922.515204
+    },
+    {
+     "threshold": 0.96,
+     "caught": 56,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 11,
+     "unseenGestures": 66,
+     "medianLatencyMs": 922.515204
+    },
+    {
+     "threshold": 0.97,
+     "caught": 53,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 9,
+     "unseenGestures": 66,
+     "medianLatencyMs": 932.583566
+    },
+    {
+     "threshold": 0.98,
+     "caught": 49,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 7,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.8266
+    },
+    {
+     "threshold": 0.99,
+     "caught": 39,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 4,
+     "unseenGestures": 66,
+     "medianLatencyMs": 948.478098
+    },
+    {
+     "threshold": 0.995,
+     "caught": 24,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 2,
+     "unseenGestures": 66,
+     "medianLatencyMs": 965.2550585
+    },
+    {
+     "threshold": 0.999,
+     "caught": 3,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 948.478098
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.65,
+     "caught": 110,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7619833293916518,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 50,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.2050830000001
+    },
+    "5.0": {
+     "threshold": 0.6,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5239666587833036,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 932.330979
+    },
+    "10.0": {
+     "threshold": 0.6,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5239666587833036,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 932.330979
+    }
+   },
+   "seconds": 68,
+   "features": 2949,
+   "trainMoments": 3568
+  }
+ },
+ "trees-top50": {
+  "17": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 103,
+     "gestures": 128,
+     "falseActivations": 65,
+     "perHour": 114.52308698598783,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 4,
+      "everyday_noise": 54,
+      "pinch_hold": 7
+     },
+     "unseenCaught": 46,
+     "unseenGestures": 66,
+     "medianLatencyMs": 928.66277
+    },
+    {
+     "threshold": 0.35,
+     "caught": 105,
+     "gestures": 128,
+     "falseActivations": 51,
+     "perHour": 89.85657594285199,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 3,
+      "everyday_noise": 43,
+      "pinch_hold": 5
+     },
+     "unseenCaught": 47,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.8266
+    },
+    {
+     "threshold": 0.4,
+     "caught": 107,
+     "gestures": 128,
+     "falseActivations": 39,
+     "perHour": 68.7138521915927,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 34,
+      "pinch_hold": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 48,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.594811
+    },
+    {
+     "threshold": 0.45,
+     "caught": 105,
+     "gestures": 128,
+     "falseActivations": 30,
+     "perHour": 52.85680937814823,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 27,
+      "pinch_hold": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 46,
+     "unseenGestures": 66,
+     "medianLatencyMs": 942.457279
+    },
+    {
+     "threshold": 0.5,
+     "caught": 100,
+     "gestures": 128,
+     "falseActivations": 24,
+     "perHour": 42.28544750251858,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 22,
+      "unlabelled": 1,
+      "pinch_hold": 1
+     },
+     "unseenCaught": 41,
+     "unseenGestures": 66,
+     "medianLatencyMs": 945.38666
+    },
+    {
+     "threshold": 0.55,
+     "caught": 100,
+     "gestures": 128,
+     "falseActivations": 18,
+     "perHour": 31.714085626888938,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 16,
+      "unlabelled": 1,
+      "pinch_hold": 1
+     },
+     "unseenCaught": 40,
+     "unseenGestures": 66,
+     "medianLatencyMs": 948.3191835
+    },
+    {
+     "threshold": 0.6,
+     "caught": 98,
+     "gestures": 128,
+     "falseActivations": 17,
+     "perHour": 29.952191980950662,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 15,
+      "unlabelled": 1,
+      "pinch_hold": 1
+     },
+     "unseenCaught": 38,
+     "unseenGestures": 66,
+     "medianLatencyMs": 949.799344
+    },
+    {
+     "threshold": 0.65,
+     "caught": 95,
+     "gestures": 128,
+     "falseActivations": 14,
+     "perHour": 24.666511043135838,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 12,
+      "unlabelled": 1,
+      "pinch_hold": 1
+     },
+     "unseenCaught": 36,
+     "unseenGestures": 66,
+     "medianLatencyMs": 949.999872
+    },
+    {
+     "threshold": 0.7,
+     "caught": 90,
+     "gestures": 128,
+     "falseActivations": 10,
+     "perHour": 17.61893645938274,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 9,
+      "unlabelled": 1
+     },
+     "unseenCaught": 32,
+     "unseenGestures": 66,
+     "medianLatencyMs": 952.5207635
+    },
+    {
+     "threshold": 0.75,
+     "caught": 87,
+     "gestures": 128,
+     "falseActivations": 7,
+     "perHour": 12.333255521567919,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 6,
+      "unlabelled": 1
+     },
+     "unseenCaught": 29,
+     "unseenGestures": 66,
+     "medianLatencyMs": 951.106748
+    },
+    {
+     "threshold": 0.8,
+     "caught": 85,
+     "gestures": 128,
+     "falseActivations": 5,
+     "perHour": 8.80946822969137,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 27,
+     "unseenGestures": 66,
+     "medianLatencyMs": 953.934779
+    },
+    {
+     "threshold": 0.85,
+     "caught": 81,
+     "gestures": 128,
+     "falseActivations": 4,
+     "perHour": 7.0475745837530965,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 23,
+     "unseenGestures": 66,
+     "medianLatencyMs": 951.106748
+    },
+    {
+     "threshold": 0.9,
+     "caught": 79,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5237872918765483,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 22,
+     "unseenGestures": 66,
+     "medianLatencyMs": 956.144437
+    },
+    {
+     "threshold": 0.95,
+     "caught": 73,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 16,
+     "unseenGestures": 66,
+     "medianLatencyMs": 956.588566
+    },
+    {
+     "threshold": 0.96,
+     "caught": 65,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 11,
+     "unseenGestures": 66,
+     "medianLatencyMs": 961.803674
+    },
+    {
+     "threshold": 0.97,
+     "caught": 61,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 9,
+     "unseenGestures": 66,
+     "medianLatencyMs": 969.053617
+    },
+    {
+     "threshold": 0.98,
+     "caught": 56,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 5,
+     "unseenGestures": 66,
+     "medianLatencyMs": 961.4691825
+    },
+    {
+     "threshold": 0.99,
+     "caught": 50,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 3,
+     "unseenGestures": 66,
+     "medianLatencyMs": 972.8951715000001
+    },
+    {
+     "threshold": 0.995,
+     "caught": 38,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 1,
+     "unseenGestures": 66,
+     "medianLatencyMs": 974.1034205
+    },
+    {
+     "threshold": 0.999,
+     "caught": 12,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 998.1909235
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.95,
+     "caught": 73,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 16,
+     "unseenGestures": 66,
+     "medianLatencyMs": 956.588566
+    },
+    "5.0": {
+     "threshold": 0.9,
+     "caught": 79,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5237872918765483,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 22,
+     "unseenGestures": 66,
+     "medianLatencyMs": 956.144437
+    },
+    "10.0": {
+     "threshold": 0.8,
+     "caught": 85,
+     "gestures": 128,
+     "falseActivations": 5,
+     "perHour": 8.80946822969137,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 27,
+     "unseenGestures": 66,
+     "medianLatencyMs": 953.934779
+    }
+   },
+   "seconds": 59,
+   "features": 50,
+   "trainMoments": 3569,
+   "topFeatures": [
+    "ppg_z2000ms_d2_red_n16_q10",
+    "imu_accel_z_spread_vs_3s_n1280ms",
+    "ppg_z1000ms_d1_red_n16_q10",
+    "ppg_z2000ms_d3_red_n16_q10",
+    "ppg_z1000ms_d3_red_n16_q90",
+    "imu_accel_mag_spread_vs_3s_n1280ms",
+    "ppg_z1000ms_d3_red_n16_q10",
+    "ppg_z2000ms_d1_red_n16_q10",
+    "ppg_z1000ms_d2_red_n16_q90",
+    "ppg_z2000ms_d2_green_n16_q10",
+    "ppg_z2000ms_d3_green_n16_q10",
+    "ppg_z1000ms_d2_red_n16_q10",
+    "ppg_z1000ms_d2_green_n16_q10",
+    "ppg_z1000ms_d3_red_n16_mean_absolute_change",
+    "ppg_z1000ms_d3_green_n16_q10"
+   ]
+  },
+  "18": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 106,
+     "gestures": 128,
+     "falseActivations": 62,
+     "perHour": 109.237406048173,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 5,
+      "everyday_noise": 52,
+      "pinch_hold": 5
+     },
+     "unseenCaught": 48,
+     "unseenGestures": 66,
+     "medianLatencyMs": 913.2438945
+    },
+    {
+     "threshold": 0.35,
+     "caught": 107,
+     "gestures": 128,
+     "falseActivations": 49,
+     "perHour": 86.33278865097543,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 4,
+      "everyday_noise": 41,
+      "pinch_hold": 4
+     },
+     "unseenCaught": 49,
+     "unseenGestures": 66,
+     "medianLatencyMs": 912.55301
+    },
+    {
+     "threshold": 0.4,
+     "caught": 108,
+     "gestures": 128,
+     "falseActivations": 43,
+     "perHour": 75.7614267753458,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 38,
+      "pinch_hold": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 48,
+     "unseenGestures": 66,
+     "medianLatencyMs": 915.747675
+    },
+    {
+     "threshold": 0.45,
+     "caught": 105,
+     "gestures": 128,
+     "falseActivations": 32,
+     "perHour": 56.38059667002477,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 30,
+      "unlabelled": 1,
+      "pinch_hold": 1
+     },
+     "unseenCaught": 45,
+     "unseenGestures": 66,
+     "medianLatencyMs": 920.999936
+    },
+    {
+     "threshold": 0.5,
+     "caught": 101,
+     "gestures": 128,
+     "falseActivations": 24,
+     "perHour": 42.28544750251858,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 23,
+      "unlabelled": 1
+     },
+     "unseenCaught": 40,
+     "unseenGestures": 66,
+     "medianLatencyMs": 922.963234
+    },
+    {
+     "threshold": 0.55,
+     "caught": 100,
+     "gestures": 128,
+     "falseActivations": 17,
+     "perHour": 29.952191980950662,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 15,
+      "unlabelled": 1,
+      "pinch_hold": 1
+     },
+     "unseenCaught": 39,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.230292
+    },
+    {
+     "threshold": 0.6,
+     "caught": 99,
+     "gestures": 128,
+     "falseActivations": 14,
+     "perHour": 24.666511043135838,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 13,
+      "unlabelled": 1
+     },
+     "unseenCaught": 38,
+     "unseenGestures": 66,
+     "medianLatencyMs": 942.457279
+    },
+    {
+     "threshold": 0.65,
+     "caught": 96,
+     "gestures": 128,
+     "falseActivations": 12,
+     "perHour": 21.14272375125929,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 11,
+      "unlabelled": 1
+     },
+     "unseenCaught": 35,
+     "unseenGestures": 66,
+     "medianLatencyMs": 942.535165
+    },
+    {
+     "threshold": 0.7,
+     "caught": 91,
+     "gestures": 128,
+     "falseActivations": 10,
+     "perHour": 17.61893645938274,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 9,
+      "unlabelled": 1
+     },
+     "unseenCaught": 32,
+     "unseenGestures": 66,
+     "medianLatencyMs": 944.172391
+    },
+    {
+     "threshold": 0.75,
+     "caught": 87,
+     "gestures": 128,
+     "falseActivations": 7,
+     "perHour": 12.333255521567919,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 6,
+      "unlabelled": 1
+     },
+     "unseenCaught": 28,
+     "unseenGestures": 66,
+     "medianLatencyMs": 944.172391
+    },
+    {
+     "threshold": 0.8,
+     "caught": 85,
+     "gestures": 128,
+     "falseActivations": 5,
+     "perHour": 8.80946822969137,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 27,
+     "unseenGestures": 66,
+     "medianLatencyMs": 944.706745
+    },
+    {
+     "threshold": 0.85,
+     "caught": 81,
+     "gestures": 128,
+     "falseActivations": 3,
+     "perHour": 5.285680937814822,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 23,
+     "unseenGestures": 66,
+     "medianLatencyMs": 944.172391
+    },
+    {
+     "threshold": 0.9,
+     "caught": 76,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 19,
+     "unseenGestures": 66,
+     "medianLatencyMs": 944.439568
+    },
+    {
+     "threshold": 0.95,
+     "caught": 67,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 12,
+     "unseenGestures": 66,
+     "medianLatencyMs": 936.0
+    },
+    {
+     "threshold": 0.96,
+     "caught": 63,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 8,
+     "unseenGestures": 66,
+     "medianLatencyMs": 936.0
+    },
+    {
+     "threshold": 0.97,
+     "caught": 54,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 4,
+     "unseenGestures": 66,
+     "medianLatencyMs": 935.7046849999999
+    },
+    {
+     "threshold": 0.98,
+     "caught": 51,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 2,
+     "unseenGestures": 66,
+     "medianLatencyMs": 935.40937
+    },
+    {
+     "threshold": 0.99,
+     "caught": 45,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 2,
+     "unseenGestures": 66,
+     "medianLatencyMs": 935.40937
+    },
+    {
+     "threshold": 0.995,
+     "caught": 35,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 1,
+     "unseenGestures": 66,
+     "medianLatencyMs": 949.7138
+    },
+    {
+     "threshold": 0.999,
+     "caught": 21,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 944.172391
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.9,
+     "caught": 76,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 19,
+     "unseenGestures": 66,
+     "medianLatencyMs": 944.439568
+    },
+    "5.0": {
+     "threshold": 0.9,
+     "caught": 76,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 19,
+     "unseenGestures": 66,
+     "medianLatencyMs": 944.439568
+    },
+    "10.0": {
+     "threshold": 0.8,
+     "caught": 85,
+     "gestures": 128,
+     "falseActivations": 5,
+     "perHour": 8.80946822969137,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 27,
+     "unseenGestures": 66,
+     "medianLatencyMs": 944.706745
+    }
+   },
+   "seconds": 59,
+   "features": 50,
+   "trainMoments": 3569,
+   "topFeatures": [
+    "ppg_z1000ms_d3_red_n16_q90",
+    "ppg_z1000ms_d2_red_n16_q10",
+    "imu_accel_z_spread_vs_3s_n1280ms",
+    "ppg_z2000ms_d3_red_n16_q10",
+    "ppg_z1000ms_d3_red_n16_q10",
+    "ppg_z1000ms_d1_red_n16_q10",
+    "imu_accel_mag_spread_vs_3s_n1280ms",
+    "ppg_z2000ms_d2_red_n16_q10",
+    "ppg_z2000ms_d3_red_n16_q90",
+    "ppg_z1000ms_d2_green_n16_q10",
+    "ppg_z2000ms_d3_green_n16_q10",
+    "ppg_z2000ms_d2_red_n16_q90",
+    "ppg_z1000ms_d2_red_n16_q90",
+    "ppg_z1000ms_d3_red_n16_mean_absolute_change",
+    "ppg_z2000ms_d2_green_n16_q10"
+   ]
+  }
+ },
+ "trees-top200": {
+  "17": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 113,
+     "gestures": 128,
+     "falseActivations": 56,
+     "perHour": 98.66604417254335,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 49,
+      "unlabelled": 3,
+      "pinch_hold": 4
+     },
+     "unseenCaught": 53,
+     "unseenGestures": 66,
+     "medianLatencyMs": 904.0
+    },
+    {
+     "threshold": 0.35,
+     "caught": 114,
+     "gestures": 128,
+     "falseActivations": 44,
+     "perHour": 77.52332042128407,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 38,
+      "pinch_hold": 4,
+      "unlabelled": 2
+     },
+     "unseenCaught": 53,
+     "unseenGestures": 66,
+     "medianLatencyMs": 903.890855
+    },
+    {
+     "threshold": 0.4,
+     "caught": 113,
+     "gestures": 128,
+     "falseActivations": 34,
+     "perHour": 59.904383961901324,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 29,
+      "pinch_hold": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 52,
+     "unseenGestures": 66,
+     "medianLatencyMs": 904.706745
+    },
+    {
+     "threshold": 0.45,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 25,
+     "perHour": 44.04734114845686,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 22,
+      "pinch_hold": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 50,
+     "unseenGestures": 66,
+     "medianLatencyMs": 916.105792
+    },
+    {
+     "threshold": 0.5,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 22,
+     "perHour": 38.761660210642034,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 19,
+      "pinch_hold": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 50,
+     "unseenGestures": 66,
+     "medianLatencyMs": 919.125852
+    },
+    {
+     "threshold": 0.55,
+     "caught": 110,
+     "gestures": 128,
+     "falseActivations": 17,
+     "perHour": 29.952191980950662,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 15,
+      "unlabelled": 1,
+      "pinch_hold": 1
+     },
+     "unseenCaught": 49,
+     "unseenGestures": 66,
+     "medianLatencyMs": 926.070466
+    },
+    {
+     "threshold": 0.6,
+     "caught": 104,
+     "gestures": 128,
+     "falseActivations": 12,
+     "perHour": 21.14272375125929,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 11,
+      "unlabelled": 1
+     },
+     "unseenCaught": 43,
+     "unseenGestures": 66,
+     "medianLatencyMs": 929.8685595
+    },
+    {
+     "threshold": 0.65,
+     "caught": 100,
+     "gestures": 128,
+     "falseActivations": 8,
+     "perHour": 14.095149167506193,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 7,
+      "unlabelled": 1
+     },
+     "unseenCaught": 39,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.130197
+    },
+    {
+     "threshold": 0.7,
+     "caught": 96,
+     "gestures": 128,
+     "falseActivations": 7,
+     "perHour": 12.333255521567919,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 6,
+      "unlabelled": 1
+     },
+     "unseenCaught": 35,
+     "unseenGestures": 66,
+     "medianLatencyMs": 931.893575
+    },
+    {
+     "threshold": 0.75,
+     "caught": 96,
+     "gestures": 128,
+     "falseActivations": 4,
+     "perHour": 7.0475745837530965,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 35,
+     "unseenGestures": 66,
+     "medianLatencyMs": 931.893575
+    },
+    {
+     "threshold": 0.8,
+     "caught": 90,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5237872918765483,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 31,
+     "unseenGestures": 66,
+     "medianLatencyMs": 931.893575
+    },
+    {
+     "threshold": 0.85,
+     "caught": 85,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 26,
+     "unseenGestures": 66,
+     "medianLatencyMs": 929.003586
+    },
+    {
+     "threshold": 0.9,
+     "caught": 79,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 21,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.515524
+    },
+    {
+     "threshold": 0.95,
+     "caught": 64,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 11,
+     "unseenGestures": 66,
+     "medianLatencyMs": 926.2595550000001
+    },
+    {
+     "threshold": 0.96,
+     "caught": 59,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 9,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.478162
+    },
+    {
+     "threshold": 0.97,
+     "caught": 58,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 8,
+     "unseenGestures": 66,
+     "medianLatencyMs": 926.2595550000001
+    },
+    {
+     "threshold": 0.98,
+     "caught": 55,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 5,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.053617
+    },
+    {
+     "threshold": 0.99,
+     "caught": 40,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 1,
+     "unseenGestures": 66,
+     "medianLatencyMs": 928.2845705
+    },
+    {
+     "threshold": 0.995,
+     "caught": 26,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 934.2035155
+    },
+    {
+     "threshold": 0.999,
+     "caught": 6,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 859.7989445
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.85,
+     "caught": 85,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 26,
+     "unseenGestures": 66,
+     "medianLatencyMs": 929.003586
+    },
+    "5.0": {
+     "threshold": 0.8,
+     "caught": 90,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5237872918765483,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 31,
+     "unseenGestures": 66,
+     "medianLatencyMs": 931.893575
+    },
+    "10.0": {
+     "threshold": 0.75,
+     "caught": 96,
+     "gestures": 128,
+     "falseActivations": 4,
+     "perHour": 7.0475745837530965,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 35,
+     "unseenGestures": 66,
+     "medianLatencyMs": 931.893575
+    }
+   },
+   "seconds": 59,
+   "features": 200,
+   "trainMoments": 3569,
+   "topFeatures": [
+    "ppg_z2000ms_d2_red_n16_q10",
+    "imu_accel_z_spread_vs_3s_n1280ms",
+    "ppg_z1000ms_d1_red_n16_q10",
+    "ppg_z2000ms_d3_red_n16_q10",
+    "ppg_z1000ms_d3_red_n16_q90",
+    "imu_accel_mag_spread_vs_3s_n1280ms",
+    "ppg_z1000ms_d3_red_n16_q10",
+    "ppg_z2000ms_d1_red_n16_q10",
+    "ppg_z1000ms_d2_red_n16_q90",
+    "ppg_z2000ms_d2_green_n16_q10",
+    "ppg_z2000ms_d3_green_n16_q10",
+    "ppg_z1000ms_d2_red_n16_q10",
+    "ppg_z1000ms_d2_green_n16_q10",
+    "ppg_z1000ms_d3_red_n16_mean_absolute_change",
+    "ppg_z1000ms_d3_green_n16_q10"
+   ]
+  },
+  "18": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 114,
+     "gestures": 128,
+     "falseActivations": 56,
+     "perHour": 98.66604417254335,
+     "repeats": 1,
+     "falseOn": {
+      "everyday_noise": 47,
+      "pinch_hold": 5,
+      "unlabelled": 4
+     },
+     "unseenCaught": 54,
+     "unseenGestures": 66,
+     "medianLatencyMs": 918.141798
+    },
+    {
+     "threshold": 0.35,
+     "caught": 112,
+     "gestures": 128,
+     "falseActivations": 44,
+     "perHour": 77.52332042128407,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 38,
+      "pinch_hold": 5,
+      "unlabelled": 1
+     },
+     "unseenCaught": 52,
+     "unseenGestures": 66,
+     "medianLatencyMs": 916.6510905
+    },
+    {
+     "threshold": 0.4,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 37,
+     "perHour": 65.19006489971615,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 32,
+      "pinch_hold": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 925.675724
+    },
+    {
+     "threshold": 0.45,
+     "caught": 110,
+     "gestures": 128,
+     "falseActivations": 27,
+     "perHour": 47.5711284403334,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 23,
+      "pinch_hold": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 50,
+     "unseenGestures": 66,
+     "medianLatencyMs": 929.6981515
+    },
+    {
+     "threshold": 0.5,
+     "caught": 109,
+     "gestures": 128,
+     "falseActivations": 22,
+     "perHour": 38.761660210642034,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 18,
+      "pinch_hold": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 49,
+     "unseenGestures": 66,
+     "medianLatencyMs": 935.000064
+    },
+    {
+     "threshold": 0.55,
+     "caught": 108,
+     "gestures": 128,
+     "falseActivations": 15,
+     "perHour": 26.428404689074114,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 13,
+      "unlabelled": 1,
+      "pinch_hold": 1
+     },
+     "unseenCaught": 48,
+     "unseenGestures": 66,
+     "medianLatencyMs": 935.4564275
+    },
+    {
+     "threshold": 0.6,
+     "caught": 104,
+     "gestures": 128,
+     "falseActivations": 9,
+     "perHour": 15.857042813444469,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 8,
+      "unlabelled": 1
+     },
+     "unseenCaught": 44,
+     "unseenGestures": 66,
+     "medianLatencyMs": 939.4100820000001
+    },
+    {
+     "threshold": 0.65,
+     "caught": 99,
+     "gestures": 128,
+     "falseActivations": 7,
+     "perHour": 12.333255521567919,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 6,
+      "unlabelled": 1
+     },
+     "unseenCaught": 39,
+     "unseenGestures": 66,
+     "medianLatencyMs": 944.172391
+    },
+    {
+     "threshold": 0.7,
+     "caught": 95,
+     "gestures": 128,
+     "falseActivations": 5,
+     "perHour": 8.80946822969137,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 35,
+     "unseenGestures": 66,
+     "medianLatencyMs": 948.478098
+    },
+    {
+     "threshold": 0.75,
+     "caught": 93,
+     "gestures": 128,
+     "falseActivations": 3,
+     "perHour": 5.285680937814822,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 34,
+     "unseenGestures": 66,
+     "medianLatencyMs": 949.598816
+    },
+    {
+     "threshold": 0.8,
+     "caught": 90,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 32,
+     "unseenGestures": 66,
+     "medianLatencyMs": 949.0384570000001
+    },
+    {
+     "threshold": 0.85,
+     "caught": 84,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 25,
+     "unseenGestures": 66,
+     "medianLatencyMs": 943.3927209999999
+    },
+    {
+     "threshold": 0.9,
+     "caught": 78,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 21,
+     "unseenGestures": 66,
+     "medianLatencyMs": 943.3927209999999
+    },
+    {
+     "threshold": 0.95,
+     "caught": 63,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 10,
+     "unseenGestures": 66,
+     "medianLatencyMs": 944.172391
+    },
+    {
+     "threshold": 0.96,
+     "caught": 62,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 10,
+     "unseenGestures": 66,
+     "medianLatencyMs": 946.3252445
+    },
+    {
+     "threshold": 0.97,
+     "caught": 58,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 7,
+     "unseenGestures": 66,
+     "medianLatencyMs": 940.189752
+    },
+    {
+     "threshold": 0.98,
+     "caught": 51,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 3,
+     "unseenGestures": 66,
+     "medianLatencyMs": 944.172391
+    },
+    {
+     "threshold": 0.99,
+     "caught": 43,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 3,
+     "unseenGestures": 66,
+     "medianLatencyMs": 957.999872
+    },
+    {
+     "threshold": 0.995,
+     "caught": 31,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 1,
+     "unseenGestures": 66,
+     "medianLatencyMs": 948.478098
+    },
+    {
+     "threshold": 0.999,
+     "caught": 15,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 944.172391
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.8,
+     "caught": 90,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 32,
+     "unseenGestures": 66,
+     "medianLatencyMs": 949.0384570000001
+    },
+    "5.0": {
+     "threshold": 0.8,
+     "caught": 90,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 32,
+     "unseenGestures": 66,
+     "medianLatencyMs": 949.0384570000001
+    },
+    "10.0": {
+     "threshold": 0.7,
+     "caught": 95,
+     "gestures": 128,
+     "falseActivations": 5,
+     "perHour": 8.80946822969137,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 4,
+      "unlabelled": 1
+     },
+     "unseenCaught": 35,
+     "unseenGestures": 66,
+     "medianLatencyMs": 948.478098
+    }
+   },
+   "seconds": 59,
+   "features": 200,
+   "trainMoments": 3569,
+   "topFeatures": [
+    "ppg_z1000ms_d3_red_n16_q90",
+    "ppg_z1000ms_d2_red_n16_q10",
+    "imu_accel_z_spread_vs_3s_n1280ms",
+    "ppg_z2000ms_d3_red_n16_q10",
+    "ppg_z1000ms_d3_red_n16_q10",
+    "ppg_z1000ms_d1_red_n16_q10",
+    "imu_accel_mag_spread_vs_3s_n1280ms",
+    "ppg_z2000ms_d2_red_n16_q10",
+    "ppg_z2000ms_d3_red_n16_q90",
+    "ppg_z1000ms_d2_green_n16_q10",
+    "ppg_z2000ms_d3_green_n16_q10",
+    "ppg_z2000ms_d2_red_n16_q90",
+    "ppg_z1000ms_d2_red_n16_q90",
+    "ppg_z1000ms_d3_red_n16_mean_absolute_change",
+    "ppg_z2000ms_d2_green_n16_q10"
+   ]
+  }
+ },
+ "trees-top500": {
+  "17": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 116,
+     "gestures": 128,
+     "falseActivations": 53,
+     "perHour": 93.38036323472853,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 40,
+      "unlabelled": 2,
+      "pinch_hold": 11
+     },
+     "unseenCaught": 55,
+     "unseenGestures": 66,
+     "medianLatencyMs": 909.623286
+    },
+    {
+     "threshold": 0.35,
+     "caught": 113,
+     "gestures": 128,
+     "falseActivations": 43,
+     "perHour": 75.7614267753458,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 35,
+      "pinch_hold": 7,
+      "unlabelled": 1
+     },
+     "unseenCaught": 52,
+     "unseenGestures": 66,
+     "medianLatencyMs": 904.706745
+    },
+    {
+     "threshold": 0.4,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 35,
+     "perHour": 61.666277607839596,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 27,
+      "pinch_hold": 7,
+      "unlabelled": 1
+     },
+     "unseenCaught": 50,
+     "unseenGestures": 66,
+     "medianLatencyMs": 910.721894
+    },
+    {
+     "threshold": 0.45,
+     "caught": 112,
+     "gestures": 128,
+     "falseActivations": 25,
+     "perHour": 44.04734114845686,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 19,
+      "pinch_hold": 5,
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 911.221333
+    },
+    {
+     "threshold": 0.5,
+     "caught": 109,
+     "gestures": 128,
+     "falseActivations": 17,
+     "perHour": 29.952191980950662,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 11,
+      "pinch_hold": 5,
+      "unlabelled": 1
+     },
+     "unseenCaught": 48,
+     "unseenGestures": 66,
+     "medianLatencyMs": 916.144437
+    },
+    {
+     "threshold": 0.55,
+     "caught": 107,
+     "gestures": 128,
+     "falseActivations": 10,
+     "perHour": 17.61893645938274,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 8,
+      "pinch_hold": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 46,
+     "unseenGestures": 66,
+     "medianLatencyMs": 919.125852
+    },
+    {
+     "threshold": 0.6,
+     "caught": 104,
+     "gestures": 128,
+     "falseActivations": 10,
+     "perHour": 17.61893645938274,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 8,
+      "pinch_hold": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 43,
+     "unseenGestures": 66,
+     "medianLatencyMs": 931.6585494999999
+    },
+    {
+     "threshold": 0.65,
+     "caught": 95,
+     "gestures": 128,
+     "falseActivations": 4,
+     "perHour": 7.0475745837530965,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 35,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.206777
+    },
+    {
+     "threshold": 0.7,
+     "caught": 92,
+     "gestures": 128,
+     "falseActivations": 3,
+     "perHour": 5.285680937814822,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 33,
+     "unseenGestures": 66,
+     "medianLatencyMs": 932.8185915
+    },
+    {
+     "threshold": 0.75,
+     "caught": 89,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 30,
+     "unseenGestures": 66,
+     "medianLatencyMs": 932.583566
+    },
+    {
+     "threshold": 0.8,
+     "caught": 87,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 28,
+     "unseenGestures": 66,
+     "medianLatencyMs": 930.733533
+    },
+    {
+     "threshold": 0.85,
+     "caught": 78,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 19,
+     "unseenGestures": 66,
+     "medianLatencyMs": 927.7486175
+    },
+    {
+     "threshold": 0.9,
+     "caught": 73,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 16,
+     "unseenGestures": 66,
+     "medianLatencyMs": 925.522547
+    },
+    {
+     "threshold": 0.95,
+     "caught": 57,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 7,
+     "unseenGestures": 66,
+     "medianLatencyMs": 932.583566
+    },
+    {
+     "threshold": 0.96,
+     "caught": 57,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 7,
+     "unseenGestures": 66,
+     "medianLatencyMs": 932.583566
+    },
+    {
+     "threshold": 0.97,
+     "caught": 52,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 5,
+     "unseenGestures": 66,
+     "medianLatencyMs": 924.55027
+    },
+    {
+     "threshold": 0.98,
+     "caught": 44,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 3,
+     "unseenGestures": 66,
+     "medianLatencyMs": 934.1034205
+    },
+    {
+     "threshold": 0.99,
+     "caught": 28,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 1,
+     "unseenGestures": 66,
+     "medianLatencyMs": 941.3550765
+    },
+    {
+     "threshold": 0.995,
+     "caught": 18,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 941.3550765
+    },
+    {
+     "threshold": 0.999,
+     "caught": 3,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 909.598816
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.75,
+     "caught": 89,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 30,
+     "unseenGestures": 66,
+     "medianLatencyMs": 932.583566
+    },
+    "5.0": {
+     "threshold": 0.75,
+     "caught": 89,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 30,
+     "unseenGestures": 66,
+     "medianLatencyMs": 932.583566
+    },
+    "10.0": {
+     "threshold": 0.65,
+     "caught": 95,
+     "gestures": 128,
+     "falseActivations": 4,
+     "perHour": 7.0475745837530965,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 35,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.206777
+    }
+   },
+   "seconds": 60,
+   "features": 500,
+   "trainMoments": 3569,
+   "topFeatures": [
+    "ppg_z2000ms_d2_red_n16_q10",
+    "imu_accel_z_spread_vs_3s_n1280ms",
+    "ppg_z1000ms_d1_red_n16_q10",
+    "ppg_z2000ms_d3_red_n16_q10",
+    "ppg_z1000ms_d3_red_n16_q90",
+    "imu_accel_mag_spread_vs_3s_n1280ms",
+    "ppg_z1000ms_d3_red_n16_q10",
+    "ppg_z2000ms_d1_red_n16_q10",
+    "ppg_z1000ms_d2_red_n16_q90",
+    "ppg_z2000ms_d2_green_n16_q10",
+    "ppg_z2000ms_d3_green_n16_q10",
+    "ppg_z1000ms_d2_red_n16_q10",
+    "ppg_z1000ms_d2_green_n16_q10",
+    "ppg_z1000ms_d3_red_n16_mean_absolute_change",
+    "ppg_z1000ms_d3_green_n16_q10"
+   ]
+  },
+  "18": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 113,
+     "gestures": 128,
+     "falseActivations": 52,
+     "perHour": 91.61846958879026,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 40,
+      "pinch_hold": 10,
+      "unlabelled": 2
+     },
+     "unseenCaught": 53,
+     "unseenGestures": 66,
+     "medianLatencyMs": 918.091653
+    },
+    {
+     "threshold": 0.35,
+     "caught": 113,
+     "gestures": 128,
+     "falseActivations": 41,
+     "perHour": 72.23763948346924,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 34,
+      "pinch_hold": 6,
+      "unlabelled": 1
+     },
+     "unseenCaught": 53,
+     "unseenGestures": 66,
+     "medianLatencyMs": 923.684528
+    },
+    {
+     "threshold": 0.4,
+     "caught": 111,
+     "gestures": 128,
+     "falseActivations": 34,
+     "perHour": 59.904383961901324,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 27,
+      "pinch_hold": 6,
+      "unlabelled": 1
+     },
+     "unseenCaught": 51,
+     "unseenGestures": 66,
+     "medianLatencyMs": 928.66277
+    },
+    {
+     "threshold": 0.45,
+     "caught": 110,
+     "gestures": 128,
+     "falseActivations": 27,
+     "perHour": 47.5711284403334,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 20,
+      "pinch_hold": 6,
+      "unlabelled": 1
+     },
+     "unseenCaught": 50,
+     "unseenGestures": 66,
+     "medianLatencyMs": 928.8331780000001
+    },
+    {
+     "threshold": 0.5,
+     "caught": 108,
+     "gestures": 128,
+     "falseActivations": 20,
+     "perHour": 35.23787291876548,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 13,
+      "pinch_hold": 6,
+      "unlabelled": 1
+     },
+     "unseenCaught": 48,
+     "unseenGestures": 66,
+     "medianLatencyMs": 930.3668305
+    },
+    {
+     "threshold": 0.55,
+     "caught": 106,
+     "gestures": 128,
+     "falseActivations": 13,
+     "perHour": 22.904617397197566,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 9,
+      "pinch_hold": 3,
+      "unlabelled": 1
+     },
+     "unseenCaught": 46,
+     "unseenGestures": 66,
+     "medianLatencyMs": 931.893575
+    },
+    {
+     "threshold": 0.6,
+     "caught": 103,
+     "gestures": 128,
+     "falseActivations": 10,
+     "perHour": 17.61893645938274,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 7,
+      "pinch_hold": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 43,
+     "unseenGestures": 66,
+     "medianLatencyMs": 935.912791
+    },
+    {
+     "threshold": 0.65,
+     "caught": 96,
+     "gestures": 128,
+     "falseActivations": 6,
+     "perHour": 10.571361875629645,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 5,
+      "unlabelled": 1
+     },
+     "unseenCaught": 37,
+     "unseenGestures": 66,
+     "medianLatencyMs": 939.7286075
+    },
+    {
+     "threshold": 0.7,
+     "caught": 92,
+     "gestures": 128,
+     "falseActivations": 3,
+     "perHour": 5.285680937814822,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 33,
+     "unseenGestures": 66,
+     "medianLatencyMs": 939.7286075
+    },
+    {
+     "threshold": 0.75,
+     "caught": 89,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5237872918765483,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 31,
+     "unseenGestures": 66,
+     "medianLatencyMs": 935.000064
+    },
+    {
+     "threshold": 0.8,
+     "caught": 85,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 26,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.206777
+    },
+    {
+     "threshold": 0.85,
+     "caught": 77,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 19,
+     "unseenGestures": 66,
+     "medianLatencyMs": 929.003586
+    },
+    {
+     "threshold": 0.9,
+     "caught": 73,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 16,
+     "unseenGestures": 66,
+     "medianLatencyMs": 929.003586
+    },
+    {
+     "threshold": 0.95,
+     "caught": 59,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 8,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.053617
+    },
+    {
+     "threshold": 0.96,
+     "caught": 55,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 6,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.206777
+    },
+    {
+     "threshold": 0.97,
+     "caught": 53,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 5,
+     "unseenGestures": 66,
+     "medianLatencyMs": 947.710089
+    },
+    {
+     "threshold": 0.98,
+     "caught": 46,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 4,
+     "unseenGestures": 66,
+     "medianLatencyMs": 948.0940935000001
+    },
+    {
+     "threshold": 0.99,
+     "caught": 24,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 945.083684
+    },
+    {
+     "threshold": 0.995,
+     "caught": 17,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.406967
+    },
+    {
+     "threshold": 0.999,
+     "caught": 3,
+     "gestures": 128,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "repeats": 0,
+     "falseOn": {},
+     "unseenCaught": 0,
+     "unseenGestures": 66,
+     "medianLatencyMs": 919.125852
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.8,
+     "caught": 85,
+     "gestures": 128,
+     "falseActivations": 1,
+     "perHour": 1.7618936459382741,
+     "repeats": 0,
+     "falseOn": {
+      "unlabelled": 1
+     },
+     "unseenCaught": 26,
+     "unseenGestures": 66,
+     "medianLatencyMs": 933.206777
+    },
+    "5.0": {
+     "threshold": 0.75,
+     "caught": 89,
+     "gestures": 128,
+     "falseActivations": 2,
+     "perHour": 3.5237872918765483,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 1,
+      "unlabelled": 1
+     },
+     "unseenCaught": 31,
+     "unseenGestures": 66,
+     "medianLatencyMs": 935.000064
+    },
+    "10.0": {
+     "threshold": 0.7,
+     "caught": 92,
+     "gestures": 128,
+     "falseActivations": 3,
+     "perHour": 5.285680937814822,
+     "repeats": 0,
+     "falseOn": {
+      "everyday_noise": 2,
+      "unlabelled": 1
+     },
+     "unseenCaught": 33,
+     "unseenGestures": 66,
+     "medianLatencyMs": 939.7286075
+    }
+   },
+   "seconds": 60,
+   "features": 500,
+   "trainMoments": 3569,
+   "topFeatures": [
+    "ppg_z1000ms_d3_red_n16_q90",
+    "ppg_z1000ms_d2_red_n16_q10",
+    "imu_accel_z_spread_vs_3s_n1280ms",
+    "ppg_z2000ms_d3_red_n16_q10",
+    "ppg_z1000ms_d3_red_n16_q10",
+    "ppg_z1000ms_d1_red_n16_q10",
+    "imu_accel_mag_spread_vs_3s_n1280ms",
+    "ppg_z2000ms_d2_red_n16_q10",
+    "ppg_z2000ms_d3_red_n16_q90",
+    "ppg_z1000ms_d2_green_n16_q10",
+    "ppg_z2000ms_d3_green_n16_q10",
+    "ppg_z2000ms_d2_red_n16_q90",
+    "ppg_z1000ms_d2_red_n16_q90",
+    "ppg_z1000ms_d3_red_n16_mean_absolute_change",
+    "ppg_z2000ms_d2_green_n16_q10"
+   ]
+  }
+ }
+}

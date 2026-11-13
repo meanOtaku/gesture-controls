@@ -1,0 +1,119 @@
+{
+ "pinch_in trees": {
+  "threshold": 0.75,
+  "thresholdSource": "trainingRecordings",
+  "caught": 89,
+  "gestures": 128,
+  "falseActivations": 1,
+  "perHour": 1.7618936459382741,
+  "medianLatencyMs": 933.8266,
+  "repeats": 0,
+  "falseOn": {
+   "unlabelled": 1
+  },
+  "seconds": 195
+ },
+ "pinch_in trees+spectral": {
+  "threshold": 0.7,
+  "thresholdSource": "trainingRecordings",
+  "caught": 99,
+  "gestures": 128,
+  "falseActivations": 1,
+  "perHour": 1.7618936459382741,
+  "medianLatencyMs": 917.999872,
+  "repeats": 0,
+  "falseOn": {
+   "unlabelled": 1
+  },
+  "seconds": 212
+ },
+ "pinch_in trees@100": {
+  "threshold": 0.7,
+  "thresholdSource": "trainingRecordings",
+  "caught": 99,
+  "gestures": 128,
+  "falseActivations": 2,
+  "perHour": 3.5239666587833036,
+  "medianLatencyMs": 933.206777,
+  "repeats": 0,
+  "falseOn": {
+   "everyday_noise": 1,
+   "unlabelled": 1
+  },
+  "seconds": 219
+ },
+ "pinch_in trees+spectral@100": {
+  "threshold": 0.6,
+  "thresholdSource": "trainingRecordings",
+  "caught": 111,
+  "gestures": 128,
+  "falseActivations": 2,
+  "perHour": 3.5239666587833036,
+  "medianLatencyMs": 918.482365,
+  "repeats": 0,
+  "falseOn": {
+   "everyday_noise": 1,
+   "unlabelled": 1
+  },
+  "seconds": 225
+ },
+ "pinch_out trees": {
+  "threshold": 0.65,
+  "thresholdSource": "trainingRecordings",
+  "caught": 115,
+  "gestures": 134,
+  "falseActivations": 5,
+  "perHour": 8.477808731023593,
+  "medianLatencyMs": 907.527509,
+  "repeats": 0,
+  "falseOn": {
+   "everyday_noise": 4,
+   "pinch_in": 1
+  },
+  "seconds": 196
+ },
+ "pinch_out trees+spectral": {
+  "threshold": 0.6,
+  "thresholdSource": "trainingRecordings",
+  "caught": 114,
+  "gestures": 134,
+  "falseActivations": 11,
+  "perHour": 18.651179208251904,
+  "medianLatencyMs": 910.5064990000001,
+  "repeats": 0,
+  "falseOn": {
+   "everyday_noise": 6,
+   "pinch_in": 4,
+   "unlabelled": 1
+  },
+  "seconds": 266
+ },
+ "pinch_out trees@100": {
+  "threshold": 0.65,
+  "thresholdSource": "trainingRecordings",
+  "caught": 118,
+  "gestures": 134,
+  "falseActivations": 3,
+  "perHour": 5.087030253570145,
+  "medianLatencyMs": 908.0098800000001,
+  "repeats": 0,
+  "falseOn": {
+   "everyday_noise": 3
+  },
+  "seconds": 269
+ },
+ "pinch_out trees+spectral@100": {
+  "threshold": 0.65,
+  "thresholdSource": "trainingRecordings",
+  "caught": 117,
+  "gestures": 134,
+  "falseActivations": 4,
+  "perHour": 6.7827070047601925,
+  "medianLatencyMs": 907.527509,
+  "repeats": 0,
+  "falseOn": {
+   "everyday_noise": 4
+  },
+  "seconds": 270
+ }
+}
