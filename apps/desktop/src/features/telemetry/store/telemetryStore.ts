@@ -1096,7 +1096,16 @@ class TelemetryStore {
     this.schedulePublish();
   }
 
-  ingestWatchOrientation(orientation: WatchOrientationSample): void {
+  /**
+   * Samples the backend gathered over about 50 ms, oldest first. Only the newest arrived just now: the others waited in
+   * the batch, so their arrival time would make the watch's clock look later than it is.
+   */
+  ingestWatchOrientationBatch(samples: readonly WatchOrientationSample[]): void {
+    samples.forEach((sample, index) => this.ingestWatchOrientation(sample, index === samples.length - 1));
+  }
+
+  /** One orientation sample. `arrivedNow` says its arrival time is a fair clock-sync observation. */
+  ingestWatchOrientation(orientation: WatchOrientationSample, arrivedNow = true): void {
     // M1: reject an impossible/non-finite source timestamp outright rather
     // than accepting or inventing one for row-ordering/timing purposes.
     if (!Number.isFinite(orientation.timestampNs)) return;
@@ -1106,7 +1115,7 @@ class TelemetryStore {
     this.noteWatchSample();
     this.health.noteMotion(performance.now());
     // Lines the watch's clock up with the browser's, which camera frames are stamped with.
-    clockSync.observe(orientation.timestampNs, performance.now());
+    if (arrivedNow) clockSync.observe(orientation.timestampNs, performance.now());
     const at = Date.now();
     const plotAt = this.watchMotionPlotAt(orientation.timestampNs);
     const euler = quaternionToEulerDegrees(orientation.quaternion);

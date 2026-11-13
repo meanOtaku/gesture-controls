@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, memo } from "react";
 import { createPortal } from "react-dom";
 import { useThemeIs } from "../../shared/theme/useThemeIs";
 
@@ -59,7 +59,7 @@ function choose(select: HTMLSelectElement, value: string) {
  * <select> stays the real control: the list reads its options, and a choice is set on it and announced with the usual
  * input and change events, so every dropdown in the app works unchanged. Other themes keep the system list.
  */
-export function NervSelectMenu() {
+function NervSelectMenuView() {
   const nerv = useThemeIs("nerv");
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const [place, setPlace] = useState<{ left: number; width: number; top?: number; bottom?: number; maxHeight: number } | null>(null);
@@ -228,3 +228,6 @@ export function NervSelectMenu() {
     document.body,
   );
 }
+
+/** Memoized: the app re-renders on every telemetry publish (~15 a second), and this shows nothing from it. */
+export const NervSelectMenu = memo(NervSelectMenuView);

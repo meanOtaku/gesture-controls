@@ -13,7 +13,8 @@ use watch_bridge::{
 pub const WATCH_STATUS_EVENT: &str = "watch-status";
 /// The link's phase, counters, latencies and recent events, once a second.
 pub const WATCH_LINK_DIAGNOSTICS_EVENT: &str = "watch-link-diagnostics";
-pub const WATCH_ORIENTATION_EVENT: &str = "watch-orientation";
+/// Orientation samples, gathered for up to [`ORIENTATION_BATCH_INTERVAL`] and sent as one array, oldest first.
+pub const WATCH_ORIENTATION_BATCH_EVENT: &str = "watch-orientation-batch";
 pub const WATCH_PPG_BATCH_EVENT: &str = "watch-ppg-batch";
 pub const WATCH_HEART_RATE_BATCH_EVENT: &str = "watch-heart-rate-batch";
 pub const WATCH_SKIN_TEMPERATURE_BATCH_EVENT: &str = "watch-skin-temperature-batch";
@@ -166,16 +167,49 @@ fn warn_if_sdk_milliseconds(rate_hz: f64) {
     }
 }
 
-/// The longest an orientation-driven status update may be held back. Orientation arrives at
-/// up to 200 Hz, and the frontend can render at most ~15 Hz (the telemetry publish interval),
-/// so more frequent status events only cost serialization and an IPC round trip each. The
-/// orientation itself is delivered on its own, never-throttled event, and the frontend
-/// de-duplicates the copy carried inside the status, so no sample is lost by this.
+/// The longest a sample-driven status update may be held back. Orientation arrives at up to
+/// 200 Hz and pulse batches several times a second, and the frontend can render at most ~15 Hz
+/// (the telemetry publish interval), so more frequent status events only cost serialization and
+/// a script run in the page each. The samples themselves go on their own events, and the
+/// frontend de-duplicates the orientation copy carried inside the status, so nothing is lost.
 const STATUS_COALESCE_INTERVAL: Duration = Duration::from_millis(100);
 
-/// Whether a status event should be sent now. Only `coalescible` updates (a new orientation
-/// on an already-connected watch, which changes nothing but `last_orientation`) may be held
-/// back; every other change is sent at once.
+/// How long orientation samples are gathered before they go to the page as one event.
+///
+/// Every event is delivered by running a fresh script in the page, and WebKit keeps part of
+/// every script it runs: at one event per sample (100 a second) the page grew by gigabytes in
+/// under half an hour until macOS killed it for memory, which reloads the app. Twenty batches a
+/// second keep every sample, in order, at most this late, which the ~15 Hz display never shows.
+const ORIENTATION_BATCH_INTERVAL: Duration = Duration::from_millis(50);
+
+/// Whether the gathered orientation samples should be sent now: the first batch at once, then
+/// one every [`ORIENTATION_BATCH_INTERVAL`]. A batch always ends on the newest sample, sent the
+/// moment it arrives, so its arrival time still lines the watch's clock up with the page's.
+fn orientation_flush_due(last_flush: Option<Instant>, now: Instant) -> bool {
+    last_flush.is_none_or(|previous| now.duration_since(previous) >= ORIENTATION_BATCH_INTERVAL)
+}
+
+/// Orientation samples waiting to be sent, and when the last batch went.
+#[derive(Default)]
+struct OrientationBatch {
+    samples: Vec<WatchOrientationSample>,
+    last_flush: Option<Instant>,
+}
+
+impl OrientationBatch {
+    fn flush(&mut self, app: &AppHandle, now: Instant) {
+        if self.samples.is_empty() {
+            return;
+        }
+        let _ = app.emit(WATCH_ORIENTATION_BATCH_EVENT, &self.samples);
+        self.samples.clear();
+        self.last_flush = Some(now);
+    }
+}
+
+/// Whether a status event should be sent now. Only `coalescible` updates (a new orientation or
+/// pulse batch on an already-connected watch, which change only their latest readings) may be
+/// held back; every other change is sent at once.
 fn status_emit_due(last_emit: Option<Instant>, now: Instant, coalescible: bool) -> bool {
     !coalescible
         || last_emit.is_none_or(|previous| now.duration_since(previous) >= STATUS_COALESCE_INTERVAL)
@@ -185,6 +219,7 @@ fn status_emit_due(last_emit: Option<Instant>, now: Instant, coalescible: bool) 
 pub struct WatchRuntime {
     state: Mutex<WatchStatus>,
     last_status_emit: Mutex<Option<Instant>>,
+    orientation_batch: Mutex<OrientationBatch>,
 }
 
 impl WatchRuntime {
@@ -194,6 +229,7 @@ impl WatchRuntime {
             .lock()
             .map_err(|_| "watch status lock was poisoned")?;
         let mut coalescible = false;
+        let mut new_orientation = None;
         match event {
             WatchEvent::Connected => {
                 *state = WatchStatus {
@@ -209,7 +245,7 @@ impl WatchRuntime {
                 // one that first marks the watch connected must be reported at once.
                 coalescible = state.connected;
                 state.connected = true;
-                let _ = app.emit(WATCH_ORIENTATION_EVENT, &sample);
+                new_orientation = Some(sample.clone());
                 state.last_orientation = Some(sample);
             }
             WatchEvent::Heartbeat(mut sample) => {
@@ -230,6 +266,7 @@ impl WatchRuntime {
             }
             WatchEvent::Ppg(sample) => {
                 let _ = app.emit(WATCH_PPG_BATCH_EVENT, &sample);
+                coalescible = state.connected;
                 state.connected = true;
                 if let (Some(&first), Some(&last)) =
                     (sample.timestamps_ns.first(), sample.timestamps_ns.last())
@@ -426,11 +463,24 @@ impl WatchRuntime {
             WatchEvent::InvalidMessage { .. } => return Ok(()),
         }
         let now = Instant::now();
+        let mut batch = self
+            .orientation_batch
+            .lock()
+            .map_err(|_| "watch orientation batch lock was poisoned")?;
+        if let Some(sample) = new_orientation {
+            batch.samples.push(sample);
+            if orientation_flush_due(batch.last_flush, now) {
+                batch.flush(app, now);
+            }
+        }
         let mut last_emit = self
             .last_status_emit
             .lock()
             .map_err(|_| "watch status emit gate was poisoned")?;
         if status_emit_due(*last_emit, now, coalescible) {
+            // The status carries the newest orientation, so the samples before it go first:
+            // the page must never see a sample after a newer one.
+            batch.flush(app, now);
             // Serialized in place: cloning the whole status (two maps, nested vectors) just
             // to serialize the copy was pure overhead on every sensor event.
             let _ = app.emit(WATCH_STATUS_EVENT, &*state);
@@ -593,6 +643,20 @@ mod tests {
             true
         ));
         assert!(status_emit_due(Some(start), start + GAP, true));
+    }
+
+    #[test]
+    fn orientation_goes_out_in_batches_at_most_twenty_times_a_second() {
+        let start = Instant::now();
+        let batch = ORIENTATION_BATCH_INTERVAL;
+        assert!(orientation_flush_due(None, start), "the first batch goes at once");
+        assert!(!orientation_flush_due(Some(start), start + Duration::from_millis(10)));
+        assert!(!orientation_flush_due(Some(start), start + batch - Duration::from_millis(1)));
+        assert!(orientation_flush_due(Some(start), start + batch));
+        assert!(
+            Duration::from_secs(1).as_millis() / batch.as_millis() <= 20,
+            "each event runs a script in the page, and WebKit keeps part of every one"
+        );
     }
 
     #[test]

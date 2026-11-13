@@ -1,4 +1,4 @@
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore, memo } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { useTelemetryExport } from "../hooks/useTelemetryExport";
 import { telemetryStore } from "../store/telemetryStore";
@@ -16,7 +16,7 @@ import { exportFolderStore } from "../store/exportFolderStore";
  * a folder). The effect's own cleanup, which runs on every dependency change (including the state leaving "recording" by a
  * manual stop or a discard), cancels any pending timer, so it is never armed twice or left running past its session.
  */
-export function RecordingTimer() {
+function RecordingTimerView() {
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
   const { exportDataset, saveDatasetRecording } = useTelemetryExport();
   const state = telemetryStore.getDatasetRecordingState();
@@ -51,3 +51,6 @@ export function RecordingTimer() {
 
   return null;
 }
+
+/** Memoized: the app re-renders on every telemetry publish (~15 a second), and this shows nothing from it. */
+export const RecordingTimer = memo(RecordingTimerView);

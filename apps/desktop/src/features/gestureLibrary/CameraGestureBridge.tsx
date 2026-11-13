@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect } from "react";
+import { useEffect, memo } from "react";
 import { getCameraController } from "../camera/cameraService";
 import { CameraGestureReporter } from "./cameraGestureReporter";
 import { GESTURE_LIBRARY_CHANGED, listGestureDefinitions } from "./gestureLibraryApi";
@@ -8,7 +8,7 @@ import { GESTURE_LIBRARY_CHANGED, listGestureDefinitions } from "./gestureLibrar
  * Always mounted, renders nothing: runs the library's gestures over the camera's frames and reports them to the desktop,
  * where recipes can use them. It keeps working whichever tab is open, as long as the camera is on.
  */
-export function CameraGestureBridge() {
+function CameraGestureBridgeView() {
   useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
     const camera = getCameraController();
@@ -41,3 +41,6 @@ export function CameraGestureBridge() {
   }, []);
   return null;
 }
+
+/** Memoized: the app re-renders on every telemetry publish (~15 a second), and this shows nothing from it. */
+export const CameraGestureBridge = memo(CameraGestureBridgeView);

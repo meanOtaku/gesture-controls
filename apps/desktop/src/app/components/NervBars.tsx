@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore, memo } from "react";
 import { getCameraController } from "../../features/camera/cameraService";
 import { droneDevice, getDroneSnapshot, subscribeDrone } from "../../features/drone/droneStatus";
 import { AnimatedText, AnimatedWord } from "../../components/app/AnimatedNumber";
@@ -135,7 +135,7 @@ function FooterBar({ headphonesConnected, watchConnected, watchWorn, recordingSt
  * headphones, watch, camera, drone and recorder are live, and the computer's clock. Everything shown is read from the app's
  * own state: nothing is made up for effect. They exist only under the NERV theme.
  */
-export function NervBars({ activeTab, ...status }: { activeTab: AppTab } & NavStatusInput) {
+function NervBarsView({ activeTab, ...status }: { activeTab: AppTab } & NavStatusInput) {
   const nerv = useThemeIs("nerv");
   const camera = getCameraController();
   const cameraOn = useSyncExternalStore(camera.subscribe, () => camera.getSnapshot().status === "on", () => false);
@@ -157,3 +157,6 @@ export function NervBars({ activeTab, ...status }: { activeTab: AppTab } & NavSt
     </>
   );
 }
+
+/** Memoized: it re-renders when a device state or the page changes, and on its own clock, not on every telemetry publish. */
+export const NervBars = memo(NervBarsView);

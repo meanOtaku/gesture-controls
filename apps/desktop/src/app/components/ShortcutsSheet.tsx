@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, memo } from "react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../components/ui/sheet";
 
 const isMac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
@@ -57,7 +57,7 @@ export function shortcutGroups(mac: boolean): { title: string; keys: [string, st
 }
 
 /** The keyboard shortcuts, opened with `?` from anywhere but a text field. */
-export function ShortcutsSheet() {
+function ShortcutsSheetView() {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -99,3 +99,6 @@ export function ShortcutsSheet() {
     </Sheet>
   );
 }
+
+/** Memoized: the app re-renders on every telemetry publish (~15 a second), and this shows nothing from it. */
+export const ShortcutsSheet = memo(ShortcutsSheetView);

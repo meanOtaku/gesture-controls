@@ -39,7 +39,7 @@ import {
   SETTINGS_UPDATED_EVENT,
   WATCH_EDA_BATCH_EVENT,
   WATCH_HEART_RATE_BATCH_EVENT,
-  WATCH_ORIENTATION_EVENT,
+  WATCH_ORIENTATION_BATCH_EVENT,
   WATCH_PPG_BATCH_EVENT,
   WATCH_SKIN_TEMPERATURE_BATCH_EVENT,
   WATCH_STATUS_EVENT,
@@ -391,8 +391,8 @@ function MainApp() {
     const registration = listen<WatchStatus>(WATCH_STATUS_EVENT, ({ payload }) => {
       if (!cancelled) telemetryStore.ingestWatchStatus(payload);
     });
-    const orientationRegistration = listen<WatchOrientationSample>(WATCH_ORIENTATION_EVENT, ({ payload }) => {
-      if (!cancelled) telemetryStore.ingestWatchOrientation(payload);
+    const orientationRegistration = listen<WatchOrientationSample[]>(WATCH_ORIENTATION_BATCH_EVENT, ({ payload }) => {
+      if (!cancelled) telemetryStore.ingestWatchOrientationBatch(payload);
     });
     const ppgRegistration = listen<WatchPpgBatch>(WATCH_PPG_BATCH_EVENT, ({ payload }) => {
       if (!cancelled) telemetryStore.ingestPpgBatch(payload);

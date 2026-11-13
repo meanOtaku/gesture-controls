@@ -1,5 +1,5 @@
 import { Command } from "cmdk";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore, memo } from "react";
 import { toast } from "sonner";
 import { getCameraController } from "../../features/camera/cameraService";
 import { markMiss, type MissKind } from "../../features/misses/missApi";
@@ -12,7 +12,7 @@ const inDesktop = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" i
  * listed in the menu's order; the actions are the ones worth reaching without finding their page first (marking a miss,
  * the camera, the list of keyboard shortcuts).
  */
-export function CommandPalette({ onSelect }: { onSelect: (tab: AppTab) => void }) {
+function CommandPaletteView({ onSelect }: { onSelect: (tab: AppTab) => void }) {
   const [open, setOpen] = useState(false);
   const camera = getCameraController();
   const cameraOn = useSyncExternalStore(camera.subscribe, () => camera.getSnapshot().status === "on", () => false);
@@ -71,3 +71,6 @@ export function CommandPalette({ onSelect }: { onSelect: (tab: AppTab) => void }
     </Command.Dialog>
   );
 }
+
+/** Memoized: the app re-renders on every telemetry publish (~15 a second), and this shows nothing from it. */
+export const CommandPalette = memo(CommandPaletteView);

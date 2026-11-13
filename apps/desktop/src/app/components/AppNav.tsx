@@ -1,5 +1,5 @@
 import { Activity, Brain, ChevronDown, ChevronRight, CircleDot, Database, Highlighter, Network, FolderOpen, Hand, Headphones, Shapes, Tags, Radar, LayoutDashboard, Plane, Settings as SettingsIcon, SlidersHorizontal, Watch, Workflow } from "lucide-react";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -129,11 +129,25 @@ type AppNavProps = {
   statuses?: Partial<Record<AppTab, NavStatus>>;
 };
 
+/** Whether two sets of tab markers say the same thing. */
+export function sameStatuses(a: Partial<Record<AppTab, NavStatus>> = {}, b: Partial<Record<AppTab, NavStatus>> = {}): boolean {
+  const tabs = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<AppTab>;
+  for (const tab of tabs) if (a[tab]?.tone !== b[tab]?.tone || a[tab]?.label !== b[tab]?.label) return false;
+  return true;
+}
+
 /**
  * Primary navigation: what is used every day first, then the devices, then the pages for making a model (which fold away
  * under one heading), with Settings pinned at the bottom.
+ *
+ * It re-renders only when the page or a marker changes. The app above it renders on every watch status (about ten times a
+ * second), and each render of the nav's seventeen tooltips cost WebKit memory it never gave back: the page grew by about
+ * 2 MB a second until macOS killed it, which reloads the app.
  */
-export function AppNav({ activeTab, onSelect, statuses = {} }: AppNavProps) {
+export const AppNav = memo(AppNavView, (before, after) =>
+  before.activeTab === after.activeTab && before.onSelect === after.onSelect && sameStatuses(before.statuses, after.statuses));
+
+function AppNavView({ activeTab, onSelect, statuses = {} }: AppNavProps) {
   const [labOpen, setLabOpen] = useState(readLabOpen);
   // The page you are on is never folded away.
   const labShown = labOpen || LAB_TABS.has(activeTab);
