@@ -9,6 +9,7 @@ fn recipe(id: &str, stages: Vec<Stage>, device: Device) -> Recipe {
         device,
         action: Action::Volume,
         keys: None,
+        apps: Vec::new(),
     }
 }
 
@@ -721,6 +722,7 @@ fn model_recipe(action: Action, label: &str, hold: ModelHold, stages: Vec<Stage>
     Recipe {
         action,
         keys: None,
+        apps: Vec::new(),
         ..recipe("m", stages, Device::default_for(DeviceKind::RotationKnob))
     }
 }
@@ -820,6 +822,7 @@ fn camera_recipe(action: Action, gesture: &str, hold: ModelHold) -> Recipe {
     Recipe {
         action,
         keys: None,
+        apps: Vec::new(),
         ..recipe(
             "c",
             vec![Stage::Camera {
@@ -1239,4 +1242,56 @@ fn a_shortcut_recipe_needs_its_keys_and_only_the_same_shortcut_conflicts() {
     .unwrap();
     assert_eq!(old.keys, None);
     assert!(!serde_json::to_string(&old).unwrap().contains("keys"));
+}
+
+#[test]
+fn a_recipe_for_some_apps_runs_only_in_them_and_does_not_clash_with_one_for_other_apps() {
+    let volume = |id: &str, apps: &[&str]| Recipe {
+        id: id.into(),
+        apps: apps.iter().map(|app| (*app).to_string()).collect(),
+        ..recipe(id, chain(), Device::default_for(DeviceKind::RotationKnob))
+    };
+    let everywhere = volume("everywhere", &[]);
+    let music = volume("music", &["Spotify", "Music"]);
+    let browser = volume("browser", &["Safari"]);
+    assert!(everywhere.runs_in(None) && everywhere.runs_in(Some("Anything")));
+    assert!(music.runs_in(Some("spotify ")) && music.runs_in(Some("Music")));
+    assert!(!music.runs_in(Some("Safari")));
+    assert!(
+        !music.runs_in(None),
+        "not knowing the app in front is not a match"
+    );
+
+    assert!(find_conflicts(&[music.clone(), browser.clone()]).is_empty());
+    assert_eq!(
+        find_conflicts(&[music.clone(), volume("also", &["MUSIC"])]).len(),
+        1
+    );
+    // One that works everywhere clashes with every other on the same resource.
+    assert_eq!(
+        find_conflicts(&[everywhere, music.clone(), browser]).len(),
+        2
+    );
+
+    assert_eq!(validate_recipe(&music), Ok(()));
+    assert_eq!(
+        validate_recipe(&volume("twice", &["Safari", "safari"])),
+        Err(RecipeError::InvalidApps)
+    );
+    assert_eq!(
+        validate_recipe(&volume("blank", &[" "])),
+        Err(RecipeError::InvalidApps)
+    );
+    let many: Vec<String> = (0..9).map(|i| format!("App {i}")).collect();
+    let many: Vec<&str> = many.iter().map(String::as_str).collect();
+    assert_eq!(
+        validate_recipe(&volume("many", &many)),
+        Err(RecipeError::InvalidApps)
+    );
+    // A recipe saved before apps existed works everywhere, and one with none is saved without the field.
+    assert!(
+        !serde_json::to_string(&volume("x", &[]))
+            .unwrap()
+            .contains("apps")
+    );
 }

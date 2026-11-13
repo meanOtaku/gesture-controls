@@ -507,6 +507,1032 @@
      "medianLatencyMs": 442.478226
     }
    }
+  },
+  "19": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 52,
+     "perHour": 94.26294277439192,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 12,
+     "medianLatencyMs": 432.261052
+    },
+    {
+     "threshold": 0.35,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 38,
+     "perHour": 68.88445818128639,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 9,
+     "medianLatencyMs": 433.684656
+    },
+    {
+     "threshold": 0.4,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 36,
+     "perHour": 65.25896038227133,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 8,
+     "medianLatencyMs": 436.20376450000003
+    },
+    {
+     "threshold": 0.45,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 33,
+     "perHour": 59.820713683748714,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 8,
+     "medianLatencyMs": 438.722873
+    },
+    {
+     "threshold": 0.5,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 30,
+     "perHour": 54.3824669852261,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 9,
+     "medianLatencyMs": 439.482301
+    },
+    {
+     "threshold": 0.55,
+     "caught": 92,
+     "gestures": 120,
+     "falseActivations": 29,
+     "perHour": 52.56971808571856,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 9,
+     "medianLatencyMs": 439.10258699999997
+    },
+    {
+     "threshold": 0.6,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 28,
+     "perHour": 50.75696918621103,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 9,
+     "medianLatencyMs": 441.537539
+    },
+    {
+     "threshold": 0.65,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 24,
+     "perHour": 43.50597358818088,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 9,
+     "medianLatencyMs": 441.537539
+    },
+    {
+     "threshold": 0.7,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 20,
+     "perHour": 36.254977990150735,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 8,
+     "medianLatencyMs": 442.239049
+    },
+    {
+     "threshold": 0.75,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 16,
+     "perHour": 29.003982392120587,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 7,
+     "medianLatencyMs": 441.7687055
+    },
+    {
+     "threshold": 0.8,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 14,
+     "perHour": 25.378484593105515,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 6,
+     "medianLatencyMs": 442.239049
+    },
+    {
+     "threshold": 0.85,
+     "caught": 98,
+     "gestures": 120,
+     "falseActivations": 11,
+     "perHour": 19.940237894582904,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 441.7687055
+    },
+    {
+     "threshold": 0.9,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 9,
+     "perHour": 16.31474009556783,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 441.999872
+    },
+    {
+     "threshold": 0.95,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 9,
+     "perHour": 16.31474009556783,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 447.27337850000004
+    },
+    {
+     "threshold": 0.96,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 8,
+     "perHour": 14.501991196060294,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 447.27337850000004
+    },
+    {
+     "threshold": 0.97,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 7,
+     "perHour": 12.689242296552758,
+     "unseenCaught": 44,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 451.546693
+    },
+    {
+     "threshold": 0.98,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.250995598030147,
+     "unseenCaught": 44,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 451.546693
+    },
+    {
+     "threshold": 0.99,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 447.27337850000004
+    },
+    {
+     "threshold": 0.995,
+     "caught": 91,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 452.407031
+    },
+    {
+     "threshold": 0.999,
+     "caught": 79,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 40,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 488.144437
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.999,
+     "caught": 79,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 40,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 488.144437
+    },
+    "5.0": {
+     "threshold": 0.995,
+     "caught": 91,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 452.407031
+    },
+    "10.0": {
+     "threshold": 0.98,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.250995598030147,
+     "unseenCaught": 44,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 451.546693
+    }
+   }
+  },
+  "20": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 41,
+     "perHour": 74.32270487980901,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 10,
+     "medianLatencyMs": 469.8234095
+    },
+    {
+     "threshold": 0.35,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 32,
+     "perHour": 58.007964784241175,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 9,
+     "medianLatencyMs": 474.67566
+    },
+    {
+     "threshold": 0.4,
+     "caught": 98,
+     "gestures": 120,
+     "falseActivations": 27,
+     "perHour": 48.94422028670349,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 8,
+     "medianLatencyMs": 478.2428665
+    },
+    {
+     "threshold": 0.45,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 27,
+     "perHour": 48.94422028670349,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 8,
+     "medianLatencyMs": 478.406903
+    },
+    {
+     "threshold": 0.5,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 25,
+     "perHour": 45.31872248768842,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 8,
+     "medianLatencyMs": 478.406903
+    },
+    {
+     "threshold": 0.55,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 21,
+     "perHour": 38.067726889658275,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 7,
+     "medianLatencyMs": 478.406903
+    },
+    {
+     "threshold": 0.6,
+     "caught": 98,
+     "gestures": 120,
+     "falseActivations": 21,
+     "perHour": 38.067726889658275,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 7,
+     "medianLatencyMs": 478.2428665
+    },
+    {
+     "threshold": 0.65,
+     "caught": 99,
+     "gestures": 120,
+     "falseActivations": 18,
+     "perHour": 32.62948019113566,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 7,
+     "medianLatencyMs": 478.07883
+    },
+    {
+     "threshold": 0.7,
+     "caught": 102,
+     "gestures": 120,
+     "falseActivations": 14,
+     "perHour": 25.378484593105515,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 5,
+     "medianLatencyMs": 473.46835599999997
+    },
+    {
+     "threshold": 0.75,
+     "caught": 102,
+     "gestures": 120,
+     "falseActivations": 13,
+     "perHour": 23.56573569359798,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 5,
+     "medianLatencyMs": 473.46835599999997
+    },
+    {
+     "threshold": 0.8,
+     "caught": 101,
+     "gestures": 120,
+     "falseActivations": 10,
+     "perHour": 18.127488995075367,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 478.07883
+    },
+    {
+     "threshold": 0.85,
+     "caught": 101,
+     "gestures": 120,
+     "falseActivations": 7,
+     "perHour": 12.689242296552758,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 478.07883
+    },
+    {
+     "threshold": 0.9,
+     "caught": 101,
+     "gestures": 120,
+     "falseActivations": 6,
+     "perHour": 10.87649339704522,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 478.406903
+    },
+    {
+     "threshold": 0.95,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.250995598030147,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 483.1034925
+    },
+    {
+     "threshold": 0.96,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 483.1034925
+    },
+    {
+     "threshold": 0.97,
+     "caught": 99,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 480.999936
+    },
+    {
+     "threshold": 0.98,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 480.999936
+    },
+    {
+     "threshold": 0.99,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 479.7034195
+    },
+    {
+     "threshold": 0.995,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 478.2428665
+    },
+    {
+     "threshold": 0.999,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 480.999936
+    }
+   ],
+   "best": {
+    "2.0": null,
+    "5.0": {
+     "threshold": 0.99,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 479.7034195
+    },
+    "10.0": {
+     "threshold": 0.96,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 483.1034925
+    }
+   }
+  },
+  "21": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 38,
+     "perHour": 68.88445818128639,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 10,
+     "medianLatencyMs": 441.62028799999996
+    },
+    {
+     "threshold": 0.35,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 28,
+     "perHour": 50.75696918621103,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 7,
+     "medianLatencyMs": 444.06195449999996
+    },
+    {
+     "threshold": 0.4,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 27,
+     "perHour": 48.94422028670349,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 7,
+     "medianLatencyMs": 448.9447595
+    },
+    {
+     "threshold": 0.45,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 26,
+     "perHour": 47.13147138719596,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 7,
+     "medianLatencyMs": 448.9447595
+    },
+    {
+     "threshold": 0.5,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 24,
+     "perHour": 43.50597358818088,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 7,
+     "medianLatencyMs": 446.420872
+    },
+    {
+     "threshold": 0.55,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 23,
+     "perHour": 41.69322468867335,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 7,
+     "medianLatencyMs": 451.468647
+    },
+    {
+     "threshold": 0.6,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 20,
+     "perHour": 36.254977990150735,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 7,
+     "medianLatencyMs": 451.701777
+    },
+    {
+     "threshold": 0.65,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 17,
+     "perHour": 30.816731291628123,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 6,
+     "medianLatencyMs": 451.934907
+    },
+    {
+     "threshold": 0.7,
+     "caught": 98,
+     "gestures": 120,
+     "falseActivations": 15,
+     "perHour": 27.19123349261305,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 5,
+     "medianLatencyMs": 452.4674215
+    },
+    {
+     "threshold": 0.75,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 14,
+     "perHour": 25.378484593105515,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 5,
+     "medianLatencyMs": 451.934907
+    },
+    {
+     "threshold": 0.8,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 13,
+     "perHour": 23.56573569359798,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 452.999936
+    },
+    {
+     "threshold": 0.85,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 9,
+     "perHour": 16.31474009556783,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 463.330787
+    },
+    {
+     "threshold": 0.9,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 7,
+     "perHour": 12.689242296552758,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 459.4231555
+    },
+    {
+     "threshold": 0.95,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 463.330787
+    },
+    {
+     "threshold": 0.96,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 463.330787
+    },
+    {
+     "threshold": 0.97,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 463.330787
+    },
+    {
+     "threshold": 0.98,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 459.4231555
+    },
+    {
+     "threshold": 0.99,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 452.4674215
+    },
+    {
+     "threshold": 0.995,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 454.25773000000004
+    },
+    {
+     "threshold": 0.999,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 455.515524
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.999,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 455.515524
+    },
+    "5.0": {
+     "threshold": 0.995,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 454.25773000000004
+    },
+    "10.0": {
+     "threshold": 0.97,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 463.330787
+    }
+   }
+  },
+  "22": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 99,
+     "gestures": 120,
+     "falseActivations": 39,
+     "perHour": 70.69720708079393,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 11,
+     "medianLatencyMs": 450.892975
+    },
+    {
+     "threshold": 0.35,
+     "caught": 99,
+     "gestures": 120,
+     "falseActivations": 30,
+     "perHour": 54.3824669852261,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 8,
+     "medianLatencyMs": 451.934907
+    },
+    {
+     "threshold": 0.4,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 25,
+     "perHour": 45.31872248768842,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 7,
+     "medianLatencyMs": 451.413941
+    },
+    {
+     "threshold": 0.45,
+     "caught": 101,
+     "gestures": 120,
+     "falseActivations": 22,
+     "perHour": 39.88047578916581,
+     "unseenCaught": 51,
+     "unseenGestures": 63,
+     "unseenFalse": 6,
+     "medianLatencyMs": 451.934907
+    },
+    {
+     "threshold": 0.5,
+     "caught": 102,
+     "gestures": 120,
+     "falseActivations": 20,
+     "perHour": 36.254977990150735,
+     "unseenCaught": 51,
+     "unseenGestures": 63,
+     "unseenFalse": 5,
+     "medianLatencyMs": 452.4674215
+    },
+    {
+     "threshold": 0.55,
+     "caught": 101,
+     "gestures": 120,
+     "falseActivations": 19,
+     "perHour": 34.442229090643195,
+     "unseenCaught": 51,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 452.999936
+    },
+    {
+     "threshold": 0.6,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 19,
+     "perHour": 34.442229090643195,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 5,
+     "medianLatencyMs": 454.25773000000004
+    },
+    {
+     "threshold": 0.65,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 15,
+     "perHour": 27.19123349261305,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 5,
+     "medianLatencyMs": 454.25773000000004
+    },
+    {
+     "threshold": 0.7,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 13,
+     "perHour": 23.56573569359798,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 5,
+     "medianLatencyMs": 460.589115
+    },
+    {
+     "threshold": 0.75,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 11,
+     "perHour": 19.940237894582904,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 460.589115
+    },
+    {
+     "threshold": 0.8,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 11,
+     "perHour": 19.940237894582904,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 481.537539
+    },
+    {
+     "threshold": 0.85,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 10,
+     "perHour": 18.127488995075367,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 5,
+     "medianLatencyMs": 481.537539
+    },
+    {
+     "threshold": 0.9,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 6,
+     "perHour": 10.87649339704522,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 485.207049
+    },
+    {
+     "threshold": 0.95,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.250995598030147,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 489.3550765
+    },
+    {
+     "threshold": 0.96,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.250995598030147,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 489.3550765
+    },
+    {
+     "threshold": 0.97,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 489.3550765
+    },
+    {
+     "threshold": 0.98,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 489.710217
+    },
+    {
+     "threshold": 0.99,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 489.3550765
+    },
+    {
+     "threshold": 0.995,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 489.710217
+    },
+    {
+     "threshold": 0.999,
+     "caught": 89,
+     "gestures": 120,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 489.710217
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.995,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 489.710217
+    },
+    "5.0": {
+     "threshold": 0.97,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 489.3550765
+    },
+    "10.0": {
+     "threshold": 0.99,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 489.3550765
+    }
+   }
   }
  },
  "loop": {
@@ -2027,6 +3053,1042 @@
      "medianLatencyMs": 496.24413300000003
     }
    }
+  },
+  "19": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 17,
+     "perHour": 30.816731291628123,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 6,
+     "medianLatencyMs": 467.594683
+    },
+    {
+     "threshold": 0.35,
+     "caught": 99,
+     "gestures": 120,
+     "falseActivations": 14,
+     "perHour": 25.378484593105515,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 481.420936
+    },
+    {
+     "threshold": 0.4,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 11,
+     "perHour": 19.940237894582904,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 481.47923749999995
+    },
+    {
+     "threshold": 0.45,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 11,
+     "perHour": 19.940237894582904,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 482.0078825
+    },
+    {
+     "threshold": 0.5,
+     "caught": 101,
+     "gestures": 120,
+     "falseActivations": 9,
+     "perHour": 16.31474009556783,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 481.537539
+    },
+    {
+     "threshold": 0.55,
+     "caught": 101,
+     "gestures": 120,
+     "falseActivations": 6,
+     "perHour": 10.87649339704522,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 481.537539
+    },
+    {
+     "threshold": 0.6,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 6,
+     "perHour": 10.87649339704522,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 482.0078825
+    },
+    {
+     "threshold": 0.65,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.250995598030147,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 482.0078825
+    },
+    {
+     "threshold": 0.7,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 482.0078825
+    },
+    {
+     "threshold": 0.75,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 482.0078825
+    },
+    {
+     "threshold": 0.8,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 482.0078825
+    },
+    {
+     "threshold": 0.85,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 482.0078825
+    },
+    {
+     "threshold": 0.9,
+     "caught": 99,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 481.537539
+    },
+    {
+     "threshold": 0.95,
+     "caught": 99,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 481.537539
+    },
+    {
+     "threshold": 0.96,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 482.0078825
+    },
+    {
+     "threshold": 0.97,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 482.0078825
+    },
+    {
+     "threshold": 0.98,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 482.0078825
+    },
+    {
+     "threshold": 0.99,
+     "caught": 98,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 482.0078825
+    },
+    {
+     "threshold": 0.995,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 483.66261
+    },
+    {
+     "threshold": 0.999,
+     "caught": 91,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 512.999936
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.999,
+     "caught": 91,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 512.999936
+    },
+    "5.0": {
+     "threshold": 0.98,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 482.0078825
+    },
+    "10.0": {
+     "threshold": 0.98,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 482.0078825
+    }
+   }
+  },
+  "20": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 19,
+     "perHour": 34.442229090643195,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 5,
+     "medianLatencyMs": 450.892975
+    },
+    {
+     "threshold": 0.35,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 14,
+     "perHour": 25.378484593105515,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 453.49208550000003
+    },
+    {
+     "threshold": 0.4,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 12,
+     "perHour": 21.75298679409044,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 453.49208550000003
+    },
+    {
+     "threshold": 0.45,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 10,
+     "perHour": 18.127488995075367,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 455.515524
+    },
+    {
+     "threshold": 0.5,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 10,
+     "perHour": 18.127488995075367,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 461.4506455
+    },
+    {
+     "threshold": 0.55,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 7,
+     "perHour": 12.689242296552758,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 455.515524
+    },
+    {
+     "threshold": 0.6,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 7,
+     "perHour": 12.689242296552758,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 461.4506455
+    },
+    {
+     "threshold": 0.65,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 5,
+     "perHour": 9.063744497537684,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 455.515524
+    },
+    {
+     "threshold": 0.7,
+     "caught": 99,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 471.613243
+    },
+    {
+     "threshold": 0.75,
+     "caught": 99,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 471.613243
+    },
+    {
+     "threshold": 0.8,
+     "caught": 99,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 471.613243
+    },
+    {
+     "threshold": 0.85,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 476.134047
+    },
+    {
+     "threshold": 0.9,
+     "caught": 99,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 475.176377
+    },
+    {
+     "threshold": 0.95,
+     "caught": 99,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 477.091717
+    },
+    {
+     "threshold": 0.96,
+     "caught": 99,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 478.406903
+    },
+    {
+     "threshold": 0.97,
+     "caught": 98,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 476.79164000000003
+    },
+    {
+     "threshold": 0.98,
+     "caught": 99,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 475.176377
+    },
+    {
+     "threshold": 0.99,
+     "caught": 98,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 476.79164000000003
+    },
+    {
+     "threshold": 0.995,
+     "caught": 98,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 478.94460200000003
+    },
+    {
+     "threshold": 0.999,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 485.0270215
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.999,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 485.0270215
+    },
+    "5.0": {
+     "threshold": 0.85,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 476.134047
+    },
+    "10.0": {
+     "threshold": 0.85,
+     "caught": 100,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 476.134047
+    }
+   }
+  },
+  "21": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 91,
+     "gestures": 120,
+     "falseActivations": 17,
+     "perHour": 30.816731291628123,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 467.385767
+    },
+    {
+     "threshold": 0.35,
+     "caught": 91,
+     "gestures": 120,
+     "falseActivations": 15,
+     "perHour": 27.19123349261305,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 476.844796
+    },
+    {
+     "threshold": 0.4,
+     "caught": 91,
+     "gestures": 120,
+     "falseActivations": 13,
+     "perHour": 23.56573569359798,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 476.844796
+    },
+    {
+     "threshold": 0.45,
+     "caught": 92,
+     "gestures": 120,
+     "falseActivations": 12,
+     "perHour": 21.75298679409044,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 476.9682565
+    },
+    {
+     "threshold": 0.5,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 11,
+     "perHour": 19.940237894582904,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 476.844796
+    },
+    {
+     "threshold": 0.55,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 8,
+     "perHour": 14.501991196060294,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 476.844796
+    },
+    {
+     "threshold": 0.6,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 7,
+     "perHour": 12.689242296552758,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 477.091717
+    },
+    {
+     "threshold": 0.65,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.250995598030147,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 476.9682565
+    },
+    {
+     "threshold": 0.7,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 476.9682565
+    },
+    {
+     "threshold": 0.75,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 476.9682565
+    },
+    {
+     "threshold": 0.8,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 477.091717
+    },
+    {
+     "threshold": 0.85,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 483.0168565
+    },
+    {
+     "threshold": 0.9,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6254977990150734,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 483.0168565
+    },
+    {
+     "threshold": 0.95,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 478.9591905
+    },
+    {
+     "threshold": 0.96,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 480.826664
+    },
+    {
+     "threshold": 0.97,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 477.091717
+    },
+    {
+     "threshold": 0.98,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 476.9682565
+    },
+    {
+     "threshold": 0.99,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 476.844796
+    },
+    {
+     "threshold": 0.995,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 476.0
+    },
+    {
+     "threshold": 0.999,
+     "caught": 86,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 487.1034925
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.96,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 480.826664
+    },
+    "5.0": {
+     "threshold": 0.96,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 480.826664
+    },
+    "10.0": {
+     "threshold": 0.96,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 50,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 480.826664
+    }
+   }
+  },
+  "22": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 16,
+     "perHour": 29.003982392120587,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 451.468647
+    },
+    {
+     "threshold": 0.35,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 14,
+     "perHour": 25.378484593105515,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 454.125916
+    },
+    {
+     "threshold": 0.4,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 14,
+     "perHour": 25.378484593105515,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 453.562926
+    },
+    {
+     "threshold": 0.45,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 11,
+     "perHour": 19.940237894582904,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 454.82072000000005
+    },
+    {
+     "threshold": 0.5,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 10,
+     "perHour": 18.127488995075367,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 459.4231555
+    },
+    {
+     "threshold": 0.55,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 9,
+     "perHour": 16.31474009556783,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 465.358277
+    },
+    {
+     "threshold": 0.6,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 6,
+     "perHour": 10.87649339704522,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 465.358277
+    },
+    {
+     "threshold": 0.65,
+     "caught": 98,
+     "gestures": 120,
+     "falseActivations": 5,
+     "perHour": 9.063744497537684,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 472.238742
+    },
+    {
+     "threshold": 0.7,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.250995598030147,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 467.385767
+    },
+    {
+     "threshold": 0.75,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 477.091717
+    },
+    {
+     "threshold": 0.8,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 477.091717
+    },
+    {
+     "threshold": 0.85,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 480.826664
+    },
+    {
+     "threshold": 0.9,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.43824669852261,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 485.207049
+    },
+    {
+     "threshold": 0.95,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 480.826664
+    },
+    {
+     "threshold": 0.96,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 480.826664
+    },
+    {
+     "threshold": 0.97,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 478.9591905
+    },
+    {
+     "threshold": 0.98,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 480.826664
+    },
+    {
+     "threshold": 0.99,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 480.826664
+    },
+    {
+     "threshold": 0.995,
+     "caught": 92,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 474.10621549999996
+    },
+    {
+     "threshold": 0.999,
+     "caught": 89,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 505.759767
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.98,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 480.826664
+    },
+    "5.0": {
+     "threshold": 0.98,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8127488995075367,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 480.826664
+    },
+    "10.0": {
+     "threshold": 0.65,
+     "caught": 98,
+     "gestures": 120,
+     "falseActivations": 5,
+     "perHour": 9.063744497537684,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 472.238742
+    }
+   }
   }
  },
  "base@100": {
@@ -2786,6 +4848,3331 @@
      "unseenGestures": 63,
      "unseenFalse": 2,
      "medianLatencyMs": 472.261052
+    }
+   }
+  },
+  "18": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 98,
+     "gestures": 120,
+     "falseActivations": 22,
+     "perHour": 39.88378950559248,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 7,
+     "medianLatencyMs": 453.8105775
+    },
+    {
+     "threshold": 0.35,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 16,
+     "perHour": 29.006392367703622,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 6,
+     "medianLatencyMs": 457.693031
+    },
+    {
+     "threshold": 0.4,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 12,
+     "perHour": 21.754794275777716,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 5,
+     "medianLatencyMs": 457.693031
+    },
+    {
+     "threshold": 0.45,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 10,
+     "perHour": 18.128995229814763,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 457.693031
+    },
+    {
+     "threshold": 0.5,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 8,
+     "perHour": 14.503196183851811,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 457.693031
+    },
+    {
+     "threshold": 0.55,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 8,
+     "perHour": 14.503196183851811,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 458.42714550000005
+    },
+    {
+     "threshold": 0.6,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 8,
+     "perHour": 14.503196183851811,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 458.42714550000005
+    },
+    {
+     "threshold": 0.65,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 6,
+     "perHour": 10.877397137888858,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 459.16126
+    },
+    {
+     "threshold": 0.7,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.2515980919259055,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 466.963234
+    },
+    {
+     "threshold": 0.75,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.2515980919259055,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 469.269318
+    },
+    {
+     "threshold": 0.8,
+     "caught": 96,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 469.269318
+    },
+    {
+     "threshold": 0.85,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 466.963234
+    },
+    {
+     "threshold": 0.9,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 471.575402
+    },
+    {
+     "threshold": 0.95,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 469.269318
+    },
+    {
+     "threshold": 0.96,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 44,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 466.963234
+    },
+    {
+     "threshold": 0.97,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 44,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 466.963234
+    },
+    {
+     "threshold": 0.98,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 43,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 474.72215
+    },
+    {
+     "threshold": 0.99,
+     "caught": 92,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 42,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 473.148776
+    },
+    {
+     "threshold": 0.995,
+     "caught": 89,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 41,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 466.963234
+    },
+    {
+     "threshold": 0.999,
+     "caught": 86,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 41,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 473.148776
+    }
+   ],
+   "best": {
+    "2.0": null,
+    "5.0": {
+     "threshold": 0.95,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 469.269318
+    },
+    "10.0": {
+     "threshold": 0.7,
+     "caught": 97,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.2515980919259055,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 466.963234
+    }
+   }
+  }
+ },
+ "aug@100": {
+  "17": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 80,
+     "gestures": 120,
+     "falseActivations": 25,
+     "perHour": 45.32248807453691,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 5,
+     "medianLatencyMs": 391.5943225
+    },
+    {
+     "threshold": 0.35,
+     "caught": 81,
+     "gestures": 120,
+     "falseActivations": 16,
+     "perHour": 29.006392367703622,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 392.0
+    },
+    {
+     "threshold": 0.4,
+     "caught": 81,
+     "gestures": 120,
+     "falseActivations": 14,
+     "perHour": 25.38059332174067,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 392.0
+    },
+    {
+     "threshold": 0.45,
+     "caught": 81,
+     "gestures": 120,
+     "falseActivations": 12,
+     "perHour": 21.754794275777716,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 391.613243
+    },
+    {
+     "threshold": 0.5,
+     "caught": 81,
+     "gestures": 120,
+     "falseActivations": 11,
+     "perHour": 19.94189475279624,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 391.613243
+    },
+    {
+     "threshold": 0.55,
+     "caught": 81,
+     "gestures": 120,
+     "falseActivations": 11,
+     "perHour": 19.94189475279624,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 391.613243
+    },
+    {
+     "threshold": 0.6,
+     "caught": 81,
+     "gestures": 120,
+     "falseActivations": 11,
+     "perHour": 19.94189475279624,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 391.613243
+    },
+    {
+     "threshold": 0.65,
+     "caught": 81,
+     "gestures": 120,
+     "falseActivations": 8,
+     "perHour": 14.503196183851811,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 391.613243
+    },
+    {
+     "threshold": 0.7,
+     "caught": 76,
+     "gestures": 120,
+     "falseActivations": 7,
+     "perHour": 12.690296660870334,
+     "unseenCaught": 42,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 392.05289600000003
+    },
+    {
+     "threshold": 0.75,
+     "caught": 72,
+     "gestures": 120,
+     "falseActivations": 7,
+     "perHour": 12.690296660870334,
+     "unseenCaught": 38,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 392.600365
+    },
+    {
+     "threshold": 0.8,
+     "caught": 70,
+     "gestures": 120,
+     "falseActivations": 6,
+     "perHour": 10.877397137888858,
+     "unseenCaught": 37,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 392.183422
+    },
+    {
+     "threshold": 0.85,
+     "caught": 67,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.2515980919259055,
+     "unseenCaught": 36,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 391.613243
+    },
+    {
+     "threshold": 0.9,
+     "caught": 65,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.2515980919259055,
+     "unseenCaught": 34,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 388.606839
+    },
+    {
+     "threshold": 0.95,
+     "caught": 63,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.2515980919259055,
+     "unseenCaught": 34,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 391.575402
+    },
+    {
+     "threshold": 0.96,
+     "caught": 62,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.2515980919259055,
+     "unseenCaught": 34,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 389.327084
+    },
+    {
+     "threshold": 0.97,
+     "caught": 61,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 34,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 391.575402
+    },
+    {
+     "threshold": 0.98,
+     "caught": 62,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 35,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 391.5943225
+    },
+    {
+     "threshold": 0.99,
+     "caught": 63,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8128995229814764,
+     "unseenCaught": 35,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 391.613243
+    },
+    {
+     "threshold": 0.995,
+     "caught": 59,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8128995229814764,
+     "unseenCaught": 34,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 392.261052
+    },
+    {
+     "threshold": 0.999,
+     "caught": 50,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8128995229814764,
+     "unseenCaught": 30,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 392.600365
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.99,
+     "caught": 63,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8128995229814764,
+     "unseenCaught": 35,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 391.613243
+    },
+    "5.0": {
+     "threshold": 0.99,
+     "caught": 63,
+     "gestures": 120,
+     "falseActivations": 1,
+     "perHour": 1.8128995229814764,
+     "unseenCaught": 35,
+     "unseenGestures": 63,
+     "unseenFalse": 0,
+     "medianLatencyMs": 391.613243
+    },
+    "10.0": {
+     "threshold": 0.85,
+     "caught": 67,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.2515980919259055,
+     "unseenCaught": 36,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 391.613243
+    }
+   }
+  },
+  "18": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 85,
+     "gestures": 120,
+     "falseActivations": 24,
+     "perHour": 43.50958855155543,
+     "unseenCaught": 44,
+     "unseenGestures": 63,
+     "unseenFalse": 6,
+     "medianLatencyMs": 399.22759
+    },
+    {
+     "threshold": 0.35,
+     "caught": 87,
+     "gestures": 120,
+     "falseActivations": 17,
+     "perHour": 30.8192918906851,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 400.999936
+    },
+    {
+     "threshold": 0.4,
+     "caught": 87,
+     "gestures": 120,
+     "falseActivations": 17,
+     "perHour": 30.8192918906851,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 400.999936
+    },
+    {
+     "threshold": 0.45,
+     "caught": 87,
+     "gestures": 120,
+     "falseActivations": 16,
+     "perHour": 29.006392367703622,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 400.999936
+    },
+    {
+     "threshold": 0.5,
+     "caught": 87,
+     "gestures": 120,
+     "falseActivations": 16,
+     "perHour": 29.006392367703622,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 405.399771
+    },
+    {
+     "threshold": 0.55,
+     "caught": 87,
+     "gestures": 120,
+     "falseActivations": 13,
+     "perHour": 23.567693798759194,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 405.399771
+    },
+    {
+     "threshold": 0.6,
+     "caught": 87,
+     "gestures": 120,
+     "falseActivations": 12,
+     "perHour": 21.754794275777716,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 400.999936
+    },
+    {
+     "threshold": 0.65,
+     "caught": 87,
+     "gestures": 120,
+     "falseActivations": 8,
+     "perHour": 14.503196183851811,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 400.999936
+    },
+    {
+     "threshold": 0.7,
+     "caught": 87,
+     "gestures": 120,
+     "falseActivations": 6,
+     "perHour": 10.877397137888858,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 400.999936
+    },
+    {
+     "threshold": 0.75,
+     "caught": 85,
+     "gestures": 120,
+     "falseActivations": 5,
+     "perHour": 9.064497614907381,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 400.999936
+    },
+    {
+     "threshold": 0.8,
+     "caught": 85,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 405.399771
+    },
+    {
+     "threshold": 0.85,
+     "caught": 85,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 405.399771
+    },
+    {
+     "threshold": 0.9,
+     "caught": 83,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 44,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 421.934779
+    },
+    {
+     "threshold": 0.95,
+     "caught": 83,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 44,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 421.934779
+    },
+    {
+     "threshold": 0.96,
+     "caught": 83,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 43,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 419.846802
+    },
+    {
+     "threshold": 0.97,
+     "caught": 83,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 43,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 421.934779
+    },
+    {
+     "threshold": 0.98,
+     "caught": 82,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 42,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 420.8907905
+    },
+    {
+     "threshold": 0.99,
+     "caught": 79,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 41,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 421.934779
+    },
+    {
+     "threshold": 0.995,
+     "caught": 79,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 41,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 421.934779
+    },
+    {
+     "threshold": 0.999,
+     "caught": 76,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 37,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 425.7043455
+    }
+   ],
+   "best": {
+    "2.0": null,
+    "5.0": {
+     "threshold": 0.999,
+     "caught": 76,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 37,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 425.7043455
+    },
+    "10.0": {
+     "threshold": 0.85,
+     "caught": 85,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 405.399771
+    }
+   }
+  }
+ },
+ "loop+aug@100": {
+  "17": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 11,
+     "perHour": 19.94189475279624,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 4,
+     "medianLatencyMs": 437.091717
+    },
+    {
+     "threshold": 0.35,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 7,
+     "perHour": 12.690296660870334,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 437.907295
+    },
+    {
+     "threshold": 0.4,
+     "caught": 92,
+     "gestures": 120,
+     "falseActivations": 5,
+     "perHour": 9.064497614907381,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 429.238806
+    },
+    {
+     "threshold": 0.45,
+     "caught": 92,
+     "gestures": 120,
+     "falseActivations": 5,
+     "perHour": 9.064497614907381,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 429.238806
+    },
+    {
+     "threshold": 0.5,
+     "caught": 92,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.2515980919259055,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 429.238806
+    },
+    {
+     "threshold": 0.55,
+     "caught": 92,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 429.238806
+    },
+    {
+     "threshold": 0.6,
+     "caught": 92,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 429.238806
+    },
+    {
+     "threshold": 0.65,
+     "caught": 92,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 429.238806
+    },
+    {
+     "threshold": 0.7,
+     "caught": 92,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 438.9752315
+    },
+    {
+     "threshold": 0.75,
+     "caught": 92,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 439.8137125
+    },
+    {
+     "threshold": 0.8,
+     "caught": 91,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 439.22759
+    },
+    {
+     "threshold": 0.85,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 439.22759
+    },
+    {
+     "threshold": 0.9,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 438.9752315
+    },
+    {
+     "threshold": 0.95,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 437.907295
+    },
+    {
+     "threshold": 0.96,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 437.907295
+    },
+    {
+     "threshold": 0.97,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 437.907295
+    },
+    {
+     "threshold": 0.98,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 437.907295
+    },
+    {
+     "threshold": 0.99,
+     "caught": 89,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 438.722873
+    },
+    {
+     "threshold": 0.995,
+     "caught": 86,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 438.9752315
+    },
+    {
+     "threshold": 0.999,
+     "caught": 76,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 40,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 421.0054975
+    }
+   ],
+   "best": {
+    "2.0": null,
+    "5.0": {
+     "threshold": 0.98,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 437.907295
+    },
+    "10.0": {
+     "threshold": 0.98,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 437.907295
+    }
+   }
+  },
+  "18": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 10,
+     "perHour": 18.128995229814763,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 427.78770099999997
+    },
+    {
+     "threshold": 0.35,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 9,
+     "perHour": 16.316095706833288,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 3,
+     "medianLatencyMs": 427.78770099999997
+    },
+    {
+     "threshold": 0.4,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 5,
+     "perHour": 9.064497614907381,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 435.1491375
+    },
+    {
+     "threshold": 0.45,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 5,
+     "perHour": 9.064497614907381,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 435.1491375
+    },
+    {
+     "threshold": 0.5,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 5,
+     "perHour": 9.064497614907381,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 431.575402
+    },
+    {
+     "threshold": 0.55,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 5,
+     "perHour": 9.064497614907381,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 427.78770099999997
+    },
+    {
+     "threshold": 0.6,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 5,
+     "perHour": 9.064497614907381,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 427.78770099999997
+    },
+    {
+     "threshold": 0.65,
+     "caught": 94,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.2515980919259055,
+     "unseenCaught": 48,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 435.1491375
+    },
+    {
+     "threshold": 0.7,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.2515980919259055,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 431.575402
+    },
+    {
+     "threshold": 0.75,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 4,
+     "perHour": 7.2515980919259055,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 431.575402
+    },
+    {
+     "threshold": 0.8,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 3,
+     "perHour": 5.438698568944429,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 438.722873
+    },
+    {
+     "threshold": 0.85,
+     "caught": 92,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 46,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 435.1491375
+    },
+    {
+     "threshold": 0.9,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 431.575402
+    },
+    {
+     "threshold": 0.95,
+     "caught": 92,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 435.1491375
+    },
+    {
+     "threshold": 0.96,
+     "caught": 91,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 431.575402
+    },
+    {
+     "threshold": 0.97,
+     "caught": 91,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 431.575402
+    },
+    {
+     "threshold": 0.98,
+     "caught": 88,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 438.9752315
+    },
+    {
+     "threshold": 0.99,
+     "caught": 86,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 45,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 438.9752315
+    },
+    {
+     "threshold": 0.995,
+     "caught": 84,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 44,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 439.56342900000004
+    },
+    {
+     "threshold": 0.999,
+     "caught": 73,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 36,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 431.575402
+    }
+   ],
+   "best": {
+    "2.0": null,
+    "5.0": {
+     "threshold": 0.9,
+     "caught": 93,
+     "gestures": 120,
+     "falseActivations": 2,
+     "perHour": 3.6257990459629528,
+     "unseenCaught": 47,
+     "unseenGestures": 63,
+     "unseenFalse": 1,
+     "medianLatencyMs": 431.575402
+    },
+    "10.0": {
+     "threshold": 0.5,
+     "caught": 95,
+     "gestures": 120,
+     "falseActivations": 5,
+     "perHour": 9.064497614907381,
+     "unseenCaught": 49,
+     "unseenGestures": 63,
+     "unseenFalse": 2,
+     "medianLatencyMs": 431.575402
+    }
+   }
+  }
+ },
+ "base@2s": {
+  "17": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 86,
+     "gestures": 118,
+     "falseActivations": 49,
+     "perHour": 89.17241719347415,
+     "unseenCaught": 43,
+     "unseenGestures": 62,
+     "unseenFalse": 8,
+     "medianLatencyMs": 454.81396900000004
+    },
+    {
+     "threshold": 0.35,
+     "caught": 92,
+     "gestures": 118,
+     "falseActivations": 37,
+     "perHour": 67.33427420731722,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 6,
+     "medianLatencyMs": 454.81396900000004
+    },
+    {
+     "threshold": 0.4,
+     "caught": 93,
+     "gestures": 118,
+     "falseActivations": 31,
+     "perHour": 56.41520271423875,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 5,
+     "medianLatencyMs": 457.693031
+    },
+    {
+     "threshold": 0.45,
+     "caught": 93,
+     "gestures": 118,
+     "falseActivations": 29,
+     "perHour": 52.77551221654593,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 4,
+     "medianLatencyMs": 457.693031
+    },
+    {
+     "threshold": 0.5,
+     "caught": 95,
+     "gestures": 118,
+     "falseActivations": 27,
+     "perHour": 49.1358217188531,
+     "unseenCaught": 46,
+     "unseenGestures": 62,
+     "unseenFalse": 3,
+     "medianLatencyMs": 457.693031
+    },
+    {
+     "threshold": 0.55,
+     "caught": 97,
+     "gestures": 118,
+     "falseActivations": 23,
+     "perHour": 41.85644072346746,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 3,
+     "medianLatencyMs": 451.934907
+    },
+    {
+     "threshold": 0.6,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 23,
+     "perHour": 41.85644072346746,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 3,
+     "medianLatencyMs": 459.3955215
+    },
+    {
+     "threshold": 0.65,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 16,
+     "perHour": 29.11752398154258,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 462.060338
+    },
+    {
+     "threshold": 0.7,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 10,
+     "perHour": 18.198452488464113,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 462.060338
+    },
+    {
+     "threshold": 0.75,
+     "caught": 97,
+     "gestures": 118,
+     "falseActivations": 10,
+     "perHour": 18.198452488464113,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 461.098012
+    },
+    {
+     "threshold": 0.8,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 9,
+     "perHour": 16.3786072396177,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 462.060338
+    },
+    {
+     "threshold": 0.85,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 9,
+     "perHour": 16.3786072396177,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 463.1767255
+    },
+    {
+     "threshold": 0.9,
+     "caught": 99,
+     "gestures": 118,
+     "falseActivations": 7,
+     "perHour": 12.738916741924879,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 463.022664
+    },
+    {
+     "threshold": 0.95,
+     "caught": 99,
+     "gestures": 118,
+     "falseActivations": 3,
+     "perHour": 5.459535746539234,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 465.662706
+    },
+    {
+     "threshold": 0.96,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 3,
+     "perHour": 5.459535746539234,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 464.4967465
+    },
+    {
+     "threshold": 0.97,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 2,
+     "perHour": 3.6396904976928224,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 464.4967465
+    },
+    {
+     "threshold": 0.98,
+     "caught": 99,
+     "gestures": 118,
+     "falseActivations": 2,
+     "perHour": 3.6396904976928224,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 463.330787
+    },
+    {
+     "threshold": 0.99,
+     "caught": 95,
+     "gestures": 118,
+     "falseActivations": 2,
+     "perHour": 3.6396904976928224,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 463.330787
+    },
+    {
+     "threshold": 0.995,
+     "caught": 95,
+     "gestures": 118,
+     "falseActivations": 2,
+     "perHour": 3.6396904976928224,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 485.207049
+    },
+    {
+     "threshold": 0.999,
+     "caught": 80,
+     "gestures": 118,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "unseenCaught": 43,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 491.457305
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.999,
+     "caught": 80,
+     "gestures": 118,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "unseenCaught": 43,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 491.457305
+    },
+    "5.0": {
+     "threshold": 0.98,
+     "caught": 99,
+     "gestures": 118,
+     "falseActivations": 2,
+     "perHour": 3.6396904976928224,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 463.330787
+    },
+    "10.0": {
+     "threshold": 0.98,
+     "caught": 99,
+     "gestures": 118,
+     "falseActivations": 2,
+     "perHour": 3.6396904976928224,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 463.330787
+    }
+   }
+  },
+  "18": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 88,
+     "gestures": 118,
+     "falseActivations": 45,
+     "perHour": 81.89303619808851,
+     "unseenCaught": 43,
+     "unseenGestures": 62,
+     "unseenFalse": 8,
+     "medianLatencyMs": 498.263113
+    },
+    {
+     "threshold": 0.35,
+     "caught": 94,
+     "gestures": 118,
+     "falseActivations": 29,
+     "perHour": 52.77551221654593,
+     "unseenCaught": 46,
+     "unseenGestures": 62,
+     "unseenFalse": 6,
+     "medianLatencyMs": 498.263113
+    },
+    {
+     "threshold": 0.4,
+     "caught": 94,
+     "gestures": 118,
+     "falseActivations": 28,
+     "perHour": 50.955666967699514,
+     "unseenCaught": 46,
+     "unseenGestures": 62,
+     "unseenFalse": 6,
+     "medianLatencyMs": 501.7944
+    },
+    {
+     "threshold": 0.45,
+     "caught": 94,
+     "gestures": 118,
+     "falseActivations": 24,
+     "perHour": 43.67628597231387,
+     "unseenCaught": 46,
+     "unseenGestures": 62,
+     "unseenFalse": 4,
+     "medianLatencyMs": 501.7944
+    },
+    {
+     "threshold": 0.5,
+     "caught": 94,
+     "gestures": 118,
+     "falseActivations": 22,
+     "perHour": 40.036595474621045,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 4,
+     "medianLatencyMs": 503.8378765
+    },
+    {
+     "threshold": 0.55,
+     "caught": 96,
+     "gestures": 118,
+     "falseActivations": 21,
+     "perHour": 38.21675022577464,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 4,
+     "medianLatencyMs": 501.7944
+    },
+    {
+     "threshold": 0.6,
+     "caught": 96,
+     "gestures": 118,
+     "falseActivations": 19,
+     "perHour": 34.577059728081814,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 4,
+     "medianLatencyMs": 501.7944
+    },
+    {
+     "threshold": 0.65,
+     "caught": 96,
+     "gestures": 118,
+     "falseActivations": 11,
+     "perHour": 20.018297737310522,
+     "unseenCaught": 46,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 501.7944
+    },
+    {
+     "threshold": 0.7,
+     "caught": 97,
+     "gestures": 118,
+     "falseActivations": 8,
+     "perHour": 14.55876199077129,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 502.675817
+    },
+    {
+     "threshold": 0.75,
+     "caught": 97,
+     "gestures": 118,
+     "falseActivations": 8,
+     "perHour": 14.55876199077129,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 502.675817
+    },
+    {
+     "threshold": 0.8,
+     "caught": 97,
+     "gestures": 118,
+     "falseActivations": 7,
+     "perHour": 12.738916741924879,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 502.675817
+    },
+    {
+     "threshold": 0.85,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 4,
+     "perHour": 7.279380995385645,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 501.7944
+    },
+    {
+     "threshold": 0.9,
+     "caught": 97,
+     "gestures": 118,
+     "falseActivations": 4,
+     "perHour": 7.279380995385645,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 504.999936
+    },
+    {
+     "threshold": 0.95,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 2,
+     "perHour": 3.6396904976928224,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 503.8378765
+    },
+    {
+     "threshold": 0.96,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 2,
+     "perHour": 3.6396904976928224,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 503.8378765
+    },
+    {
+     "threshold": 0.97,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 2,
+     "perHour": 3.6396904976928224,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 503.8378765
+    },
+    {
+     "threshold": 0.98,
+     "caught": 97,
+     "gestures": 118,
+     "falseActivations": 2,
+     "perHour": 3.6396904976928224,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 502.675817
+    },
+    {
+     "threshold": 0.99,
+     "caught": 95,
+     "gestures": 118,
+     "falseActivations": 2,
+     "perHour": 3.6396904976928224,
+     "unseenCaught": 46,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 502.675817
+    },
+    {
+     "threshold": 0.995,
+     "caught": 94,
+     "gestures": 118,
+     "falseActivations": 1,
+     "perHour": 1.8198452488464112,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 503.8378765
+    },
+    {
+     "threshold": 0.999,
+     "caught": 92,
+     "gestures": 118,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "unseenCaught": 42,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 501.7944
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.995,
+     "caught": 94,
+     "gestures": 118,
+     "falseActivations": 1,
+     "perHour": 1.8198452488464112,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 503.8378765
+    },
+    "5.0": {
+     "threshold": 0.97,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 2,
+     "perHour": 3.6396904976928224,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 503.8378765
+    },
+    "10.0": {
+     "threshold": 0.97,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 2,
+     "perHour": 3.6396904976928224,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 503.8378765
+    }
+   }
+  },
+  "19": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 86,
+     "gestures": 118,
+     "falseActivations": 53,
+     "perHour": 96.4517981888598,
+     "unseenCaught": 42,
+     "unseenGestures": 62,
+     "unseenFalse": 10,
+     "medianLatencyMs": 501.40180499999997
+    },
+    {
+     "threshold": 0.35,
+     "caught": 93,
+     "gestures": 118,
+     "falseActivations": 45,
+     "perHour": 81.89303619808851,
+     "unseenCaught": 44,
+     "unseenGestures": 62,
+     "unseenFalse": 9,
+     "medianLatencyMs": 497.803674
+    },
+    {
+     "threshold": 0.4,
+     "caught": 93,
+     "gestures": 118,
+     "falseActivations": 43,
+     "perHour": 78.25334570039568,
+     "unseenCaught": 44,
+     "unseenGestures": 62,
+     "unseenFalse": 10,
+     "medianLatencyMs": 504.999936
+    },
+    {
+     "threshold": 0.45,
+     "caught": 95,
+     "gestures": 118,
+     "falseActivations": 37,
+     "perHour": 67.33427420731722,
+     "unseenCaught": 46,
+     "unseenGestures": 62,
+     "unseenFalse": 8,
+     "medianLatencyMs": 504.999936
+    },
+    {
+     "threshold": 0.5,
+     "caught": 96,
+     "gestures": 118,
+     "falseActivations": 35,
+     "perHour": 63.694583709624396,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 6,
+     "medianLatencyMs": 504.999936
+    },
+    {
+     "threshold": 0.55,
+     "caught": 96,
+     "gestures": 118,
+     "falseActivations": 31,
+     "perHour": 56.41520271423875,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 6,
+     "medianLatencyMs": 504.999936
+    },
+    {
+     "threshold": 0.6,
+     "caught": 96,
+     "gestures": 118,
+     "falseActivations": 23,
+     "perHour": 41.85644072346746,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 5,
+     "medianLatencyMs": 504.999936
+    },
+    {
+     "threshold": 0.65,
+     "caught": 95,
+     "gestures": 118,
+     "falseActivations": 20,
+     "perHour": 36.39690497692823,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 5,
+     "medianLatencyMs": 504.999936
+    },
+    {
+     "threshold": 0.7,
+     "caught": 96,
+     "gestures": 118,
+     "falseActivations": 15,
+     "perHour": 27.29767873269617,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 4,
+     "medianLatencyMs": 506.02671250000003
+    },
+    {
+     "threshold": 0.75,
+     "caught": 96,
+     "gestures": 118,
+     "falseActivations": 14,
+     "perHour": 25.477833483849757,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 4,
+     "medianLatencyMs": 504.999936
+    },
+    {
+     "threshold": 0.8,
+     "caught": 97,
+     "gestures": 118,
+     "falseActivations": 11,
+     "perHour": 20.018297737310522,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 3,
+     "medianLatencyMs": 504.999936
+    },
+    {
+     "threshold": 0.85,
+     "caught": 97,
+     "gestures": 118,
+     "falseActivations": 10,
+     "perHour": 18.198452488464113,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 2,
+     "medianLatencyMs": 504.999936
+    },
+    {
+     "threshold": 0.9,
+     "caught": 96,
+     "gestures": 118,
+     "falseActivations": 7,
+     "perHour": 12.738916741924879,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 2,
+     "medianLatencyMs": 507.32408599999997
+    },
+    {
+     "threshold": 0.95,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 5,
+     "perHour": 9.099226244232057,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 514.4100490000001
+    },
+    {
+     "threshold": 0.96,
+     "caught": 97,
+     "gestures": 118,
+     "falseActivations": 5,
+     "perHour": 9.099226244232057,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 514.097948
+    },
+    {
+     "threshold": 0.97,
+     "caught": 97,
+     "gestures": 118,
+     "falseActivations": 5,
+     "perHour": 9.099226244232057,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 514.097948
+    },
+    {
+     "threshold": 0.98,
+     "caught": 96,
+     "gestures": 118,
+     "falseActivations": 4,
+     "perHour": 7.279380995385645,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 510.84631549999995
+    },
+    {
+     "threshold": 0.99,
+     "caught": 95,
+     "gestures": 118,
+     "falseActivations": 3,
+     "perHour": 5.459535746539234,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 514.097948
+    },
+    {
+     "threshold": 0.995,
+     "caught": 94,
+     "gestures": 118,
+     "falseActivations": 3,
+     "perHour": 5.459535746539234,
+     "unseenCaught": 46,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 514.4100490000001
+    },
+    {
+     "threshold": 0.999,
+     "caught": 91,
+     "gestures": 118,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 507.053489
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.999,
+     "caught": 91,
+     "gestures": 118,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 507.053489
+    },
+    "5.0": {
+     "threshold": 0.999,
+     "caught": 91,
+     "gestures": 118,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 507.053489
+    },
+    "10.0": {
+     "threshold": 0.95,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 5,
+     "perHour": 9.099226244232057,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 514.4100490000001
+    }
+   }
+  },
+  "20": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 90,
+     "gestures": 118,
+     "falseActivations": 51,
+     "perHour": 92.81210769116697,
+     "unseenCaught": 44,
+     "unseenGestures": 62,
+     "unseenFalse": 10,
+     "medianLatencyMs": 492.3105455
+    },
+    {
+     "threshold": 0.35,
+     "caught": 92,
+     "gestures": 118,
+     "falseActivations": 38,
+     "perHour": 69.15411945616363,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 9,
+     "medianLatencyMs": 489.5722505
+    },
+    {
+     "threshold": 0.4,
+     "caught": 93,
+     "gestures": 118,
+     "falseActivations": 34,
+     "perHour": 61.874738460777984,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 7,
+     "medianLatencyMs": 488.144437
+    },
+    {
+     "threshold": 0.45,
+     "caught": 93,
+     "gestures": 118,
+     "falseActivations": 33,
+     "perHour": 60.05489321193157,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 7,
+     "medianLatencyMs": 488.144437
+    },
+    {
+     "threshold": 0.5,
+     "caught": 94,
+     "gestures": 118,
+     "falseActivations": 30,
+     "perHour": 54.59535746539234,
+     "unseenCaught": 46,
+     "unseenGestures": 62,
+     "unseenFalse": 6,
+     "medianLatencyMs": 492.3105455
+    },
+    {
+     "threshold": 0.55,
+     "caught": 95,
+     "gestures": 118,
+     "falseActivations": 27,
+     "perHour": 49.1358217188531,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 5,
+     "medianLatencyMs": 491.000064
+    },
+    {
+     "threshold": 0.6,
+     "caught": 95,
+     "gestures": 118,
+     "falseActivations": 23,
+     "perHour": 41.85644072346746,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 5,
+     "medianLatencyMs": 491.000064
+    },
+    {
+     "threshold": 0.65,
+     "caught": 96,
+     "gestures": 118,
+     "falseActivations": 17,
+     "perHour": 30.937369230388992,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 4,
+     "medianLatencyMs": 495.7123505
+    },
+    {
+     "threshold": 0.7,
+     "caught": 97,
+     "gestures": 118,
+     "falseActivations": 15,
+     "perHour": 27.29767873269617,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 3,
+     "medianLatencyMs": 497.803674
+    },
+    {
+     "threshold": 0.75,
+     "caught": 96,
+     "gestures": 118,
+     "falseActivations": 14,
+     "perHour": 25.477833483849757,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 3,
+     "medianLatencyMs": 502.9564595
+    },
+    {
+     "threshold": 0.8,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 12,
+     "perHour": 21.838142986156935,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 2,
+     "medianLatencyMs": 502.9564595
+    },
+    {
+     "threshold": 0.85,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 11,
+     "perHour": 20.018297737310522,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 2,
+     "medianLatencyMs": 502.9564595
+    },
+    {
+     "threshold": 0.9,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 8,
+     "perHour": 14.55876199077129,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 2,
+     "medianLatencyMs": 505.981585
+    },
+    {
+     "threshold": 0.95,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 5,
+     "perHour": 9.099226244232057,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 2,
+     "medianLatencyMs": 502.9564595
+    },
+    {
+     "threshold": 0.96,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 5,
+     "perHour": 9.099226244232057,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 2,
+     "medianLatencyMs": 502.9564595
+    },
+    {
+     "threshold": 0.97,
+     "caught": 97,
+     "gestures": 118,
+     "falseActivations": 5,
+     "perHour": 9.099226244232057,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 2,
+     "medianLatencyMs": 500.912983
+    },
+    {
+     "threshold": 0.98,
+     "caught": 96,
+     "gestures": 118,
+     "falseActivations": 5,
+     "perHour": 9.099226244232057,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 2,
+     "medianLatencyMs": 499.7860285
+    },
+    {
+     "threshold": 0.99,
+     "caught": 95,
+     "gestures": 118,
+     "falseActivations": 1,
+     "perHour": 1.8198452488464112,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 500.912983
+    },
+    {
+     "threshold": 0.995,
+     "caught": 94,
+     "gestures": 118,
+     "falseActivations": 1,
+     "perHour": 1.8198452488464112,
+     "unseenCaught": 46,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 502.9564595
+    },
+    {
+     "threshold": 0.999,
+     "caught": 90,
+     "gestures": 118,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 499.35832849999997
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.99,
+     "caught": 95,
+     "gestures": 118,
+     "falseActivations": 1,
+     "perHour": 1.8198452488464112,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 500.912983
+    },
+    "5.0": {
+     "threshold": 0.99,
+     "caught": 95,
+     "gestures": 118,
+     "falseActivations": 1,
+     "perHour": 1.8198452488464112,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 500.912983
+    },
+    "10.0": {
+     "threshold": 0.96,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 5,
+     "perHour": 9.099226244232057,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 2,
+     "medianLatencyMs": 502.9564595
+    }
+   }
+  }
+ },
+ "loop+aug@2s": {
+  "17": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 86,
+     "gestures": 118,
+     "falseActivations": 35,
+     "perHour": 63.694583709624396,
+     "unseenCaught": 41,
+     "unseenGestures": 62,
+     "unseenFalse": 6,
+     "medianLatencyMs": 481.74319249999996
+    },
+    {
+     "threshold": 0.35,
+     "caught": 86,
+     "gestures": 118,
+     "falseActivations": 28,
+     "perHour": 50.955666967699514,
+     "unseenCaught": 40,
+     "unseenGestures": 62,
+     "unseenFalse": 7,
+     "medianLatencyMs": 481.74319249999996
+    },
+    {
+     "threshold": 0.4,
+     "caught": 86,
+     "gestures": 118,
+     "falseActivations": 24,
+     "perHour": 43.67628597231387,
+     "unseenCaught": 40,
+     "unseenGestures": 62,
+     "unseenFalse": 6,
+     "medianLatencyMs": 484.76876949999996
+    },
+    {
+     "threshold": 0.45,
+     "caught": 86,
+     "gestures": 118,
+     "falseActivations": 22,
+     "perHour": 40.036595474621045,
+     "unseenCaught": 40,
+     "unseenGestures": 62,
+     "unseenFalse": 5,
+     "medianLatencyMs": 484.76876949999996
+    },
+    {
+     "threshold": 0.5,
+     "caught": 86,
+     "gestures": 118,
+     "falseActivations": 21,
+     "perHour": 38.21675022577464,
+     "unseenCaught": 40,
+     "unseenGestures": 62,
+     "unseenFalse": 5,
+     "medianLatencyMs": 484.76876949999996
+    },
+    {
+     "threshold": 0.55,
+     "caught": 86,
+     "gestures": 118,
+     "falseActivations": 19,
+     "perHour": 34.577059728081814,
+     "unseenCaught": 40,
+     "unseenGestures": 62,
+     "unseenFalse": 4,
+     "medianLatencyMs": 484.76876949999996
+    },
+    {
+     "threshold": 0.6,
+     "caught": 86,
+     "gestures": 118,
+     "falseActivations": 17,
+     "perHour": 30.937369230388992,
+     "unseenCaught": 40,
+     "unseenGestures": 62,
+     "unseenFalse": 4,
+     "medianLatencyMs": 484.76876949999996
+    },
+    {
+     "threshold": 0.65,
+     "caught": 86,
+     "gestures": 118,
+     "falseActivations": 14,
+     "perHour": 25.477833483849757,
+     "unseenCaught": 40,
+     "unseenGestures": 62,
+     "unseenFalse": 4,
+     "medianLatencyMs": 484.76876949999996
+    },
+    {
+     "threshold": 0.7,
+     "caught": 89,
+     "gestures": 118,
+     "falseActivations": 11,
+     "perHour": 20.018297737310522,
+     "unseenCaught": 42,
+     "unseenGestures": 62,
+     "unseenFalse": 2,
+     "medianLatencyMs": 488.0
+    },
+    {
+     "threshold": 0.75,
+     "caught": 90,
+     "gestures": 118,
+     "falseActivations": 6,
+     "perHour": 10.919071493078468,
+     "unseenCaught": 44,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 484.76876949999996
+    },
+    {
+     "threshold": 0.8,
+     "caught": 90,
+     "gestures": 118,
+     "falseActivations": 3,
+     "perHour": 5.459535746539234,
+     "unseenCaught": 44,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 484.76876949999996
+    },
+    {
+     "threshold": 0.85,
+     "caught": 90,
+     "gestures": 118,
+     "falseActivations": 3,
+     "perHour": 5.459535746539234,
+     "unseenCaught": 43,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 489.96745350000003
+    },
+    {
+     "threshold": 0.9,
+     "caught": 92,
+     "gestures": 118,
+     "falseActivations": 3,
+     "perHour": 5.459535746539234,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 489.96745350000003
+    },
+    {
+     "threshold": 0.95,
+     "caught": 93,
+     "gestures": 118,
+     "falseActivations": 2,
+     "perHour": 3.6396904976928224,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 488.0
+    },
+    {
+     "threshold": 0.96,
+     "caught": 92,
+     "gestures": 118,
+     "falseActivations": 2,
+     "perHour": 3.6396904976928224,
+     "unseenCaught": 44,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 484.76876949999996
+    },
+    {
+     "threshold": 0.97,
+     "caught": 92,
+     "gestures": 118,
+     "falseActivations": 1,
+     "perHour": 1.8198452488464112,
+     "unseenCaught": 44,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 489.96745350000003
+    },
+    {
+     "threshold": 0.98,
+     "caught": 92,
+     "gestures": 118,
+     "falseActivations": 1,
+     "perHour": 1.8198452488464112,
+     "unseenCaught": 44,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 493.77407500000004
+    },
+    {
+     "threshold": 0.99,
+     "caught": 93,
+     "gestures": 118,
+     "falseActivations": 1,
+     "perHour": 1.8198452488464112,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 495.613243
+    },
+    {
+     "threshold": 0.995,
+     "caught": 92,
+     "gestures": 118,
+     "falseActivations": 1,
+     "perHour": 1.8198452488464112,
+     "unseenCaught": 44,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 493.77407500000004
+    },
+    {
+     "threshold": 0.999,
+     "caught": 88,
+     "gestures": 118,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "unseenCaught": 41,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 494.617135
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.99,
+     "caught": 93,
+     "gestures": 118,
+     "falseActivations": 1,
+     "perHour": 1.8198452488464112,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 495.613243
+    },
+    "5.0": {
+     "threshold": 0.99,
+     "caught": 93,
+     "gestures": 118,
+     "falseActivations": 1,
+     "perHour": 1.8198452488464112,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 495.613243
+    },
+    "10.0": {
+     "threshold": 0.99,
+     "caught": 93,
+     "gestures": 118,
+     "falseActivations": 1,
+     "perHour": 1.8198452488464112,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 495.613243
+    }
+   }
+  },
+  "18": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 85,
+     "gestures": 118,
+     "falseActivations": 40,
+     "perHour": 72.79380995385645,
+     "unseenCaught": 43,
+     "unseenGestures": 62,
+     "unseenFalse": 7,
+     "medianLatencyMs": 477.873152
+    },
+    {
+     "threshold": 0.35,
+     "caught": 84,
+     "gestures": 118,
+     "falseActivations": 32,
+     "perHour": 58.23504796308516,
+     "unseenCaught": 41,
+     "unseenGestures": 62,
+     "unseenFalse": 6,
+     "medianLatencyMs": 471.8164595
+    },
+    {
+     "threshold": 0.4,
+     "caught": 84,
+     "gestures": 118,
+     "falseActivations": 27,
+     "perHour": 49.1358217188531,
+     "unseenCaught": 41,
+     "unseenGestures": 62,
+     "unseenFalse": 4,
+     "medianLatencyMs": 471.8164595
+    },
+    {
+     "threshold": 0.45,
+     "caught": 85,
+     "gestures": 118,
+     "falseActivations": 24,
+     "perHour": 43.67628597231387,
+     "unseenCaught": 42,
+     "unseenGestures": 62,
+     "unseenFalse": 3,
+     "medianLatencyMs": 465.759767
+    },
+    {
+     "threshold": 0.5,
+     "caught": 87,
+     "gestures": 118,
+     "falseActivations": 22,
+     "perHour": 40.036595474621045,
+     "unseenCaught": 43,
+     "unseenGestures": 62,
+     "unseenFalse": 2,
+     "medianLatencyMs": 465.662706
+    },
+    {
+     "threshold": 0.55,
+     "caught": 87,
+     "gestures": 118,
+     "falseActivations": 19,
+     "perHour": 34.577059728081814,
+     "unseenCaught": 43,
+     "unseenGestures": 62,
+     "unseenFalse": 2,
+     "medianLatencyMs": 465.662706
+    },
+    {
+     "threshold": 0.6,
+     "caught": 88,
+     "gestures": 118,
+     "falseActivations": 15,
+     "perHour": 27.29767873269617,
+     "unseenCaught": 44,
+     "unseenGestures": 62,
+     "unseenFalse": 3,
+     "medianLatencyMs": 460.589115
+    },
+    {
+     "threshold": 0.65,
+     "caught": 89,
+     "gestures": 118,
+     "falseActivations": 15,
+     "perHour": 27.29767873269617,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 3,
+     "medianLatencyMs": 465.759767
+    },
+    {
+     "threshold": 0.7,
+     "caught": 90,
+     "gestures": 118,
+     "falseActivations": 12,
+     "perHour": 21.838142986156935,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 3,
+     "medianLatencyMs": 471.8164595
+    },
+    {
+     "threshold": 0.75,
+     "caught": 93,
+     "gestures": 118,
+     "falseActivations": 8,
+     "perHour": 14.55876199077129,
+     "unseenCaught": 46,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 477.873152
+    },
+    {
+     "threshold": 0.8,
+     "caught": 93,
+     "gestures": 118,
+     "falseActivations": 6,
+     "perHour": 10.919071493078468,
+     "unseenCaught": 46,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 477.873152
+    },
+    {
+     "threshold": 0.85,
+     "caught": 93,
+     "gestures": 118,
+     "falseActivations": 6,
+     "perHour": 10.919071493078468,
+     "unseenCaught": 46,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 481.420936
+    },
+    {
+     "threshold": 0.9,
+     "caught": 93,
+     "gestures": 118,
+     "falseActivations": 5,
+     "perHour": 9.099226244232057,
+     "unseenCaught": 44,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 478.706873
+    },
+    {
+     "threshold": 0.95,
+     "caught": 95,
+     "gestures": 118,
+     "falseActivations": 5,
+     "perHour": 9.099226244232057,
+     "unseenCaught": 46,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 478.706873
+    },
+    {
+     "threshold": 0.96,
+     "caught": 94,
+     "gestures": 118,
+     "falseActivations": 4,
+     "perHour": 7.279380995385645,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 479.7667685
+    },
+    {
+     "threshold": 0.97,
+     "caught": 94,
+     "gestures": 118,
+     "falseActivations": 4,
+     "perHour": 7.279380995385645,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 479.7667685
+    },
+    {
+     "threshold": 0.98,
+     "caught": 94,
+     "gestures": 118,
+     "falseActivations": 4,
+     "perHour": 7.279380995385645,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 479.7667685
+    },
+    {
+     "threshold": 0.99,
+     "caught": 93,
+     "gestures": 118,
+     "falseActivations": 3,
+     "perHour": 5.459535746539234,
+     "unseenCaught": 44,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 480.826664
+    },
+    {
+     "threshold": 0.995,
+     "caught": 91,
+     "gestures": 118,
+     "falseActivations": 3,
+     "perHour": 5.459535746539234,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 481.420936
+    },
+    {
+     "threshold": 0.999,
+     "caught": 88,
+     "gestures": 118,
+     "falseActivations": 2,
+     "perHour": 3.6396904976928224,
+     "unseenCaught": 42,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 493.0981825
+    }
+   ],
+   "best": {
+    "2.0": null,
+    "5.0": {
+     "threshold": 0.999,
+     "caught": 88,
+     "gestures": 118,
+     "falseActivations": 2,
+     "perHour": 3.6396904976928224,
+     "unseenCaught": 42,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 493.0981825
+    },
+    "10.0": {
+     "threshold": 0.95,
+     "caught": 95,
+     "gestures": 118,
+     "falseActivations": 5,
+     "perHour": 9.099226244232057,
+     "unseenCaught": 46,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 478.706873
+    }
+   }
+  },
+  "19": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 87,
+     "gestures": 118,
+     "falseActivations": 40,
+     "perHour": 72.79380995385645,
+     "unseenCaught": 41,
+     "unseenGestures": 62,
+     "unseenFalse": 6,
+     "medianLatencyMs": 488.0
+    },
+    {
+     "threshold": 0.35,
+     "caught": 89,
+     "gestures": 118,
+     "falseActivations": 35,
+     "perHour": 63.694583709624396,
+     "unseenCaught": 41,
+     "unseenGestures": 62,
+     "unseenFalse": 6,
+     "medianLatencyMs": 485.733341
+    },
+    {
+     "threshold": 0.4,
+     "caught": 89,
+     "gestures": 118,
+     "falseActivations": 33,
+     "perHour": 60.05489321193157,
+     "unseenCaught": 41,
+     "unseenGestures": 62,
+     "unseenFalse": 7,
+     "medianLatencyMs": 485.733341
+    },
+    {
+     "threshold": 0.45,
+     "caught": 91,
+     "gestures": 118,
+     "falseActivations": 32,
+     "perHour": 58.23504796308516,
+     "unseenCaught": 42,
+     "unseenGestures": 62,
+     "unseenFalse": 7,
+     "medianLatencyMs": 488.0
+    },
+    {
+     "threshold": 0.5,
+     "caught": 91,
+     "gestures": 118,
+     "falseActivations": 30,
+     "perHour": 54.59535746539234,
+     "unseenCaught": 42,
+     "unseenGestures": 62,
+     "unseenFalse": 7,
+     "medianLatencyMs": 488.0
+    },
+    {
+     "threshold": 0.55,
+     "caught": 93,
+     "gestures": 118,
+     "falseActivations": 25,
+     "perHour": 45.49613122116028,
+     "unseenCaught": 43,
+     "unseenGestures": 62,
+     "unseenFalse": 4,
+     "medianLatencyMs": 492.575338
+    },
+    {
+     "threshold": 0.6,
+     "caught": 93,
+     "gestures": 118,
+     "falseActivations": 25,
+     "perHour": 45.49613122116028,
+     "unseenCaught": 44,
+     "unseenGestures": 62,
+     "unseenFalse": 4,
+     "medianLatencyMs": 494.985111
+    },
+    {
+     "threshold": 0.65,
+     "caught": 96,
+     "gestures": 118,
+     "falseActivations": 20,
+     "perHour": 36.39690497692823,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 4,
+     "medianLatencyMs": 495.299177
+    },
+    {
+     "threshold": 0.7,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 15,
+     "perHour": 27.29767873269617,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 495.299177
+    },
+    {
+     "threshold": 0.75,
+     "caught": 99,
+     "gestures": 118,
+     "falseActivations": 14,
+     "perHour": 25.477833483849757,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 498.659074
+    },
+    {
+     "threshold": 0.8,
+     "caught": 99,
+     "gestures": 118,
+     "falseActivations": 11,
+     "perHour": 20.018297737310522,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 498.659074
+    },
+    {
+     "threshold": 0.85,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 10,
+     "perHour": 18.198452488464113,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 501.829505
+    },
+    {
+     "threshold": 0.9,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 8,
+     "perHour": 14.55876199077129,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 501.829505
+    },
+    {
+     "threshold": 0.95,
+     "caught": 99,
+     "gestures": 118,
+     "falseActivations": 7,
+     "perHour": 12.738916741924879,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 504.999936
+    },
+    {
+     "threshold": 0.96,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 7,
+     "perHour": 12.738916741924879,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 501.829505
+    },
+    {
+     "threshold": 0.97,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 6,
+     "perHour": 10.919071493078468,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 506.02671250000003
+    },
+    {
+     "threshold": 0.98,
+     "caught": 97,
+     "gestures": 118,
+     "falseActivations": 6,
+     "perHour": 10.919071493078468,
+     "unseenCaught": 46,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 507.053489
+    },
+    {
+     "threshold": 0.99,
+     "caught": 95,
+     "gestures": 118,
+     "falseActivations": 5,
+     "perHour": 9.099226244232057,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 507.053489
+    },
+    {
+     "threshold": 0.995,
+     "caught": 94,
+     "gestures": 118,
+     "falseActivations": 3,
+     "perHour": 5.459535746539234,
+     "unseenCaught": 46,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 502.8562815
+    },
+    {
+     "threshold": 0.999,
+     "caught": 88,
+     "gestures": 118,
+     "falseActivations": 1,
+     "perHour": 1.8198452488464112,
+     "unseenCaught": 44,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 513.7612095
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.999,
+     "caught": 88,
+     "gestures": 118,
+     "falseActivations": 1,
+     "perHour": 1.8198452488464112,
+     "unseenCaught": 44,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 513.7612095
+    },
+    "5.0": {
+     "threshold": 0.999,
+     "caught": 88,
+     "gestures": 118,
+     "falseActivations": 1,
+     "perHour": 1.8198452488464112,
+     "unseenCaught": 44,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 513.7612095
+    },
+    "10.0": {
+     "threshold": 0.99,
+     "caught": 95,
+     "gestures": 118,
+     "falseActivations": 5,
+     "perHour": 9.099226244232057,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 507.053489
+    }
+   }
+  },
+  "20": {
+   "curve": [
+    {
+     "threshold": 0.3,
+     "caught": 95,
+     "gestures": 118,
+     "falseActivations": 38,
+     "perHour": 69.15411945616363,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 7,
+     "medianLatencyMs": 484.846994
+    },
+    {
+     "threshold": 0.35,
+     "caught": 97,
+     "gestures": 118,
+     "falseActivations": 31,
+     "perHour": 56.41520271423875,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 4,
+     "medianLatencyMs": 485.733341
+    },
+    {
+     "threshold": 0.4,
+     "caught": 97,
+     "gestures": 118,
+     "falseActivations": 32,
+     "perHour": 58.23504796308516,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 5,
+     "medianLatencyMs": 485.733341
+    },
+    {
+     "threshold": 0.45,
+     "caught": 96,
+     "gestures": 118,
+     "falseActivations": 31,
+     "perHour": 56.41520271423875,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 4,
+     "medianLatencyMs": 489.3666385
+    },
+    {
+     "threshold": 0.5,
+     "caught": 97,
+     "gestures": 118,
+     "falseActivations": 26,
+     "perHour": 47.315976470006696,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 4,
+     "medianLatencyMs": 492.999936
+    },
+    {
+     "threshold": 0.55,
+     "caught": 97,
+     "gestures": 118,
+     "falseActivations": 25,
+     "perHour": 45.49613122116028,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 4,
+     "medianLatencyMs": 492.999936
+    },
+    {
+     "threshold": 0.6,
+     "caught": 99,
+     "gestures": 118,
+     "falseActivations": 20,
+     "perHour": 36.39690497692823,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 3,
+     "medianLatencyMs": 494.125916
+    },
+    {
+     "threshold": 0.65,
+     "caught": 99,
+     "gestures": 118,
+     "falseActivations": 16,
+     "perHour": 29.11752398154258,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 3,
+     "medianLatencyMs": 494.125916
+    },
+    {
+     "threshold": 0.7,
+     "caught": 99,
+     "gestures": 118,
+     "falseActivations": 11,
+     "perHour": 20.018297737310522,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 495.613243
+    },
+    {
+     "threshold": 0.75,
+     "caught": 99,
+     "gestures": 118,
+     "falseActivations": 9,
+     "perHour": 16.3786072396177,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 1,
+     "medianLatencyMs": 498.659074
+    },
+    {
+     "threshold": 0.8,
+     "caught": 99,
+     "gestures": 118,
+     "falseActivations": 7,
+     "perHour": 12.738916741924879,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 503.330787
+    },
+    {
+     "threshold": 0.85,
+     "caught": 99,
+     "gestures": 118,
+     "falseActivations": 7,
+     "perHour": 12.738916741924879,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 504.999936
+    },
+    {
+     "threshold": 0.9,
+     "caught": 99,
+     "gestures": 118,
+     "falseActivations": 5,
+     "perHour": 9.099226244232057,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 503.330787
+    },
+    {
+     "threshold": 0.95,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 4,
+     "perHour": 7.279380995385645,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 500.9949305
+    },
+    {
+     "threshold": 0.96,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 4,
+     "perHour": 7.279380995385645,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 500.9949305
+    },
+    {
+     "threshold": 0.97,
+     "caught": 98,
+     "gestures": 118,
+     "falseActivations": 4,
+     "perHour": 7.279380995385645,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 500.9949305
+    },
+    {
+     "threshold": 0.98,
+     "caught": 96,
+     "gestures": 118,
+     "falseActivations": 3,
+     "perHour": 5.459535746539234,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 500.9949305
+    },
+    {
+     "threshold": 0.99,
+     "caught": 96,
+     "gestures": 118,
+     "falseActivations": 2,
+     "perHour": 3.6396904976928224,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 500.9949305
+    },
+    {
+     "threshold": 0.995,
+     "caught": 95,
+     "gestures": 118,
+     "falseActivations": 1,
+     "perHour": 1.8198452488464112,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 507.053489
+    },
+    {
+     "threshold": 0.999,
+     "caught": 90,
+     "gestures": 118,
+     "falseActivations": 0,
+     "perHour": 0.0,
+     "unseenCaught": 45,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 510.2973095
+    }
+   ],
+   "best": {
+    "2.0": {
+     "threshold": 0.995,
+     "caught": 95,
+     "gestures": 118,
+     "falseActivations": 1,
+     "perHour": 1.8198452488464112,
+     "unseenCaught": 47,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 507.053489
+    },
+    "5.0": {
+     "threshold": 0.99,
+     "caught": 96,
+     "gestures": 118,
+     "falseActivations": 2,
+     "perHour": 3.6396904976928224,
+     "unseenCaught": 48,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 500.9949305
+    },
+    "10.0": {
+     "threshold": 0.9,
+     "caught": 99,
+     "gestures": 118,
+     "falseActivations": 5,
+     "perHour": 9.099226244232057,
+     "unseenCaught": 49,
+     "unseenGestures": 62,
+     "unseenFalse": 0,
+     "medianLatencyMs": 503.330787
     }
    }
   }

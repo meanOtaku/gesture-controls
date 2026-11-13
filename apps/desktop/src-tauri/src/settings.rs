@@ -31,6 +31,10 @@ pub const MIN_SHAKE_STROKES: u32 = 3;
 pub const MAX_SHAKE_STROKES: u32 = 10;
 pub const MIN_SWIPE_PEAK_THRESHOLD: f64 = 3.0;
 pub const MAX_SWIPE_PEAK_THRESHOLD: f64 = 30.0;
+pub const MIN_WIGGLE_PEAK_RATE: f64 = 100.0;
+pub const MAX_WIGGLE_PEAK_RATE: f64 = 800.0;
+pub const MIN_HAMMER_PEAK_THRESHOLD: f64 = 10.0;
+pub const MAX_HAMMER_PEAK_THRESHOLD: f64 = 60.0;
 pub const MIN_TAP_PEAK_THRESHOLD: f64 = 4.0;
 pub const MAX_TAP_PEAK_THRESHOLD: f64 = 40.0;
 pub const MIN_ROLL_ANGLE_DEGREES: f64 = 30.0;
@@ -81,6 +85,13 @@ pub struct AppSettings {
     /// How hard a knock on the watch must be to count as a tap, in m/s². Lower is more sensitive.
     #[serde(default = "default_tap_peak_threshold")]
     pub tap_peak_threshold: f64,
+    /// How fast the wrist must be turning at the top of each twist of a wiggle, in degrees a second. Lower is more
+    /// sensitive.
+    #[serde(default = "default_wiggle_peak_rate")]
+    pub wiggle_peak_rate: f64,
+    /// How hard the jolt of a hammer blow must be, in m/s². Lower is more sensitive.
+    #[serde(default = "default_hammer_peak_threshold")]
+    pub hammer_peak_threshold: f64,
     /// How far the wrist must twist, quickly, to count as a roll gesture, in degrees. Smaller is more sensitive.
     #[serde(default = "default_roll_angle_degrees", alias = "rotateAngleDegrees")]
     pub roll_angle_degrees: f64,
@@ -142,6 +153,8 @@ impl Default for AppSettings {
             shake_strokes: default_shake_strokes(),
             swipe_peak_threshold: default_swipe_peak_threshold(),
             tap_peak_threshold: default_tap_peak_threshold(),
+            wiggle_peak_rate: default_wiggle_peak_rate(),
+            hammer_peak_threshold: default_hammer_peak_threshold(),
             roll_angle_degrees: default_roll_angle_degrees(),
             pitch_angle_degrees: default_pitch_angle_degrees(),
             heuristic_gestures: automation::HeuristicGestures::default(),
@@ -183,6 +196,12 @@ fn default_roll_angle_degrees() -> f64 {
 }
 fn default_tap_peak_threshold() -> f64 {
     12.0
+}
+fn default_wiggle_peak_rate() -> f64 {
+    250.0
+}
+fn default_hammer_peak_threshold() -> f64 {
+    25.0
 }
 fn default_swipe_peak_threshold() -> f64 {
     8.0
@@ -278,6 +297,18 @@ impl AppSettings {
             self.swipe_peak_threshold,
             MIN_SWIPE_PEAK_THRESHOLD,
             MAX_SWIPE_PEAK_THRESHOLD,
+        )?;
+        in_range(
+            "wigglePeakRate",
+            self.wiggle_peak_rate,
+            MIN_WIGGLE_PEAK_RATE,
+            MAX_WIGGLE_PEAK_RATE,
+        )?;
+        in_range(
+            "hammerPeakThreshold",
+            self.hammer_peak_threshold,
+            MIN_HAMMER_PEAK_THRESHOLD,
+            MAX_HAMMER_PEAK_THRESHOLD,
         )?;
         in_range(
             "tapPeakThreshold",

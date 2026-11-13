@@ -23,30 +23,32 @@ type OverviewSectionProps = {
 
 /** Main-tab device/gesture status cards and the onboarding checklist that guides first-time setup. */
 export function OverviewSection({ connected, calibrated, watchConnected, gestureReady, deviceName, onNavigate }: OverviewSectionProps) {
+  // The watch comes first: shakes, taps and the other wrist gestures need nothing else. The headphones add head
+  // locations, for recipes that start by looking somewhere.
   const steps: SetupStep[] = [
+    {
+      key: "watch",
+      complete: watchConnected,
+      title: "Connect your Galaxy Watch",
+      description: "Open the Watch app and enable streaming. It connects over Bluetooth by default; Wi-Fi is under Settings → Watch.",
+      navigateTo: "watch",
+      navigateLabel: "Check Watch →",
+    },
     {
       key: "headphones",
       complete: connected,
-      title: "Connect your headphones",
-      description: "Start the Sony bridge and connect your headset in Bluetooth settings.",
+      title: "Connect your headphones (optional)",
+      description: "Only for recipes that start by looking somewhere. Connect your headset in Bluetooth settings.",
       navigateTo: "headphone",
       navigateLabel: "Check headphones →",
     },
     {
       key: "calibration",
       complete: connected && calibrated,
-      title: "Set your head positions",
+      title: "Set your head positions (optional)",
       description: "Capture the screen center, then the top-right corner. Hold still for each capture.",
       navigateTo: "headphone",
       navigateLabel: "Open calibration →",
-    },
-    {
-      key: "watch",
-      complete: watchConnected,
-      title: "Connect your Galaxy Watch",
-      description: "Open the Watch app with both devices on the same Wi-Fi network.",
-      navigateTo: "watch",
-      navigateLabel: "Check Watch →",
     },
   ];
   const completedCount = steps.filter((step) => step.complete).length;
@@ -59,8 +61,8 @@ export function OverviewSection({ connected, calibrated, watchConnected, gesture
         <Card>
           <CardContent>
             <span className="label">Volume gesture</span>
-            <strong>{gestureReady ? "Ready" : "Set up"}</strong>
-            <small>{!connected ? "Connect headphones to begin" : !calibrated ? "Capture your two head positions" : !watchConnected ? "Connect Watch for wrist control" : "Look top-right to open the knob"}</small>
+            <strong>{gestureReady ? "Ready" : watchConnected ? "Watch only" : "Set up"}</strong>
+            <small>{!watchConnected ? "Connect the Watch to begin" : !connected ? "Wrist gestures work now; headphones add head locations" : !calibrated ? "Capture your two head positions" : "Look top-right to open the knob"}</small>
           </CardContent>
         </Card>
       </section>
@@ -68,7 +70,7 @@ export function OverviewSection({ connected, calibrated, watchConnected, gesture
       <Card role="region" aria-label="Setup checklist">
         <CardHeader>
           <SectionHeader
-            title={gestureReady ? "You’re ready to take control" : "Get your devices ready"}
+            title={gestureReady ? "You’re ready to take control" : watchConnected ? "The watch is ready" : "Get your devices ready"}
             description="Your next steps"
             status={<Badge variant={gestureReady ? "default" : "secondary"}>{completedCount} / {steps.length} complete</Badge>}
           />
@@ -87,7 +89,11 @@ export function OverviewSection({ connected, calibrated, watchConnected, gesture
               </li>
             ))}
           </ol>
-          <p className="interaction-guide">Look top-right to show the knob. Hold the Watch button, rotate your wrist, then release. Press Escape to hide the knob.</p>
+          <p className="interaction-guide">
+            {connected
+              ? "Look top-right to show the knob. Hold the Watch button, rotate your wrist, then release. Press Escape to hide the knob."
+              : "With the watch alone: make a recipe from a shake, a tap or a hammer on your palm under Recipes, and try each gesture under Gestures. A double tap can switch a volume dial on and off."}
+          </p>
         </CardContent>
       </Card>
     </>

@@ -83,7 +83,7 @@ The strongest new-session check is the **final test**: seal a whole day you have
 
 One budget, used twice (threshold choice and release):
 
-> **FAR at most 30 false activations per hour with no gesture under way** (`FALSE_ACTIVATIONS_BUDGET_PER_HOUR`), about one every two minutes of ordinary use.
+> **FAR at most 5 false activations per hour with no gesture under way** (`FALSE_ACTIVATIONS_BUDGET_PER_HOUR`), about one every twelve minutes of ordinary use.
 
 A model is ready to go live only when, on the judged cohort of the held-out recordings:
 
@@ -96,6 +96,10 @@ The trainer also refuses a model whose ROC-AUC on held-out or cross-checked deci
 A failing model is still kept, and can run in Monitor, where it only reports.
 
 A release report states the budget, the judged cohort, the threshold source, the number of labelled pinches, the time with no gesture under way, and the label timing of every recording.
+
+The budget was 30 an hour until 13 Nov 2026. At 30 the trainer chose cut-offs that then had to be raised by hand: for
+`pinch_out` it chose 0.5, at which the model fired 18 times in 35 minutes with no gesture under way
+([results](artifacts/training-improvements-2026-11/final-models.md)). The evidence below was gathered under the budget of 30.
 
 ## Evidence (3 Nov 2026)
 

@@ -14,6 +14,7 @@ import { RollSettings } from "./RollSettings";
 import { ShakeSettings } from "./ShakeSettings";
 import { SwipeSettings } from "./SwipeSettings";
 import { TapSettings } from "./TapSettings";
+import { WiggleHammerSettings } from "./WiggleHammerSettings";
 import { WatchHealthDeliverySettingsSection } from "./WatchHealthDeliverySettingsSection";
 import { WatchRateSettingsSection } from "./WatchRateSettingsSection";
 import { WatchSensorSwitchSection } from "./WatchSensorSwitchSection";
@@ -133,6 +134,7 @@ export function Settings({
             <ShakeSettings detections={shakeDetections} />
             <SwipeSettings lastSwipe={lastSwipe} />
             <TapSettings lastTap={lastTap} />
+            <WiggleHammerSettings />
             <RollSettings lastRoll={lastRoll} />
             <PitchSettings lastPitch={lastPitch} />
             <WristRotationSettings />

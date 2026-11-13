@@ -13,13 +13,14 @@ pub struct Conflict {
     pub second: String,
 }
 
-/// Every pair of enabled recipes that drive the same resource. Disabled recipes never conflict.
+/// Every pair of enabled recipes that drive the same resource in the same app. Disabled recipes never conflict.
 pub fn find_conflicts(recipes: &[Recipe]) -> Vec<Conflict> {
     let enabled: Vec<&Recipe> = recipes.iter().filter(|recipe| recipe.enabled).collect();
     let mut conflicts = Vec::new();
     for (index, first) in enabled.iter().enumerate() {
         for second in &enabled[index + 1..] {
-            if first.resource() == second.resource() {
+            // Recipes for different apps never run at the same moment, so they may drive the same thing.
+            if first.resource() == second.resource() && first.shares_an_app_with(second) {
                 conflicts.push(Conflict {
                     resource: first.resource(),
                     first: first.id.clone(),

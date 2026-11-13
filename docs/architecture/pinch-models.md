@@ -61,7 +61,14 @@ and `tests/fixtures/cnn_input_cases.json` keeps the two equal.
 - **Learns from** (`cnn.labels`): as the gesture, every pulse sample 0.4–0.6 s after a start. As not the gesture, every sample
   with no start from 1.2 s before it to 0.2 s after it. Each network trains on all the gesture moments and at most 40,000
   others, picked at random, so with a lot of noise each network sees part of it and the three together see most of it.
-- **Settings:** 12 passes, batches of 256, Adam at 0.001, weight decay 0.0001, gesture moments weighted up to 20×.
+- **Settings:** 20 passes, batches of 256, Adam at 0.001 following a cosine down to zero, weight decay 0.0001, gesture
+  moments weighted up to 3×. Each batch is changed a little as another wearing of the watch might change it: every channel's
+  size scaled by 0.8 to 1.25, noise added, the window moved by up to 40 ms, and the pulse blanked in 15% of the windows
+  (`cnn._augmented`). Until 12 Nov it was 12 passes at a fixed rate, a weight of up to 20× and no such changes; over six
+  seeds the new loop caught 99 of 120 held-out pinches against 95 within 5 false activations an hour, with its best cut-off
+  between 0.7 and 0.98 instead of 0.97 and 0.995
+  ([results](../research/artifacts/training-improvements-2026-11/results-pinch_in.md)). On the same test, the motion at 100
+  times a second caught no more than at 50 (94 against 96, two seeds), and a 2 s window caught 96 of 118 against 95 of 120.
 
 It finds signal shapes nobody wrote code for and fires sooner. Because every channel is scaled by its own recent level, it
 sees the shape of a movement rather than its size: after stillness, a small twitch can look as large as a pinch. That is why
@@ -87,7 +94,7 @@ The app does this when you press **Train**; the command line does the same from 
 3. **Train** the model.
 4. **Choose the threshold on the training recordings only.** Five more models, each trained without a fifth of them, score
    the part they did not see. Those are replayed as the app would run them, and the threshold that catches the most starts
-   within **30 false activations an hour** wins.
+   within **5 false activations an hour** wins (30 until 13 Nov 2026; the results below were measured under 30).
 5. **Replay the test recordings** at that threshold and count catches, repeats, late firings and false activations, as the
    [evaluation standard](../research/gesture-detector-evaluation-metrics.md) defines them.
 6. **Export** the model and check the file gives the trained model's answers.

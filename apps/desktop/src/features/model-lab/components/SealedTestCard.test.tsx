@@ -11,7 +11,7 @@ import type { LabelModel } from "../labelModels";
 const dataset = (id: string, name: string, sealed: boolean): DatasetSummary => ({ id, originalFilename: name, importedAt: "2026-10-24T10:00:00Z", label: "pinch", rowCount: 10, sealed });
 const model = { id: "pinch-v3", label: "pinch", state: "approved" } as unknown as LabelModel;
 
-// 4 false activations in 8 minutes with no gesture under way: 30 an hour, the budget; and a repeat and a late one.
+// 4 false activations in 8 minutes with no gesture under way: 30 an hour, over the budget of 5; and a repeat and a late one.
 const totals = { recordings: 1, starts: 20, caught: 9, repeats: 1, late: 2, falseActivations: 4, negativeSeconds: 480, falseActivationsPerHour: 30 };
 
 beforeEach(() => {
@@ -45,7 +45,7 @@ describe("SealedTestCard", () => {
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Run the final test" })));
     expect(invoke).toHaveBeenCalledWith("test_model_on_sealed", { versionId: "pinch-v3" });
     const result = screen.getByRole("region", { name: "Final test result" });
-    expect(result).toHaveTextContent("caught 9 of 20 starts (45%), 30 false activations an hour with no gesture under way; 1 repeat and 2 late (within the 30 an hour budget)");
+    expect(result).toHaveTextContent("caught 9 of 20 starts (45%), 30 false activations an hour with no gesture under way; 1 repeat and 2 late (over the 5 an hour budget)");
     // Named as Model Lab names it: its number, when it was recorded (here, imported) and whether it has the camera.
     expect(screen.getByRole("row", { name: /no camera/ })).toHaveTextContent("camera-timed");
     expect(result).toHaveTextContent("tested 1 time before this");

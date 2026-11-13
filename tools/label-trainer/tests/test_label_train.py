@@ -80,7 +80,7 @@ def test_the_cut_off_catches_the_most_starts_within_the_false_activation_budget(
         # An hour without the gesture: the false activations are the rate per hour.
         return {"recordings": 1, "gestures": 10, "caught": caught, "gestureRecall": caught / 10, "repeats": 0, "late": 0,
                 "medianLatencyMs": 900.0, "falseActivations": false, "negativeSeconds": 3600.0, "falseActivationsPerHour": float(false)}
-    table = {t: summary(caught, false) for t, caught, false in [(0.3, 9, 60), (0.5, 8, 45), (0.6, 7, 30), (0.7, 7, 20), (0.8, 4, 5)]}
+    table = {t: summary(caught, false) for t, caught, false in [(0.3, 9, 12), (0.5, 8, 9), (0.6, 7, 5), (0.7, 7, 3), (0.8, 4, 1)]}
     an_hour = np.array([0, 3600 * 10**9])
     recording = SimpleNamespace(session_id="r")
     original = (lt.summarise, lt.detections, lt.THRESHOLD_CANDIDATES)
@@ -90,8 +90,8 @@ def test_the_cut_off_catches_the_most_starts_within_the_false_activation_budget(
         lt.THRESHOLD_CANDIDATES = tuple(table)
         spec = lt.Spec("pinch", [], [], {}, [], [], False, 17)
         threshold, events = lt.budget_threshold(spec, [(recording, an_hour, None)])
-        # 0.6 and 0.7 both catch 7 within 30 an hour: the higher cut-off wins the tie.
-        assert threshold == 0.7 and events["withinTarget"] and events["falseActivationsPerHour"] == 20
+        # 0.6 and 0.7 both catch 7 within 5 an hour: the higher cut-off wins the tie.
+        assert threshold == 0.7 and events["withinTarget"] and events["falseActivationsPerHour"] == 3
         # None within it: the most caught less false (0.8: 6 - 55 = -49 beats 0.7: 7 - 60 = -53).
         table.update({0.3: summary(9, 90), 0.5: summary(8, 80), 0.6: summary(7, 70), 0.7: summary(7, 60), 0.8: summary(6, 55)})
         threshold, events = lt.budget_threshold(spec, [(recording, an_hour, None)])

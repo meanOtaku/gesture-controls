@@ -24,7 +24,7 @@ export interface ModelDescription {
 export const PULSE_MODEL = {
   name: "PPG + IMU pinch-start model",
   summary:
-    "Reads the watch's pulse sensor and its accelerometer and gyroscope, and fires about 0.9 s after a gesture starts. The pulse is compared with the 1, 2 and 4 seconds before it, the motion is summarised over the last 0.3 to 1.3 s, and 300 randomised decision trees decide whether a gesture has just begun. It fires at the top of the trees' rising vote, at a cut-off that keeps false alarms under about 2 a minute on training recordings it did not see.",
+    "Reads the watch's pulse sensor and its accelerometer and gyroscope, and fires about 0.9 s after a gesture starts. The pulse is compared with the 1, 2 and 4 seconds before it, the motion is summarised over the last 0.3 to 1.3 s, and 300 randomised decision trees decide whether a gesture has just begun. It fires at the top of the trees' rising vote, at a cut-off that keeps it within 5 false activations an hour on training recordings it did not see.",
   stages: [
     { title: "Pulse sensor", detail: "Green, red and infrared light, 25 times a second" },
     { title: "Compared with the recent past", detail: "Each channel z-scored against the previous 1 s, 2 s and 4 s" },

@@ -320,6 +320,7 @@ pub fn run() {
             label_registry::prune_legacy_builtins(&handle);
             label_runtime::spawn_timer(handle.clone());
             miss_recorder::register_shortcut(&handle);
+            automation::AutomationRuntime::spawn_front_app_watcher(handle.clone());
             overlay::prepare_window(&handle).map_err(std::io::Error::other)?;
             head_pose::spawn(handle.clone());
             drone::spawn_auto_connect(handle.clone());

@@ -141,7 +141,7 @@ export function Dashboard({
         <aside className="connection-help">
           <Card><CardContent className="flex flex-col gap-2">
             <h2>Connect your Watch</h2>
-            <p>Open the Watch app, enable streaming, and keep both devices on the same Wi-Fi network. Guest networks may block discovery.</p>
+            <p>Open the Watch app and enable streaming. Over Bluetooth (the default) keep the watch near this computer; over Wi-Fi keep both on the same network, and note that guest networks may block discovery. Choose which under Settings → Watch.</p>
           </CardContent></Card>
         </aside>
       )}

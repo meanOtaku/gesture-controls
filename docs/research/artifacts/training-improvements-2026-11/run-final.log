@@ -1,0 +1,8 @@
+Training the CNN on mps on 92462 moments (1267 starts) from 22 recordings
+Choosing the cut-off on the training recordings: training 5 more times, each without some of them
+Replaying the held-out recordings as the runtime would
+| pinch_in | deployable | 0.99 | 95/120 | 3.6 | 451.468647 ms | 
+Training the CNN on mps on 92420 moments (1270 starts) from 22 recordings
+Choosing the cut-off on the training recordings: training 5 more times, each without some of them
+Replaying the held-out recordings as the runtime would
+| pinch_out | deployable | 0.99 | 96/127 | 3.4 | 434.047786 ms | 

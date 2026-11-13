@@ -152,6 +152,8 @@ def test_the_gpu_check_says_what_it_will_use_and_times_it(capsys):
 def test_the_rows_it_must_keep_are_never_left_out_to_stay_within_its_negatives(monkeypatch):
     monkeypatch.setattr(cnn, "EPOCHS", 1)
     monkeypatch.setattr(cnn, "MAX_NEGATIVES", 20)
+    # The batches as they are, so the marked rows can be found in them.
+    monkeypatch.setattr(cnn, "_augmented", lambda windows, generator: windows)
     seen = []
     real_net = cnn._net
 
@@ -196,3 +198,24 @@ def test_a_cnn_reads_the_pulse_and_motion_only():
            "sources": ["watchPpg"]}
     with pytest.raises(lt.TrainingRefused, match="the CNN reads the pulse sensor and motion"):
         lt.parse_spec(raw)
+
+
+def test_a_batch_is_changed_a_little_and_stays_a_valid_input():
+    torch = pytest.importorskip("torch")
+    generator = torch.Generator().manual_seed(3)
+    windows = torch.rand(64, cnn.CHANNELS, cnn.LENGTH, generator=generator)
+    changed = cnn._augmented(windows, generator)
+    assert changed.shape == windows.shape
+    assert float(changed.min()) > 0.0 and float(changed.max()) < 1.0
+    # Close to what it was, but not the same.
+    difference = (changed - windows).abs().mean()
+    assert 0.01 < float(difference) < 0.3
+    # Where the pulse is blanked, its three channels sit at the middle (0.5) for the whole window, and nowhere else.
+    pulse = changed[:, cnn.CHANNELS - 3:, :]
+    blanked = ((pulse - 0.5).abs() < 1e-6).all(dim=2).all(dim=1)
+    assert 0 < int(blanked.sum()) < len(windows) // 2
+    assert not ((changed[:, :cnn.CHANNELS - 3, :] - 0.5).abs() < 1e-6).all(dim=2).any()
+    # The same seed changes the same batch the same way.
+    again = cnn._augmented(windows, torch.Generator().manual_seed(3))
+    first = cnn._augmented(windows, torch.Generator().manual_seed(3))
+    assert torch.equal(again, first)

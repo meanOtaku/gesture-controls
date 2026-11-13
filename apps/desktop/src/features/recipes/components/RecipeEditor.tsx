@@ -27,6 +27,8 @@ import {
   isMomentaryStage,
   isTrigger,
   shortcutProblem,
+  appsProblem,
+  parseApps,
   leadingStages,
   nameProblem,
   type Axis,
@@ -67,6 +69,7 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
   const [action, setAction] = useState<RecipeAction>(initialAction);
   const [keys, setKeys] = useState(recipe.keys ?? "");
   const [keysTouched, setKeysTouched] = useState(false);
+  const [appsText, setAppsText] = useState((recipe.apps ?? []).join(", "));
   const [serverError, setServerError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -88,6 +91,8 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
   const trigger = isTrigger(action);
   const problem = chainProblem(steps, locations, trigger);
   const keysError = action === "shortcut" ? shortcutProblem(keys) : null;
+  const apps = parseApps(appsText);
+  const appsError = appsProblem(apps);
   const nameId = `${uid}-name`;
   const axisLabelId = `${uid}-axis`;
   const kindId = `${uid}-device`;
@@ -118,6 +123,10 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
       return;
     }
     if (problem !== null) return;
+    if (appsError !== null) {
+      document.getElementById(`${uid}-apps`)?.focus();
+      return;
+    }
     if (keysError !== null) {
       setKeysTouched(true);
       document.getElementById(`${uid}-keys`)?.focus();
@@ -138,6 +147,7 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
       stages: trigger ? steps : [...steps, { kind: "drive", axis, deadZoneDegrees: deadZone, invert }],
       action,
       keys: action === "shortcut" ? keys.trim() : undefined,
+      apps: apps.length > 0 ? apps : undefined,
       device: trigger ? buildDevice("rotationKnob", defaultNumbers("rotationKnob")) : buildDevice(kind, { a, b }, action),
     });
     setSaving(false);
@@ -374,6 +384,22 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
           ))}
         </select>
         <p className="field-hint">{ACTIONS.find((candidate) => candidate.value === action)?.summary}</p>
+        </div>
+        <div className="field">
+          <div className="field-head"><Label htmlFor={`${uid}-apps`}>Only in these apps</Label></div>
+          <Input
+            id={`${uid}-apps`}
+            value={appsText}
+            placeholder="Everywhere"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-invalid={appsError !== null}
+            aria-describedby={`${uid}-apps-hint`}
+            onChange={(event) => setAppsText(event.target.value)}
+          />
+          {appsError !== null
+            ? <p className="field-error" role="alert" id={`${uid}-apps-hint`}>{appsError}</p>
+            : <p className="field-hint" id={`${uid}-apps-hint`}>Leave empty to work everywhere. Or name apps as the system shows them, separated by commas (Safari, Spotify): the recipe then only works while one of them is in front, so the same gesture can do something else in another app. Recipes for different apps do not conflict. Works on a Mac, and on Linux with xdotool; not on Windows yet.</p>}
         </div>
         {action === "shortcut" && (
           <div className="field">

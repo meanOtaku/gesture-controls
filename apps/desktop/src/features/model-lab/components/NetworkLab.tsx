@@ -54,7 +54,7 @@ export function ModelPipeline() {
     <div id="lab-pipeline" className="flex min-w-0 flex-col gap-4">
       <PipelineCard
         model={PULSE_MODEL}
-        description="Trees: Model Lab's default for every label."
+        description="Trees: Model Lab's default. They train quickly and from little data; for pinches the CNN below catches more, and sooner."
         help="Chosen by the October 2026 research: of 26 methods and several ways of preparing the pulse signal, multi-scale z-scored derivatives with ExtraTrees had the best worst-case score on recordings the model never saw; adding the watch's motion raised it again and halved the false alarms on recordings without the gesture, and firing at the top of the score's climb caught more starts for the same false alarms. The research is in docs/research/ppg-imu-fusion-and-triggers-2026-10.md."
         results={[["Worst-case AUC", trees.worstAuc.toFixed(3)], ["Mean AUC", trees.meanAuc.toFixed(3)], ["Gesture starts caught", `${Math.round(trees.recall * 100)}%`], ["False alarms", `≈${trees.falsePerMinute.toFixed(1)} / min`]]}
         hint="Measured on 37 recordings, testing 20 times on recordings the model never trained on, firing on the peak at a cut-off of 0.65 (picked on those same tests, so a little optimistic). Your models choose their own cut-off, on their training recordings. One that does not pass the checks for going live can be activated, but it only runs in Monitor."

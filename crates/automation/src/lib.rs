@@ -26,8 +26,8 @@ pub use hammer::{HammerConfig, HammerDetector};
 pub use heuristics::HeuristicGestures;
 pub use pitch::{PitchConfig, PitchDetector, PitchDirection};
 pub use recipe::{
-    Action, Axis, Hold, MAX_KEYS_CHARS, MAX_STAGES, ModelHold, Recipe, RecipeError, Stage,
-    is_valid_gesture_id, is_valid_label, validate_recipe,
+    Action, Axis, Hold, MAX_APP_NAME_CHARS, MAX_APPS, MAX_KEYS_CHARS, MAX_STAGES, ModelHold,
+    Recipe, RecipeError, Stage, is_valid_gesture_id, is_valid_label, validate_recipe,
 };
 pub use roll::{RollConfig, RollDetector, RollDirection};
 pub use runner::{RecipeRunner, RunnerPhase, Signals, TOGGLE_IDLE_NS};

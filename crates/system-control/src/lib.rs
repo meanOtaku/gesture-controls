@@ -4,12 +4,14 @@
 
 mod accumulator;
 mod brightness;
+mod front_app;
 mod media;
 mod scroll;
 mod shortcut;
 
 pub use accumulator::Accumulator;
 pub use brightness::{BrightnessController, platform_brightness_controller};
+pub use front_app::front_app;
 pub use media::{MediaController, MediaKey, platform_media_controller};
 pub use scroll::{MAX_PIXELS_PER_CALL, ScrollController, platform_scroll_controller};
 pub use shortcut::{Key, KeyCombo, NamedKey, ShortcutController, platform_shortcut_controller};

@@ -1,3 +1,4 @@
+import { errorText } from "../../shared/tauri/errorText";
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { DatasetLabel } from "../model-lab/types";
@@ -30,7 +31,7 @@ export function useGestureLibrary() {
           // Without saved frames the library still works; it just cannot check gestures against each other.
         }
       } catch (err) {
-        if (live) setError(String(err));
+        if (live) setError(errorText(err));
       } finally {
         if (live) setLoaded(true);
       }

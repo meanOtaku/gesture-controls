@@ -86,6 +86,8 @@ export interface Recipe {
   action: RecipeAction;
   /** The keyboard shortcut a "shortcut" recipe presses, such as `cmd+shift+4`; absent for every other action. */
   keys?: string | null;
+  /** The apps the recipe works in, by the name the system shows ("Safari"); absent or empty means everywhere. */
+  apps?: string[];
 }
 
 /** Two enabled recipes driving the same resource; both are held off until one is disabled. */
@@ -219,6 +221,13 @@ export const AUTOMATION_STATE_EVENT = "automation-state";
 export const SHAKE_DETECTED_EVENT = "automation-shake";
 /** The direction of a shake, when its strokes agreed on one: the payload of `SHAKE_DETECTED_EVENT` (null for none). */
 export type ShakeAxis = "along" | "vertical" | "sideways";
+/** Sent each time a recipe starts turning its dial, stops, or presses its button. */
+export const RECIPE_ACTIVITY_EVENT = "recipe-activity";
+export interface RecipeActivity {
+  /** The recipe's id. */
+  recipe: string;
+  moment: "started" | "ended" | "fired";
+}
 /** Sent each time a wrist wiggle is recognised. */
 export const WIGGLE_DETECTED_EVENT = "automation-wiggle";
 /** Sent each time a hammer blow is recognised. */
@@ -322,6 +331,10 @@ export interface AppSettings {
   swipePeakThreshold: number;
   /** How hard a knock on the watch must be to count as a tap (m/s²); lower is more sensitive. */
   tapPeakThreshold: number;
+  /** How fast the wrist must be turning at the top of each twist of a wiggle (degrees a second); lower is more sensitive. */
+  wigglePeakRate: number;
+  /** How hard the jolt of a hammer blow must be (m/s²); lower is more sensitive. */
+  hammerPeakThreshold: number;
   /** How far the wrist must twist, quickly, to count as a roll gesture (degrees); smaller is more sensitive. */
   rollAngleDegrees: number;
   /** How far the hand must tilt up or down at the wrist, quickly, to count as a pitch gesture (degrees); smaller is more sensitive. */

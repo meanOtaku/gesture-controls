@@ -179,3 +179,17 @@ describe("keyboard shortcuts", () => {
     expect(describeRecipe(recipe, () => "x")).toBe("Hammer on palm → Press cmd+shift+4");
   });
 });
+
+describe("recipes for some apps only", () => {
+  it("reads the names typed, refuses a repeat, and says where a recipe works", async () => {
+    const { appsProblem, parseApps } = await import("./recipeModel");
+    expect(parseApps(" Safari, , Spotify ,")).toEqual(["Safari", "Spotify"]);
+    expect(parseApps("")).toEqual([]);
+    expect(appsProblem(["Safari", "Spotify"])).toBeNull();
+    expect(appsProblem(["Safari", "safari"])).toMatch(/twice/);
+    expect(appsProblem(Array.from({ length: 9 }, (_, i) => `App ${i}`))).toMatch(/at most 8/);
+    const recipe = { ...blankRecipe([], "rotationKnob"), apps: ["Safari", "Spotify"] };
+    expect(describeRecipe(recipe, () => "x")).toMatch(/Volume \(only in Safari, Spotify\)$/);
+    expect(describeRecipe(blankRecipe([], "rotationKnob"), () => "x")).not.toMatch(/only in/);
+  });
+});

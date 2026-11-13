@@ -77,6 +77,9 @@ the `bridge` argument to stream JSON without opening a second window.
 - `head-target-entered` / `head-target-exited` events for calibrated targets
 - Dedicated transparent, borderless, click-through, always-on-top volume overlay
 - Automatic knob display when a recipe's head location activates; gesture recipes chain head, pinch/button and wrist stages, and conflicting recipes are paused and reported
+- Rule-based wrist gestures that need no training and only the watch: shake (any direction, up and down, side to side, along the forearm), wiggle, hammer on palm, swipe, tap, double tap, and quick roll and pitch. `cargo run -p automation --example replay -- <recording folders>` counts what each recognises in recordings, so its false activations an hour can be measured on everyday noise
+- A momentary gesture (a double tap, a shake) can switch a dial recipe on and off, so volume, brightness and scroll work with the watch alone; a recipe can press a keyboard shortcut; and a recipe can be for some apps only, so one gesture does different things in different apps (the app in front is read on macOS, and on Linux with xdotool)
+- A miss recorder: Ctrl+Alt+M or the app's buttons save the last 45 s of watch signals, what the models scored, and the camera's hand landmarks as a recording under "Misses" (see [label inference](docs/architecture/label-inference.md#the-miss-recorder))
 - Keyboard control of real macOS system output volume with arrow or +/- keys, clamped from 0–100%
 - Automatic recalibration prompt after Sony reference-frame resets
 - Galaxy Watch telemetry (IMU orientation, raw PPG, health sensors, stem button) over **Bluetooth LE by default**, or over a local-network WebSocket; haptic confirmation back to the watch

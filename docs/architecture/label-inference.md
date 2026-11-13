@@ -224,7 +224,7 @@ The desktop decides and records; the trainer only trains (`apps/desktop/src-taur
 - **Cut-off.** For a PPG + IMU model:
   - the training recordings are split into up to five folds, each scored by a model trained without it;
   - each left-out recording is **replayed as the runtime would run it**: every pulse sample, the peak trigger;
-  - the cut-off taken is the one of 0.30–0.95 that catches the most starts with at most 30 false activations per hour
+  - the cut-off taken is the one of 0.30–0.95 that catches the most starts with at most 5 false activations per hour
     with no gesture under way (`FALSE_ACTIVATIONS_BUDGET_PER_HOUR`); none within it: the most starts caught less false
     activations, never simply the highest. It is the same budget the release check holds the held-out replay to.
   - A PPG-only spec keeps Youden's J on the left-out moments and the edge trigger.
@@ -260,7 +260,7 @@ The desktop decides and records; the trainer only trains (`apps/desktop/src-taur
   - AUC and balanced accuracy at least 0.7, and the cross-check AUC at least 0.7;
   - at most 10% of other moments flagged;
   - at least 60 s without the gesture in the held-out recordings;
-  - at most 30 false activations an hour;
+  - at most 5 false activations an hour;
   - at least half the gestures caught.
 - **Files.** It also writes `evaluation.json` (with `crossCheckEvents`, the replay the cut-off was chosen on), `parity.json`, `inspection.json` (the inputs the trees lean on, every held-out moment's score, and with `research` the learning curve and leave-one-recording-out) and `result.json`.
 

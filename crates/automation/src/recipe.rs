@@ -195,11 +195,40 @@ pub struct Recipe {
     /// pressed; here it only has to be there.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keys: Option<String>,
+    /// The apps this recipe works in, by the name the system shows for them ("Safari"). Empty means everywhere. With
+    /// any named, the recipe only runs while one of them is in front, so the same gesture can do different things in
+    /// different apps.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub apps: Vec<String>,
 }
 
 pub const MAX_KEYS_CHARS: usize = 40;
+pub const MAX_APPS: usize = 8;
+pub const MAX_APP_NAME_CHARS: usize = 60;
+
+fn same_app(a: &str, b: &str) -> bool {
+    a.trim().to_lowercase() == b.trim().to_lowercase()
+}
 
 impl Recipe {
+    /// Whether this recipe may run with `front` as the app in front. One that names no apps always may; one that names
+    /// some needs to know which app is in front, so when that is unknown it does not run.
+    pub fn runs_in(&self, front: Option<&str>) -> bool {
+        self.apps.is_empty()
+            || front.is_some_and(|front| self.apps.iter().any(|app| same_app(app, front)))
+    }
+
+    /// Whether this recipe and `other` can both be running at some moment: either works everywhere, or they share an
+    /// app.
+    pub fn shares_an_app_with(&self, other: &Recipe) -> bool {
+        self.apps.is_empty()
+            || other.apps.is_empty()
+            || self
+                .apps
+                .iter()
+                .any(|mine| other.apps.iter().any(|theirs| same_app(mine, theirs)))
+    }
+
     /// The one thing this recipe drives. Two enabled recipes with the same resource conflict. Each keyboard shortcut is
     /// a resource of its own, so two recipes may press different shortcuts but not the same one.
     pub fn resource(&self) -> String {
@@ -236,6 +265,10 @@ pub enum RecipeError {
     InvalidCameraGesture,
     #[error("a keyboard shortcut recipe needs its shortcut, such as cmd+shift+4")]
     MissingKeys,
+    #[error(
+        "name at most {MAX_APPS} apps, each once, by the name the system shows (1 to {MAX_APP_NAME_CHARS} characters)"
+    )]
+    InvalidApps,
     #[error("the dead zone must be from 0 to under 90 degrees")]
     InvalidDeadZone,
     #[error("the device settings are out of range")]
@@ -286,6 +319,22 @@ pub fn validate_recipe(recipe: &Recipe) -> Result<(), RecipeError> {
     }
     if recipe.stages.len() > MAX_STAGES {
         return Err(RecipeError::TooManyStages);
+    }
+    let bad_app = |app: &String| {
+        let name = app.trim();
+        name.is_empty()
+            || name.chars().count() > MAX_APP_NAME_CHARS
+            || name.chars().any(char::is_control)
+    };
+    if recipe.apps.len() > MAX_APPS
+        || recipe.apps.iter().any(bad_app)
+        || recipe.apps.iter().enumerate().any(|(index, app)| {
+            recipe.apps[..index]
+                .iter()
+                .any(|earlier| same_app(earlier, app))
+        })
+    {
+        return Err(RecipeError::InvalidApps);
     }
     if recipe.action == Action::Shortcut
         && !recipe.keys.as_deref().is_some_and(|keys| {

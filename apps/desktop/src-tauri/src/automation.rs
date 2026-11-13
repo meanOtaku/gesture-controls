@@ -12,11 +12,12 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use automation::{
-    Action, Axis, Conflict, CrownSide, Device, DeviceKind, HammerDetector, HeuristicGestures, Hold,
-    ModelHold, PitchConfig, PitchDetector, PitchDirection, Recipe, RecipeRunner, RollConfig,
-    RollDetector, RollDirection, RunnerPhase, ShakeAxis, ShakeConfig, ShakeDetector, Signals,
-    Stage, SwipeConfig, SwipeDetector, SwipeDirection, TapConfig, TapDetector, TapKind,
-    WiggleDetector, Wrist, blocked_recipes, find_conflicts, validate_recipe,
+    Action, Axis, Conflict, CrownSide, Device, DeviceKind, HammerConfig, HammerDetector,
+    HeuristicGestures, Hold, ModelHold, PitchConfig, PitchDetector, PitchDirection, Recipe,
+    RecipeRunner, RollConfig, RollDetector, RollDirection, RunnerPhase, ShakeAxis, ShakeConfig,
+    ShakeDetector, Signals, Stage, SwipeConfig, SwipeDetector, SwipeDirection, TapConfig,
+    TapDetector, TapKind, WiggleConfig, WiggleDetector, Wrist, blocked_recipes, find_conflicts,
+    validate_recipe,
 };
 use interaction_engine::quaternion_angular_distance;
 use serde::Serialize;
@@ -39,6 +40,27 @@ pub const TAP_DETECTED_EVENT: &str = "automation-tap";
 pub const WIGGLE_DETECTED_EVENT: &str = "automation-wiggle";
 /// Sent each time a hammer blow is recognised.
 pub const HAMMER_DETECTED_EVENT: &str = "automation-hammer";
+/// Sent each time a recipe starts turning its dial, stops, or presses its button, so the app can show what is in use.
+pub const RECIPE_ACTIVITY_EVENT: &str = "recipe-activity";
+
+/// What a recipe just did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RecipeMoment {
+    /// A dial recipe's steps all hold: it began following the wrist.
+    Started,
+    /// It let go.
+    Ended,
+    /// A button recipe pressed its button.
+    Fired,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecipeActivity {
+    pub recipe: String,
+    pub moment: RecipeMoment,
+}
 /// Sent with `clockwise` or `counterClockwise` each time a quick wrist twist is recognised.
 pub const ROLL_DETECTED_EVENT: &str = "automation-roll";
 /// Sent with `up` or `down` each time a quick tilt of the hand is recognised.
@@ -133,6 +155,8 @@ pub struct Effects {
     pub fired: Vec<Action>,
     /// Keyboard-shortcut recipes that fired: the keys of each.
     pub shortcuts: Vec<String>,
+    /// Which recipes started, stopped or fired, for the app to show.
+    pub activity: Vec<RecipeActivity>,
     /// Actions whose interaction just ended, so anything still carried for them is dropped.
     pub ended: Vec<Action>,
 }
@@ -148,6 +172,8 @@ pub struct Tuning {
     pub shake_strokes: u32,
     pub swipe_peak_threshold: f64,
     pub tap_peak_threshold: f64,
+    pub wiggle_peak_rate: f64,
+    pub hammer_peak_threshold: f64,
     pub roll_angle_degrees: f64,
     pub pitch_angle_degrees: f64,
     pub heuristics: HeuristicGestures,
@@ -165,6 +191,8 @@ impl Tuning {
             shake_strokes: settings.shake_strokes,
             swipe_peak_threshold: settings.swipe_peak_threshold,
             tap_peak_threshold: settings.tap_peak_threshold,
+            wiggle_peak_rate: settings.wiggle_peak_rate,
+            hammer_peak_threshold: settings.hammer_peak_threshold,
             roll_angle_degrees: settings.roll_angle_degrees,
             pitch_angle_degrees: settings.pitch_angle_degrees,
             heuristics: settings.heuristic_gestures,
@@ -188,6 +216,20 @@ impl Tuning {
             wrist: self.wrist,
             crown: self.crown,
             ..RollConfig::default()
+        }
+    }
+
+    pub fn wiggle_config(&self) -> WiggleConfig {
+        WiggleConfig {
+            peak_rate: self.wiggle_peak_rate,
+            ..WiggleConfig::default()
+        }
+    }
+
+    pub fn hammer_config(&self) -> HammerConfig {
+        HammerConfig {
+            peak_threshold: self.hammer_peak_threshold,
+            ..HammerConfig::default()
         }
     }
 
@@ -228,6 +270,8 @@ impl Default for Tuning {
             shake_strokes: 4,
             swipe_peak_threshold: 8.0,
             tap_peak_threshold: 12.0,
+            wiggle_peak_rate: 250.0,
+            hammer_peak_threshold: 25.0,
             roll_angle_degrees: 60.0,
             pitch_angle_degrees: 40.0,
             heuristics: HeuristicGestures::default(),
@@ -258,6 +302,7 @@ pub fn default_recipes() -> Vec<Recipe> {
         device: knob,
         action: Action::Volume,
         keys: None,
+        apps: Vec::new(),
     };
     vec![
         recipe(
@@ -308,6 +353,8 @@ pub struct Engine {
     driving: bool,
     tuning: Tuning,
     head: Option<String>,
+    /// The app in front, as far as the host knows. A recipe for some apps only runs while one of them is.
+    front_app: Option<String>,
     stem: bool,
     orientation: Option<Orientation>,
     shake: ShakeDetector,
@@ -365,14 +412,15 @@ impl Engine {
             driving: false,
             tuning,
             head: None,
+            front_app: None,
             stem: false,
             orientation: None,
             shake: ShakeDetector::new(tuning.shake_config()),
             shake_until_ns: 0,
             shake_axis: None,
-            wiggle: WiggleDetector::default(),
+            wiggle: WiggleDetector::new(tuning.wiggle_config()),
             wiggle_until_ns: 0,
-            hammer: HammerDetector::default(),
+            hammer: HammerDetector::new(tuning.hammer_config()),
             hammer_until_ns: 0,
             swipe: SwipeDetector::new(tuning.swipe_config()),
             swipe_direction: None,
@@ -435,6 +483,10 @@ impl Engine {
         self.swipe_until_ns = 0;
         self.tap = TapDetector::new(tuning.tap_config());
         self.tap_until_ns = 0;
+        self.wiggle = WiggleDetector::new(tuning.wiggle_config());
+        self.wiggle_until_ns = 0;
+        self.hammer = HammerDetector::new(tuning.hammer_config());
+        self.hammer_until_ns = 0;
         self.roll = RollDetector::new(tuning.roll_config());
         self.roll_until_ns = 0;
         self.pitch = PitchDetector::new(tuning.pitch_config());
@@ -621,6 +673,19 @@ impl Engine {
     pub fn set_head(&mut self, location: Option<String>) -> Effects {
         self.head = location;
         self.step()
+    }
+
+    /// The app now in front (`None` when it is not known). A recipe for other apps lets go at once.
+    pub fn set_front_app(&mut self, app: Option<String>) -> Effects {
+        self.front_app = app;
+        self.step()
+    }
+
+    /// Whether any enabled recipe is for some apps only, so the host need only watch the front app when one is.
+    pub fn needs_front_app(&self) -> bool {
+        self.recipes
+            .iter()
+            .any(|recipe| recipe.enabled && !recipe.apps.is_empty())
     }
 
     pub fn set_stem(&mut self, held: bool) -> Effects {
@@ -849,7 +914,7 @@ impl Engine {
         let mut effects = Effects::default();
         let mut driving = false;
         for (index, (recipe, runner)) in self.recipes.iter().zip(&mut self.runners).enumerate() {
-            if self.blocked.contains(&recipe.id) {
+            if self.blocked.contains(&recipe.id) || !recipe.runs_in(self.front_app.as_deref()) {
                 runner.reset();
             } else if let Some(output) = runner.update(&signals) {
                 effects.deltas.push((recipe.action, output.delta_fraction));
@@ -862,6 +927,10 @@ impl Engine {
                 effects.deltas.push((Action::Volume, 0.0));
             }
             if runner.take_fired() {
+                effects.activity.push(RecipeActivity {
+                    recipe: recipe.id.clone(),
+                    moment: RecipeMoment::Fired,
+                });
                 match (recipe.action, &recipe.keys) {
                     (Action::Shortcut, Some(keys)) => effects.shortcuts.push(keys.clone()),
                     (Action::Shortcut, None) => {}
@@ -873,6 +942,17 @@ impl Engine {
             // glitch filter or have anything to wind down.
             let continuous = !recipe.action.is_trigger();
             driving |= continuous && phase == RunnerPhase::Driving;
+            let was_driving = self.previous_phases[index] == RunnerPhase::Driving;
+            if continuous && was_driving != (phase == RunnerPhase::Driving) {
+                effects.activity.push(RecipeActivity {
+                    recipe: recipe.id.clone(),
+                    moment: if was_driving {
+                        RecipeMoment::Ended
+                    } else {
+                        RecipeMoment::Started
+                    },
+                });
+            }
             if continuous
                 && self.previous_phases[index] == RunnerPhase::Driving
                 && phase != RunnerPhase::Driving
@@ -1094,6 +1174,53 @@ impl AutomationRuntime {
             .state())
     }
 
+    /// Follows the app in front while any enabled recipe is for some apps only, asking the system once a second. An
+    /// app that cannot be named (or a system that cannot say) counts as no app, so those recipes do not run.
+    pub fn spawn_front_app_watcher(app: AppHandle) {
+        let spawned = std::thread::Builder::new()
+            .name("front-app".to_string())
+            .spawn(move || {
+                let mut known: Option<String> = None;
+                let mut failing = false;
+                loop {
+                    std::thread::sleep(Duration::from_secs(1));
+                    let runtime = app.state::<AutomationRuntime>();
+                    let needed = runtime
+                        .engine
+                        .lock()
+                        .is_ok_and(|engine| engine.needs_front_app());
+                    let front = if needed {
+                        match system_control::front_app() {
+                            Ok(front) => {
+                                failing = false;
+                                front
+                            }
+                            Err(error) => {
+                                if !std::mem::replace(&mut failing, true) {
+                                    warn!(%error, "cannot tell which app is in front; recipes for some apps only will not run");
+                                }
+                                None
+                            }
+                        }
+                    } else {
+                        None
+                    };
+                    if front != known {
+                        known = front.clone();
+                        crate::miss_recorder::note(
+                            &app,
+                            "app",
+                            front.clone().unwrap_or_else(|| "unknown".into()),
+                        );
+                        runtime.with_engine(&app, |engine| engine.set_front_app(front));
+                    }
+                }
+            });
+        if let Err(error) = spawned {
+            warn!(%error, "failed to start the front-app watcher");
+        }
+    }
+
     pub fn set_head(&self, app: &AppHandle, location: Option<String>) {
         crate::miss_recorder::note(
             app,
@@ -1246,6 +1373,11 @@ impl AutomationRuntime {
     ) -> Result<AutomationState, String> {
         validate_recipe(&recipe).map_err(|error| error.to_string())?;
         check_locations(&recipe, known_locations)?;
+        recipe.apps = recipe
+            .apps
+            .iter()
+            .map(|app| app.trim().to_string())
+            .collect();
         // The keys are stored the one way they are written, and only for a recipe that presses them.
         recipe.keys = match (recipe.action, recipe.keys.take()) {
             (Action::Shortcut, Some(keys)) => Some(
@@ -1355,6 +1487,14 @@ fn apply_effects(app: &AppHandle, effects: &Effects, max_points_per_second: f64)
     for action in &effects.fired {
         crate::miss_recorder::note(app, "recipe", format!("fired {action:?}"));
         actuators.press(app, *action);
+    }
+    for activity in &effects.activity {
+        crate::miss_recorder::note(
+            app,
+            "recipe",
+            format!("{} {:?}", activity.recipe, activity.moment),
+        );
+        let _ = app.emit(RECIPE_ACTIVITY_EVENT, activity);
     }
     for keys in &effects.shortcuts {
         crate::miss_recorder::note(app, "recipe", format!("pressed {keys}"));
@@ -1642,6 +1782,7 @@ mod tests {
             enabled: true,
             action,
             keys: None,
+            apps: Vec::new(),
             stages: vec![
                 Stage::Hold {
                     hold: Hold::StemButton,
@@ -1712,6 +1853,7 @@ mod tests {
             enabled: true,
             action,
             keys: None,
+            apps: Vec::new(),
             stages: vec![Stage::Hold { hold }],
             device: Device::default_for(DeviceKind::RotationKnob),
         }
@@ -1804,6 +1946,7 @@ mod tests {
                 enabled: true,
                 action: Action::NextTrack,
                 keys: None,
+                apps: Vec::new(),
                 stages: vec![Stage::Hold { hold: Hold::Shake }],
                 device: Device::default_for(DeviceKind::RotationKnob),
             }],
@@ -1825,6 +1968,7 @@ mod tests {
             enabled: true,
             action: Action::PlayPause,
             keys: None,
+            apps: Vec::new(),
             stages: vec![
                 Stage::HeadAt {
                     location: "topRight".into(),
@@ -1852,6 +1996,7 @@ mod tests {
             enabled: true,
             action: Action::NextTrack,
             keys: None,
+            apps: Vec::new(),
             stages: vec![Stage::Hold { hold: Hold::Shake }],
             device: Device::default_for(DeviceKind::RotationKnob),
         };
@@ -1928,6 +2073,7 @@ mod tests {
             enabled: true,
             action,
             keys: None,
+            apps: Vec::new(),
             stages: vec![Stage::Hold { hold }],
             device: Device::default_for(DeviceKind::RotationKnob),
         }
@@ -2017,6 +2163,8 @@ mod tests {
     fn the_tap_setting_is_obeyed() {
         let strict = Tuning {
             tap_peak_threshold: 30.0,
+            wiggle_peak_rate: 250.0,
+            hammer_peak_threshold: 25.0,
             ..Tuning::default()
         };
         let mut engine = Engine::new(vec![swipe_recipe(Hold::Tap, Action::PlayPause)], strict);
@@ -2729,5 +2877,63 @@ mod tests {
         assert_eq!(grabbed.overlay, Some(OverlayWanted::Driving));
         assert!(grabbed.deltas.is_empty());
         assert_eq!(engine.cancel().overlay, Some(OverlayWanted::Hidden));
+    }
+    #[test]
+    fn a_recipe_for_some_apps_only_acts_while_one_of_them_is_in_front() {
+        let recipe = Recipe {
+            id: "safariPlay".into(),
+            name: "Play in Safari".into(),
+            enabled: true,
+            stages: vec![Stage::Hold {
+                hold: Hold::StemButton,
+            }],
+            device: Device::default_for(DeviceKind::RotationKnob),
+            action: Action::PlayPause,
+            keys: None,
+            apps: vec!["Safari".into()],
+        };
+        let mut engine = Engine::new(vec![recipe], Tuning::default());
+        assert!(engine.needs_front_app());
+        // The button is held, but nobody has said which app is in front.
+        assert!(engine.set_stem(true).fired.is_empty());
+        assert!(engine.set_front_app(Some("Finder".into())).fired.is_empty());
+        // Safari comes to the front with the button still held: now it fires, once.
+        assert_eq!(
+            engine.set_front_app(Some("safari".into())).fired,
+            vec![Action::PlayPause]
+        );
+        assert!(engine.set_front_app(Some("Safari".into())).fired.is_empty());
+        // Leaving Safari lets go, so coming back with the button held fires again.
+        engine.set_front_app(Some("Finder".into()));
+        assert_eq!(
+            engine.set_front_app(Some("Safari".into())).fired,
+            vec![Action::PlayPause]
+        );
+        // With no recipe for some apps only, there is nothing to watch for.
+        assert!(!Engine::new(default_recipes(), Tuning::default()).needs_front_app());
+    }
+    #[test]
+    fn the_engine_says_when_a_recipe_starts_stops_and_fires() {
+        let mut engine = Engine::new(default_recipes(), Tuning::default());
+        let moments = |effects: Effects| -> Vec<(String, RecipeMoment)> {
+            effects
+                .activity
+                .into_iter()
+                .map(|a| (a.recipe, a.moment))
+                .collect()
+        };
+        engine.observe_orientation([1.0, 0.0, 0.0, 0.0], 1_000_000, None);
+        engine.set_head(Some("topRight".into()));
+        assert_eq!(
+            moments(engine.set_stem(true)),
+            vec![("lookStemVolume".to_string(), RecipeMoment::Started)]
+        );
+        assert!(
+            moments(engine.observe_orientation([1.0, 0.0, 0.0, 0.0], 2_000_000, None)).is_empty()
+        );
+        assert_eq!(
+            moments(engine.set_stem(false)),
+            vec![("lookStemVolume".to_string(), RecipeMoment::Ended)]
+        );
     }
 }

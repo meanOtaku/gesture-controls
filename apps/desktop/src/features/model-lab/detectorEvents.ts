@@ -30,7 +30,7 @@ export interface Judged extends EventTotals {
 }
 
 /** The release gate's budget (`FALSE_ACTIVATIONS_BUDGET_PER_HOUR`), per hour with no gesture under way. */
-export const FALSE_ACTIVATIONS_BUDGET_PER_HOUR = 30;
+export const FALSE_ACTIVATIONS_BUDGET_PER_HOUR = 5;
 
 export const TIMING_NAME: Record<LabelTiming, string> = {
   camera: "camera-timed",

@@ -225,7 +225,7 @@ export function describeRecipe(recipe: Recipe, locationName: (id: string) => str
     ...recipe.stages.map((stage) => stageLabel(stage, locationName, gestureName)),
     ...(isTrigger(recipe.action) ? [] : [deviceLabel(recipe.device.kind)]),
     recipe.action === "shortcut" && recipe.keys ? `Press ${recipe.keys}` : actionInfo(recipe.action).label,
-  ].join(" → ");
+  ].join(" → ") + (recipe.apps && recipe.apps.length > 0 ? ` (only in ${recipe.apps.join(", ")})` : "");
 }
 
 /** The steps before the wrist rotation, which every recipe ends with. */
@@ -315,6 +315,27 @@ export function shortcutProblem(keys: string): string | null {
   const types = /^[a-z0-9]$/.test(key) || TYPING_KEYS.includes(key);
   if (types && !["cmd", "ctrl", "alt"].some((modifier) => modifiers.has(modifier))) {
     return "Add cmd, ctrl or alt: that key alone would type into whatever has the keyboard.";
+  }
+  return null;
+}
+
+export const MAX_APPS = 8;
+export const MAX_APP_NAME_CHARS = 60;
+
+/** The app names in what was typed: separated by commas, blanks dropped. */
+export function parseApps(text: string): string[] {
+  return text.split(",").map((app) => app.trim()).filter((app) => app !== "");
+}
+
+/** Why these apps cannot be saved, or null. The backend checks the same things. */
+export function appsProblem(apps: string[]): string | null {
+  if (apps.length > MAX_APPS) return `Name at most ${MAX_APPS} apps.`;
+  if (apps.some((app) => app.length > MAX_APP_NAME_CHARS)) return `An app's name can be at most ${MAX_APP_NAME_CHARS} characters.`;
+  const seen = new Set<string>();
+  for (const app of apps) {
+    const key = app.toLowerCase();
+    if (seen.has(key)) return `“${app}” is there twice.`;
+    seen.add(key);
   }
   return null;
 }

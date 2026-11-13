@@ -18,6 +18,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   shakeStrokes: 4,
   swipePeakThreshold: 8,
   tapPeakThreshold: 12,
+  wigglePeakRate: 250,
+  hammerPeakThreshold: 25,
   rollAngleDegrees: 60,
   pitchAngleDegrees: 40,
   watchWrist: "left",
@@ -45,6 +47,8 @@ export type NumericSettingKey =
   | "shakeStrokes"
   | "swipePeakThreshold"
   | "tapPeakThreshold"
+  | "wigglePeakRate"
+  | "hammerPeakThreshold"
   | "rollAngleDegrees"
   | "pitchAngleDegrees"
   | "wristMaxAngularVelocityDegreesPerSecond"
@@ -73,15 +77,15 @@ export const SETTINGS_FIELDS: Record<NumericSettingKey, NumberSpec> = {
   },
   watchOrientationRateHz: {
     label: "Orientation", unit: "Hz", min: 1, max: 200, step: 1, integer: true, defaultValue: d.watchOrientationRateHz,
-    description: "Watch rotation sensor rate; higher is smoother but costs battery",
+    description: "Watch rotation sensor rate; higher is smoother but costs battery. A Galaxy Watch4 delivers at most 100 Hz, so a higher setting changes nothing",
   },
   watchAccelerationRateHz: {
     label: "Acceleration", unit: "Hz", min: 1, max: 200, step: 1, integer: true, defaultValue: d.watchAccelerationRateHz,
-    description: "Watch acceleration sensor rate",
+    description: "Watch acceleration sensor rate. A Galaxy Watch4 delivers at most 100 Hz",
   },
   watchGyroscopeRateHz: {
     label: "Gyroscope", unit: "Hz", min: 1, max: 200, step: 1, integer: true, defaultValue: d.watchGyroscopeRateHz,
-    description: "Watch gyroscope sensor rate",
+    description: "Watch gyroscope sensor rate. A Galaxy Watch4 delivers at most 100 Hz",
   },
   watchPpgFlushRateHz: {
     label: "Raw PPG flush", unit: "Hz", min: 0.1, max: 10, step: 0.1, defaultValue: d.watchPpgFlushRateHz,
@@ -110,6 +114,14 @@ export const SETTINGS_FIELDS: Record<NumericSettingKey, NumberSpec> = {
   swipePeakThreshold: {
     label: "Swipe strength", unit: "m/s²", min: 3, max: 30, step: 0.5, defaultValue: d.swipePeakThreshold,
     description: "How hard the push of a swipe must be. Lower catches gentler swipes (and more accidents)",
+  },
+  wigglePeakRate: {
+    label: "Wiggle speed", unit: "°/s", min: 100, max: 800, step: 10, defaultValue: d.wigglePeakRate,
+    description: "How fast the wrist must be turning at the top of each twist. Lower catches gentler wiggles (and more ordinary turning)",
+  },
+  hammerPeakThreshold: {
+    label: "Hammer strength", unit: "m/s²", min: 10, max: 60, step: 1, defaultValue: d.hammerPeakThreshold,
+    description: "How hard the jolt of the blow must be. Lower catches softer blows (and more of putting things down)",
   },
   tapPeakThreshold: {
     label: "Tap strength", unit: "m/s²", min: 4, max: 40, step: 0.5, defaultValue: d.tapPeakThreshold,

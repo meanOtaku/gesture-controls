@@ -20,7 +20,7 @@ const settings: AppSettings = {
   shakePeakThreshold: 6,
   shakeStrokes: 4,
   swipePeakThreshold: 8,
-  tapPeakThreshold: 12,
+  tapPeakThreshold: 12, wigglePeakRate: 250, hammerPeakThreshold: 25,
   rollAngleDegrees: 60,
   pitchAngleDegrees: 40,
   watchWrist: "left",
@@ -42,7 +42,7 @@ describe("Settings page layout", () => {
     expect(groups.map((group) => group.id)).toEqual(["settings-group-watch", "settings-group-gestures", "settings-group-headphones", "settings-group-recording", "settings-group-appearance"]);
     const sectionsIn = (group: string) => within(screen.getByRole("region", { name: group })).getAllByRole("region").map((region) => region.getAttribute("aria-label"));
     expect(sectionsIn("Watch")).toEqual(["Watch transport", "Watch orientation", "Watch sensor enable switches", "Watch sensor rates", "Samsung health delivery controls"]);
-    expect(sectionsIn("Gestures")).toEqual(["Built-in gestures", "Still hand", "Shake sensitivity", "Swipe sensitivity", "Tap sensitivity", "Roll sensitivity", "Pitch sensitivity", "Wrist rotation controls"]);
+    expect(sectionsIn("Gestures")).toEqual(["Built-in gestures", "Still hand", "Shake sensitivity", "Swipe sensitivity", "Tap sensitivity", "Wiggle and hammer sensitivity", "Roll sensitivity", "Pitch sensitivity", "Wrist rotation controls"]);
     expect(sectionsIn("Display")).toEqual(["Appearance"]);
   });
 

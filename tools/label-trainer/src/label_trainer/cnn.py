@@ -7,6 +7,13 @@ sigmoid. `MEMBERS` such networks are trained from different seeds and their prob
 score (step 12 averaged three). It learns the decisions `POSITIVE_FROM_MS`..`POSITIVE_TO_MS` after a start (the touch near the middle of its
 second) against the decisions with no start from `CLEAR_BEFORE_MS` before to `CLEAR_AFTER_MS` after.
 
+Training (`_train`): `EPOCHS` passes with Adam, the learning rate following a cosine down to zero over them, gesture moments
+weighted at most `MAX_POSITIVE_WEIGHT` times, and every batch changed a little as another wearing of the watch might change
+it (`_augmented`: its size scaled, noise added, moved up to 40 ms in time, the pulse blanked in some windows). Against the
+earlier loop (12 passes, a weight of up to 20, no changes to the batches) it caught 99 of 120 held-out pinches against 95
+within 5 false activations an hour, over six seeds, and its best cut-off came down from 0.97-0.995 to 0.7-0.98
+(`docs/research/artifacts/training-improvements-2026-11/`).
+
 The file is JSON with batch normalisation folded into the convolutions, read by `crates/label-inference/src/cnn.rs`:
 plain weights, not code. `predict` evaluates the file exactly as the runtime does, so training can check the exported
 file reproduces the trained network before it is shipped.
@@ -35,11 +42,17 @@ CONVOLUTIONS = ((32, 1), (32, 2), (64, 4))         # (channels, dilation)
 KERNEL = 5
 HIDDEN = 32
 MEMBERS = 3
-EPOCHS = 12
+EPOCHS = 20
 BATCH = 256
 LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-4
-MAX_POSITIVE_WEIGHT = 20.0
+MAX_POSITIVE_WEIGHT = 3.0
+# What `_augmented` does to a batch: each channel's size scaled by a factor in this range, this much noise added (both
+# on the scaled values before their sigmoid), the window moved by up to this long, and the pulse blanked in this share.
+AUGMENT_SCALE = (0.8, 1.25)
+AUGMENT_NOISE = 0.15
+AUGMENT_SHIFT_MS = 40
+AUGMENT_PULSE_BLANK = 0.15
 MAX_NEGATIVES = 40_000
 # The model decides about this long after a gesture starts: the middle of the moments it learns as positives.
 DECISION_DELAY_MS = 500
@@ -178,8 +191,30 @@ def _new_net(seed: int):
     return _net()
 
 
+def _augmented(windows, generator):
+    """A batch (windows x channels x ticks, each value in 0..1) changed as another wearing of the watch might change it:
+    a tighter or looser strap changes each signal's size, the labelled start is never exact to the tick, and the pulse
+    sensor sometimes loses the skin. The last `len(cnn_input.PULSE_CHANNELS)` channels are the pulse's."""
+    import torch
+
+    logit = torch.logit(windows.clamp(1e-5, 1 - 1e-5))
+    n, channels, ticks = logit.shape
+    low, high = AUGMENT_SCALE
+    scale = torch.empty(n, channels, 1, device=logit.device).uniform_(low, high, generator=generator)
+    logit = logit * scale + AUGMENT_NOISE * torch.randn(logit.shape, device=logit.device, generator=generator)
+    most = round(AUGMENT_SHIFT_MS * 1_000_000 / cnn_input.TICK_NS)
+    shifts = torch.randint(-most, most + 1, (n,), device=logit.device, generator=generator)
+    # Moved in time, the tick at the edge repeated where the window has nothing.
+    source = (torch.arange(ticks, device=logit.device)[None, :] - shifts[:, None]).clamp(0, ticks - 1)
+    logit = torch.gather(logit, 2, source[:, None, :].expand(-1, channels, -1))
+    blank = torch.rand(n, device=logit.device, generator=generator) < AUGMENT_PULSE_BLANK
+    logit[blank, channels - len(cnn_input.PULSE_CHANNELS):, :] = 0.0
+    return torch.sigmoid(logit)
+
+
 def _train(net, x: np.ndarray, y: np.ndarray, keep: np.ndarray | None, epochs: int, rng: np.random.Generator) -> None:
-    """`epochs` passes of `net` over all positives, every row `keep` marks, and up to MAX_NEGATIVES negatives in all."""
+    """`epochs` passes of `net` over all positives, every row `keep` marks, and up to MAX_NEGATIVES negatives in all, each
+    batch through `_augmented`, the learning rate following a cosine down to zero over the passes."""
     import torch
     from torch import nn
 
@@ -199,6 +234,8 @@ def _train(net, x: np.ndarray, y: np.ndarray, keep: np.ndarray | None, epochs: i
     optimiser = torch.optim.Adam(net.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
     positives = max(1.0, float(y.sum()))
     loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(min(MAX_POSITIVE_WEIGHT, (len(y) - positives) / positives), device=where))
+    schedule = torch.optim.lr_scheduler.CosineAnnealingLR(optimiser, max(1, epochs * ((len(y) + BATCH - 1) // BATCH)))
+    generator = torch.Generator(device=where).manual_seed(int(rng.integers(2**31)))
     for _ in range(epochs):
         net.train()
         order = torch.from_numpy(rng.permutation(len(y))).to(where)
@@ -206,10 +243,11 @@ def _train(net, x: np.ndarray, y: np.ndarray, keep: np.ndarray | None, epochs: i
             pick = order[b:b + BATCH]
             if len(pick) < 2:
                 continue        # batch normalisation needs two
-            loss = loss_fn(net(windows[pick]), truth[pick])
+            loss = loss_fn(net(_augmented(windows[pick], generator)), truth[pick])
             optimiser.zero_grad()
             loss.backward()
             optimiser.step()
+            schedule.step()
     # Back to the CPU, where the file is written from and the trainer's numpy code reads it.
     net.to("cpu")
 

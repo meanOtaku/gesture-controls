@@ -1,3 +1,4 @@
+import { errorText } from "../../../shared/tauri/errorText";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
 import { HelpTooltip } from "../../../components/app/HelpTooltip";
@@ -45,7 +46,7 @@ export function WatchTransportSection({ selected, onSelect }: WatchTransportSect
   const refresh = useCallback(() => {
     invoke<WatchTransportStatus>("get_watch_transport_status")
       .then((status) => setBle(status.ble))
-      .catch((cause: unknown) => setError(String(cause)));
+      .catch((cause: unknown) => setError(errorText(cause)));
   }, []);
 
   useEffect(() => {
@@ -62,14 +63,14 @@ export function WatchTransportSection({ selected, onSelect }: WatchTransportSect
         onSelect(transport);
         refresh();
       })
-      .catch((cause: unknown) => setError(String(cause)));
+      .catch((cause: unknown) => setError(errorText(cause)));
   };
 
   const rescan = () => {
     setError(null);
     invoke("rescan_watch_ble")
       .then(refresh)
-      .catch((cause: unknown) => setError(String(cause)));
+      .catch((cause: unknown) => setError(errorText(cause)));
   };
 
   return (

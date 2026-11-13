@@ -6,13 +6,19 @@ Every variant trains on the 22 recordings the live `pinch_in-motion` / `pinch_ou
 
 Variants (each two seeds, three networks a seed, as the trainer does):
 
-* `base`      the trainer as it is: 12 passes, Adam at 0.001, gesture moments weighted up to 20 times.
+* `base`      the trainer as it was when this ran (12 Nov): 12 passes, Adam at 0.001, gesture moments weighted up to 20
+              times. The trainer has since taken `loop+aug` as its own loop (`cnn._train`), so running `base` again
+              trains that, and the results here are the record of the comparison.
 * `loop`      gesture moments weighted 3 times at most, 20 passes, the learning rate following a cosine down to zero.
 * `aug`       `base` for 20 passes, each batch changed a little: its size scaled, noise added, moved up to 40 ms in time,
               and the pulse blanked in 15% of the windows.
 * `loop+aug`  both.
 * `...@100`   the same on a 100 Hz grid (the rate the watch sends motion at; the trainer uses every other sample), with a
               fourth convolution so the filters reach as far in time.
+* `...@2s`    the same on a 2 s window ending at the same moment (so it decides no later), with a fourth convolution
+              (dilation 8) so the filters reach 1.2 s: the "wide" window of `cnn-all-days-2026-11`.
+
+Seeds differ by as much as the variants do, so `SEEDS=17,18,19,20,21,22` runs more of them.
 
 A variant is judged on all 11 recordings together by the most pinches it can catch at 2, 5 and 10 false activations an hour
 with no gesture under way, at whichever cut-off does best for it. That cut-off is chosen on the scored recordings, so the
@@ -39,7 +45,10 @@ from label_trainer import cnn, cnn_input, label_train as lt  # noqa: E402
 HERE = Path(__file__).resolve().parent
 RECORDINGS = ROOT / "data" / "recordings" / "Hand labeled"
 UNSEEN = ("pinch_hold-2026-11-09T13-48-35.709Z", "pinch_hold-2026-11-09T13-51-14.408Z", "pinch_hold-2026-11-09T13-54-14.793Z")
-SEEDS = (17, 18)
+import os  # noqa: E402
+
+# Two seeds by default; `SEEDS=17,18,19,20` runs more, which the spread between seeds calls for.
+SEEDS = tuple(int(seed) for seed in os.environ.get("SEEDS", "17,18").split(","))
 BUDGETS = (2.0, 5.0, 10.0)
 THRESHOLDS = tuple(round(t, 3) for t in (*np.arange(0.30, 0.951, 0.05), 0.96, 0.97, 0.98, 0.99, 0.995, 0.999))
 OTHERS = ["pinch_hold", "fist", "hand_open", "everyday_noise", "still", "supported"]
@@ -71,6 +80,28 @@ def at_100_hz() -> None:
     cnn_input.FEATURE_COUNT = len(cnn_input.FEATURE_NAMES)
     cnn.LENGTH = cnn_input.WINDOW_TICKS
     cnn.CONVOLUTIONS = ((32, 1), (32, 2), (32, 4), (64, 8))
+
+
+def at_2_s() -> None:
+    """The input over 2 s instead of 1, on the same 50 Hz grid, and a network whose filters reach 1.2 s."""
+    cnn_input.WINDOW_TICKS = 100
+    cnn_input.GRID_TICKS = cnn_input.WINDOW_TICKS + cnn_input.HISTORY_TICKS - 1
+    cnn_input.SPAN_NS = (cnn_input.GRID_TICKS - 1) * cnn_input.TICK_NS
+    cnn_input.FEATURE_NAMES = tuple(f"cnn_{c}_t{t:03d}" for c in cnn_input.CHANNELS for t in range(cnn_input.WINDOW_TICKS))
+    cnn_input.FEATURE_COUNT = len(cnn_input.FEATURE_NAMES)
+    cnn.LENGTH = cnn_input.WINDOW_TICKS
+    cnn.CONVOLUTIONS = ((32, 1), (32, 2), (64, 4), (64, 8))
+
+
+INPUTS = {"": None, "@100": at_100_hz, "@2s": at_2_s}
+
+
+def base_of(name: str) -> tuple[str, str]:
+    """A variant's training changes and its input: `loop+aug@2s` is (`loop+aug`, `@2s`)."""
+    for suffix in ("@100", "@2s"):
+        if name.endswith(suffix):
+            return name.removesuffix(suffix), suffix
+    return name, ""
 
 
 def augmented(windows, generator, shift_ticks: int):
@@ -123,7 +154,7 @@ def fit(x: np.ndarray, y: np.ndarray, seed: int, *, loop: bool, augment: bool) -
                 pick = order[b:b + cnn.BATCH]
                 if len(pick) < 2:
                     continue
-                batch = augmented(windows[pick], generator, cnn.LENGTH // 25) if augment else windows[pick]
+                batch = augmented(windows[pick], generator, round(40_000_000 / cnn_input.TICK_NS)) if augment else windows[pick]
                 loss = loss_fn(net(batch), truth[pick])
                 optimiser.zero_grad()
                 loss.backward()
@@ -165,8 +196,8 @@ def report(target: str, results: dict) -> None:
              "budget of false activations an hour (chosen on these recordings: for comparing variants only). In brackets, of the",
              "three sessions of 9 Nov alone. See `experiment.py`.", "",
              "| variant | seed | " + " | ".join(f"within {b:g} an hour" for b in BUDGETS) + " |", "|---|---:|" + "---|" * len(BUDGETS)]
-    for name in sorted(results, key=lambda n: (n.endswith("@100"), n)):
-        for seed, run in sorted(results[name].items()):
+    for name in sorted(results, key=lambda n: (base_of(n)[1], n)):
+        for seed, run in sorted(results[name].items(), key=lambda item: int(item[0])):
             cells = []
             for budget in BUDGETS:
                 point = run["best"][str(budget)]
@@ -179,13 +210,21 @@ def report(target: str, results: dict) -> None:
 def main(target: str, wanted: list[str]) -> None:
     path = HERE / f"results-{target}.json"
     results = json.loads(path.read_text()) if path.exists() else {}
-    names = wanted or [*VARIANTS, *(f"{name}@100" for name in VARIANTS)]
-    for fast in (False, True):
-        mine = [name for name in names if name.endswith("@100") == fast]
-        if not mine or all(str(seed) in results.get(name, {}) for name in mine for seed in SEEDS):
-            continue
-        if fast:
-            at_100_hz()
+    names = wanted or [f"{name}{suffix}" for suffix in INPUTS for name in VARIANTS]
+    # One process holds one input (the constants are changed in place), so each input's variants run in a process of
+    # their own.
+    inputs = {base_of(name)[1] for name in names if not all(str(seed) in results.get(name, {}) for seed in SEEDS)}
+    if len(inputs) > 1:
+        import subprocess
+        for suffix in sorted(inputs):
+            mine = [name for name in names if base_of(name)[1] == suffix]
+            subprocess.run([sys.executable, "-u", __file__, target, *mine], check=True)
+        return
+    for suffix in inputs:
+        mine = [name for name in names if base_of(name)[1] == suffix]
+        if INPUTS[suffix]:
+            INPUTS[suffix]()
+        fast = suffix
         spec = spec_for(target)
         recordings = lt.load_spec_recordings(spec)
         began = time.time()
@@ -196,14 +235,14 @@ def main(target: str, wanted: list[str]) -> None:
             x = lt.inputs(spec, recordings[rid], ts)
             ok = np.isfinite(x).all(axis=1)
             held_out[rid] = (ts[ok], x[ok])
-        print(f"{'100' if fast else '50'} Hz inputs: {len(train.y)} training moments ({int(train.y.sum())} starts), "
+        print(f"{fast or 'usual'} inputs: {len(train.y)} training moments ({int(train.y.sum())} starts), "
               f"{time.time() - began:.0f} s", flush=True)
         for name in mine:
             for seed in SEEDS:
                 if str(seed) in results.get(name, {}):
                     continue
                 began = time.time()
-                model = fit(train.x, train.y, seed, **VARIANTS[name.removesuffix("@100")])
+                model = fit(train.x, train.y, seed, **VARIANTS[base_of(name)[0]])
                 scored = {rid: (times, model.predict_proba(x)[:, 1]) for rid, (times, x) in held_out.items()}
                 run = judged(spec, recordings, scored)
                 results.setdefault(name, {})[str(seed)] = run

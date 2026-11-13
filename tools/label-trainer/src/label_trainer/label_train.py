@@ -88,7 +88,7 @@ MIN_WINDOW_SAMPLES = 100
 # How often a model may fire with no gesture under way, per hour of such time. One budget, used twice: the PPG + IMU model's
 # cut-off is the one that catches the most starts within it, replayed over training recordings each scored by a model that
 # did not see it; and a model whose held-out replay exceeds it cannot go live (`verdict`).
-FALSE_ACTIVATIONS_BUDGET_PER_HOUR = 30.0
+FALSE_ACTIVATIONS_BUDGET_PER_HOUR = 5.0
 # Results are judged on the camera-timed recordings when there are at least this many gestures in them (and enough time
 # without one); estimated timings put gestures where they were not, which reads as misses and false activations.
 MIN_COHORT_GESTURES = 20

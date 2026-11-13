@@ -18,7 +18,7 @@ use crate::dataset_files::{self, Hold};
 use crate::sealed_test;
 
 /// The release gate's budget, the trainer's `FALSE_ACTIVATIONS_BUDGET_PER_HOUR`.
-pub const FALSE_ACTIVATIONS_BUDGET_PER_HOUR: f64 = 30.0;
+pub const FALSE_ACTIVATIONS_BUDGET_PER_HOUR: f64 = 5.0;
 /// The camera-timed recordings decide only when they hold at least this many gestures and this long with none under way
 /// (the trainer's `MIN_COHORT_GESTURES`, `MIN_NEGATIVE_SECONDS`).
 const MIN_COHORT_GESTURES: usize = 20;

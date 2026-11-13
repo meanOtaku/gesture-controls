@@ -37,7 +37,7 @@ describe("Dashboard", () => {
   it("does not report a ready gesture when calibrated headphones are disconnected", () => {
     render(<Dashboard status={{ ...connected, connected: false }} calibration={calibrationFixture()} />);
     expect(screen.queryByText("Ready")).not.toBeInTheDocument();
-    expect(screen.getByText("Connect headphones to begin")).toBeInTheDocument();
+    expect(screen.getByText("Connect the Watch to begin")).toBeInTheDocument();
   });
 
   it("keeps device errors visible on the overview and routes setup actions", () => {
