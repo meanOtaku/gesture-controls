@@ -583,3 +583,13 @@ html.overlay-document body::before { display:none; }
 .labelling-timing { display:flex; flex-wrap:wrap; align-items:end; gap:12px; padding:12px; border:1px solid var(--line); }
 .labelling-timing label { display:flex; flex-direction:column; gap:4px; font-size:12px; }
 .labelling-timing input { width:140px; padding:6px; border:1px solid var(--line); background:var(--surface-2); color:var(--ink); }
+
+/*
+ * Rolling numbers (NumberFlow). Its digits travel up and down between values; the box is clipped so a digit on its way in
+ * or out never draws over the line above or below (a card's label, the next line of text), and the fade at the top and
+ * bottom is deep enough to hide the next digit along in the tight line heights of big readouts.
+ */
+number-flow-react {
+  clip-path: inset(0);
+  --number-flow-mask-height: 0.4em;
+}

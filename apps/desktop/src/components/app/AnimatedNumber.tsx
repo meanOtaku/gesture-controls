@@ -73,7 +73,8 @@ function RollingNumber({ value, digits, integerDigits, format }: AnimatedNumberP
   );
 }
 
-const NUMBER = /\d+(?:\.\d+)?/g;
+/** A run of digits, with its minus sign when the minus is not a hyphen inside a word or a range such as "3-5". */
+const NUMBER = /(?<![\p{L}\p{N}_.])-?\d+(?:\.\d+)?/gu;
 
 /**
  * Text whose numbers roll when they change: "12.5 Hz", "3 of 20", "07:20:00". Each run of digits is an
@@ -86,7 +87,7 @@ export function AnimatedText({ children }: { children: string }) {
   let from = 0;
   let place = 0;
   for (const match of children.matchAll(NUMBER)) {
-    const [whole, fraction = ""] = match[0].split(".");
+    const [whole, fraction = ""] = match[0].replace(/^-/, "").split(".");
     parts.push(children.slice(from, match.index));
     parts.push(
       <AnimatedNumber
@@ -105,7 +106,7 @@ export function AnimatedText({ children }: { children: string }) {
 
 /** Both words sit in the same grid cell while one fades out and the other in, so the line does not jump. */
 const STACK: React.CSSProperties = { display: "inline-grid" };
-const CELL: React.CSSProperties = { gridArea: "1 / 1", whiteSpace: "nowrap" };
+const CELL: React.CSSProperties = { gridArea: "1 / 1" };
 
 /**
  * A word or short phrase that slides and fades to its new text when it changes, such as "OFFLINE" becoming "ONLINE".
