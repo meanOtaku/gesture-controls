@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
@@ -161,7 +161,7 @@ export function GestureRecordingCard({ desktopAvailable, onStop }: {
           <div className="flex flex-col gap-1">
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-xs text-muted-foreground">Time remaining</span>
-              <span role="timer" aria-label="Time remaining" aria-live="off" className="text-2xl font-semibold tabular-nums">{clock(remaining.remainingMs)}</span>
+              <span role="timer" aria-label="Time remaining" aria-live="off" className="text-2xl font-semibold tabular-nums"><AnimatedText>{clock(remaining.remainingMs)}</AnimatedText></span>
             </div>
             <div className="gesture-meter" role="progressbar" aria-label="Recording progress" aria-valuemin={0} aria-valuemax={remaining.totalSeconds} aria-valuenow={Math.round(remaining.totalSeconds - remaining.remainingMs / 1000)}>
               <div className="gesture-meter-fill" style={{ width: `${remaining.totalSeconds > 0 ? Math.min(100, 100 - remaining.remainingMs / (remaining.totalSeconds * 10)) : 0}%` }} />

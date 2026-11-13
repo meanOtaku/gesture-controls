@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../components/app/AnimatedNumber";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
 import { SectionHeader } from "../../components/app/SectionHeader";
@@ -109,12 +109,12 @@ export function AgreementPanel({ tracker, definitions, status, cameraOn, onTurnC
               {rows.flatMap(({ label, name, summary, candidate }) => [
                 <tr key={label}>
                   <th scope="row">{name}{candidate ? <small className="block font-normal">active model</small> : null}</th>
-                  <td>{<AnimatedNumber value={summary.holds} />}</td><td>{<AnimatedNumber value={summary.found} />}</td><td>{<AnimatedNumber value={summary.missed} />}</td><td>{<AnimatedNumber value={summary.falseAlarms} />}</td><td>{<AnimatedNumber value={summary.unverified} />}</td><td>{ms(summary.medianDelayMs)}</td>
+                  <td>{<AnimatedNumber value={summary.holds} />}</td><td>{<AnimatedNumber value={summary.found} />}</td><td>{<AnimatedNumber value={summary.missed} />}</td><td>{<AnimatedNumber value={summary.falseAlarms} />}</td><td>{<AnimatedNumber value={summary.unverified} />}</td><td><AnimatedText>{ms(summary.medianDelayMs)}</AnimatedText></td>
                 </tr>,
                 ...(candidate ? [
                   <tr key={`${label}-candidate`} aria-label={`${name}, ${candidateId}`}>
                     <th scope="row"><small className="block font-normal">{candidateId} (beside it)</small></th>
-                    <td>{<AnimatedNumber value={candidate.holds} />}</td><td>{<AnimatedNumber value={candidate.found} />}</td><td>{<AnimatedNumber value={candidate.missed} />}</td><td>{<AnimatedNumber value={candidate.falseAlarms} />}</td><td>{<AnimatedNumber value={candidate.unverified} />}</td><td>{ms(candidate.medianDelayMs)}</td>
+                    <td>{<AnimatedNumber value={candidate.holds} />}</td><td>{<AnimatedNumber value={candidate.found} />}</td><td>{<AnimatedNumber value={candidate.missed} />}</td><td>{<AnimatedNumber value={candidate.falseAlarms} />}</td><td>{<AnimatedNumber value={candidate.unverified} />}</td><td><AnimatedText>{ms(candidate.medianDelayMs)}</AnimatedText></td>
                   </tr>,
                 ] : []),
               ])}

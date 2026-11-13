@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { useEffect, useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Badge } from "../../../components/ui/badge";
@@ -59,7 +59,7 @@ export function LinkHealthPanel({ diagnostics, nowUnixMs, onCopy }: LinkHealthPa
       <CardContent className="flex flex-col gap-3">
         {hint && <p className="hint" role="status">{hint}</p>}
         {diagnostics.retryInMs != null && diagnostics.phase === "failed" && (
-          <p className="hint">Trying again in {formatMs(diagnostics.retryInMs)}.</p>
+          <p className="hint">Trying again in <AnimatedText>{formatMs(diagnostics.retryInMs)}</AnimatedText>.</p>
         )}
         <section className="metric-grid" aria-label="Link metrics">
           <Metric label="Watch" value={diagnostics.peer ?? "—"} />
@@ -76,7 +76,7 @@ export function LinkHealthPanel({ diagnostics, nowUnixMs, onCopy }: LinkHealthPa
         </section>
         {diagnostics.lastEnd && (
           <p className="hint" aria-label="Last disconnect">
-            Last disconnect {formatAgo(diagnostics.lastEnd.atUnixMs, nowUnixMs)}, after {formatDuration(diagnostics.lastEnd.sessionSeconds)}:
+            Last disconnect <AnimatedText>{formatAgo(diagnostics.lastEnd.atUnixMs, nowUnixMs)}</AnimatedText>, after <AnimatedText>{formatDuration(diagnostics.lastEnd.sessionSeconds)}</AnimatedText>:
             {" "}{endReasonLabel(diagnostics.lastEnd)} — {diagnostics.lastEnd.detail}.
           </p>
         )}
@@ -90,7 +90,7 @@ export function LinkHealthPanel({ diagnostics, nowUnixMs, onCopy }: LinkHealthPa
           <ol className="model-lab-log" aria-label="Link events">
             {shown.map((event: LinkEvent, index) => (
               <li key={`${event.atUnixMs}-${index}`} data-level={event.level}>
-                <span>{formatClock(event.atUnixMs)}</span> {event.message}
+                <span><AnimatedText>{formatClock(event.atUnixMs)}</AnimatedText></span> {event.message}
               </li>
             ))}
           </ol>

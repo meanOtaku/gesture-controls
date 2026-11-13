@@ -1,4 +1,5 @@
 import { Card, CardContent } from "../../../components/ui/card";
+import { AnimatedText } from "../../../components/app/AnimatedNumber";
 import type { HeadTrackerStatus } from "../../../shared/protocol/events";
 import { number, vector } from "../format";
 import { Metric, VectorRow } from "./MetricRow";
@@ -13,7 +14,7 @@ export function HeadphoneTelemetryPanel({ status }: HeadphoneTelemetryPanelProps
     <>
       <Card role="region" aria-label="Sony device"><CardContent className="flex items-center justify-between gap-6">
         <div><span className="label">Active device</span><strong className="text-numeric block">{status?.device ?? "No device detected"}</strong></div>
-        <div className="text-right"><span className="text-numeric">{status ? number(status.packetsPerSecond, 1) : "—"}</span><small className="block text-muted-foreground">packets / sec</small></div>
+        <div className="text-right"><span className="text-numeric"><AnimatedText>{status ? number(status.packetsPerSecond, 1) : "—"}</AnimatedText></span><small className="block text-muted-foreground">packets / sec</small></div>
       </CardContent></Card>
 
       <section className="metric-grid" aria-label="Sony telemetry">

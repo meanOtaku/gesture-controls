@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../components/app/AnimatedNumber";
 import { useCallback, useEffect, useId, useState } from "react";
 import { SectionHeader } from "../../components/app/SectionHeader";
 import { OperationFeedback } from "../../components/app/OperationFeedback";
@@ -121,7 +121,7 @@ export function CameraProposalsPanel() {
                       onCheckedChange={(on) => setChosen((prev) => { const next = new Set(prev); if (on === true) next.add(index); else next.delete(index); return next; })}
                     />
                     <span>
-                      <strong>{p.gestureName}</strong> → {p.labelId}, {seconds(p.startNs, origin)}–{seconds(p.endNs, origin)} s of the recording ({<AnimatedNumber value={p.endRow - p.startRow + 1} />} rows)
+                      <strong>{p.gestureName}</strong> → {p.labelId}, <AnimatedText>{seconds(p.startNs, origin)}</AnimatedText>–<AnimatedText>{seconds(p.endNs, origin)}</AnimatedText> s of the recording ({<AnimatedNumber value={p.endRow - p.startRow + 1} />} rows)
                       {p.overlaps && <small className="text-muted-foreground"> Overlaps an interval already there, so it cannot be added.</small>}
                     </span>
                   </li>

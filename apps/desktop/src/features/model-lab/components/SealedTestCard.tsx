@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { lineOf } from "../recordingNames";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
@@ -151,7 +151,7 @@ export function SealedTestCard({ desktopAvailable, models, datasets }: { desktop
                     <td>{lineOf(datasets, row.id, row.name)}</td>
                     <td className="text-center">{TIMING_NAME[row.labelTiming]}</td>
                     <td className="text-center">{<AnimatedNumber value={row.starts} />}</td>
-                    <td className="text-center">{<AnimatedNumber value={row.caught} />} ({share(row.caught, row.starts)})</td>
+                    <td className="text-center">{<AnimatedNumber value={row.caught} />} (<AnimatedText>{share(row.caught, row.starts)}</AnimatedText>)</td>
                     <td className="text-center">{<AnimatedNumber value={row.repeats} />}</td>
                     <td className="text-center">{<AnimatedNumber value={row.late} />}</td>
                     <td className="text-center">{perHour(row)}</td>

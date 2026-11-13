@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { lineOf } from "../recordingNames";
 import type { DatasetSummary } from "../types";
 import { invoke } from "@tauri-apps/api/core";
@@ -106,14 +106,14 @@ export function CompareCard({ desktopAvailable, models, datasets }: { desktopAva
                     <td>{<AnimatedNumber value={row.starts} />}</td>
                     {row.caught.map((caught, i) => {
                       const best = Math.max(...row.caught) === caught && row.caught.filter((c) => c === caught).length === 1;
-                      return <td key={i} className={best ? "compare-best" : undefined}>{<AnimatedNumber value={caught} />} ({pct(caught, row.starts)}) · {<AnimatedNumber value={row.falseActivations[i]} />}</td>;
+                      return <td key={i} className={best ? "compare-best" : undefined}>{<AnimatedNumber value={caught} />} (<AnimatedText>{pct(caught, row.starts)}</AnimatedText>) · {<AnimatedNumber value={row.falseActivations[i]} />}</td>;
                     })}
                   </tr>
                 ))}
                 <tr className="compare-total">
                   <th>{totals[0]?.cohort === "camera" ? "Camera-timed" : "All"}</th>
                   <th>{<AnimatedNumber value={totals[0]?.starts ?? starts} />}</th>
-                  {totals.map((total, i) => <th key={i}>{pct(total.caught, total.starts)} · {perHour(total)}/h</th>)}
+                  {totals.map((total, i) => <th key={i}><AnimatedText>{pct(total.caught, total.starts)}</AnimatedText> · {perHour(total)}/h</th>)}
                 </tr>
               </tbody>
             </table>

@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { useSyncExternalStore } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
@@ -85,7 +85,7 @@ export function CameraCapturePanel() {
         </div>
         <p className="field-hint" role="status">
           {state.collecting
-            ? <>{"Recording the camera"}{state2.collecting ? "s" : ""}{": "}<AnimatedNumber value={state.collectedFrames} />{" frames kept"}{state2.collecting ? ` (second camera: ${state2.collectedFrames})` : ""}{state.truncated ? " (the limit was reached, so the end of this recording has no camera data)" : ""}{"."}</>
+            ? <>{"Recording the camera"}{state2.collecting ? "s" : ""}{": "}<AnimatedNumber value={state.collectedFrames} />{" frames kept"}<AnimatedText>{state2.collecting ? ` (second camera: ${state2.collectedFrames})` : ""}</AnimatedText>{state.truncated ? " (the limit was reached, so the end of this recording has no camera data)" : ""}{"."}</>
             : !watchStreaming
               ? "Clock alignment with the watch starts once the watch is streaming."
               : sync

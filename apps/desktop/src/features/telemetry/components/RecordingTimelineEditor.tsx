@@ -1,4 +1,5 @@
 import { parseNumber } from "../../../shared/forms/numberField";
+import { AnimatedText } from "../../../components/app/AnimatedNumber";
 import { useState } from "react";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
@@ -115,7 +116,7 @@ export function RecordingTimelineEditor({
           <div key={interval.intervalId} className="vector-row flex flex-wrap items-center gap-2">
             <Badge variant="outline">{interval.labelId.replaceAll("_", " ")}</Badge>
             <span className="text-xs text-muted-foreground">
-              {formatMmSs(elapsedSeconds(rows, interval.startRawRow))} – {formatMmSs(elapsedSeconds(rows, (interval.endRawRow ?? interval.startRawRow) - 1))}
+              <AnimatedText>{formatMmSs(elapsedSeconds(rows, interval.startRawRow))}</AnimatedText> – <AnimatedText>{formatMmSs(elapsedSeconds(rows, (interval.endRawRow ?? interval.startRawRow) - 1))}</AnimatedText>
             </span>
 
             <Select
@@ -323,7 +324,7 @@ function GapFiller({
   return (
     <div className="vector-row flex flex-wrap items-center gap-2">
       <span className="text-xs text-muted-foreground">
-        {formatMmSs(elapsedSeconds(rows, gap.startRawRow))} – {formatMmSs(elapsedSeconds(rows, gap.endRawRow - 1))} unannotated
+        <AnimatedText>{formatMmSs(elapsedSeconds(rows, gap.startRawRow))}</AnimatedText> – <AnimatedText>{formatMmSs(elapsedSeconds(rows, gap.endRawRow - 1))}</AnimatedText> unannotated
       </span>
       {sessionLabels.length > 0 ? (
         <>

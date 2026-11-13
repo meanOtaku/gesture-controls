@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
@@ -52,7 +52,7 @@ export function ModelWorkflowCard() {
         <ol className="setup-steps">
           {steps.map((step, index) => (
             <li key={step.key} data-complete={step.complete} aria-current={index === next ? "step" : undefined}>
-              <span className="step-number">{step.complete ? "✓" : String(index + 1)}</span>
+              <span className="step-number"><AnimatedText>{step.complete ? "✓" : String(index + 1)}</AnimatedText></span>
               <div><strong>{step.title}{index === next ? " (next)" : ""}</strong><p>{step.status}</p></div>
               <Button type="button" variant={index === next ? "default" : "outline"} onClick={() => go(step)}>{step.key === "label" && firstUnreviewed ? "Label the next →" : step.action}</Button>
             </li>

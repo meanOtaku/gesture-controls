@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import type { SeriesPoint } from "../store/telemetryStore";
 
 /** All channels in a chart share units and a scale, so their amplitudes are comparable. */
@@ -50,7 +50,7 @@ export function TimeChart({ title, points, labels, colors, unit = "", emptyHint 
       {unit && <span className="chart-unit">{unit}</span>}
     </div>
     <div className={`chart-plot ${chart.hasData ? "" : "is-empty"}`}>
-      {chart.hasData && <div className="chart-scale" aria-label={`${title} scale`}><span>{tick(chart.max)}</span><span>{tick((chart.min + chart.max) / 2)}</span><span>{tick(chart.min)}</span></div>}
+      {chart.hasData && <div className="chart-scale" aria-label={`${title} scale`}><span><AnimatedText>{tick(chart.max)}</AnimatedText></span><span><AnimatedText>{tick((chart.min + chart.max) / 2)}</AnimatedText></span><span><AnimatedText>{tick(chart.min)}</AnimatedText></span></div>}
       <svg viewBox="0 0 720 180" role="img" aria-label={`${title} live graph`} preserveAspectRatio="none">
         <path className="telemetry-grid-line" d="M0,90H720" />
         {chart.hasData && chart.paths.map((path, index) => <path key={index} d={path} stroke={colors[index]} />)}

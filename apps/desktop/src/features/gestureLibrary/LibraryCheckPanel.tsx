@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../components/app/AnimatedNumber";
 import { useMemo } from "react";
 import { SectionHeader } from "../../components/app/SectionHeader";
 import { Badge } from "../../components/ui/badge";
@@ -35,12 +35,12 @@ export function LibraryCheckPanel({ definitions, samples }: { definitions: Gestu
         {check.checked < 2 ? (
           <p className="hint" role="status">Needs two gestures calibrated with this version. Edit a gesture and record it again to include it.</p>
         ) : check.pairs.length === 0 ? (
-          <p role="status"><Badge>All clear</Badge> None of the {<AnimatedNumber value={check.checked} />} checked gestures fires on another's frames (more than {percent(0.1)}).</p>
+          <p role="status"><Badge>All clear</Badge> None of the {<AnimatedNumber value={check.checked} />} checked gestures fires on another's frames (more than <AnimatedText>{percent(0.1)}</AnimatedText>).</p>
         ) : (
           <ul className="flex flex-col gap-2" aria-label="Gestures that would be confused">
             {check.pairs.map((pair) => (
               <li key={`${pair.rule.id}>${pair.on.id}`} className="flex flex-wrap items-center gap-2">
-                <Badge variant={pair.severity === "bad" ? "destructive" : "secondary"}>{percent(pair.firesOn)}</Badge>
+                <Badge variant={pair.severity === "bad" ? "destructive" : "secondary"}><AnimatedText>{percent(pair.firesOn)}</AnimatedText></Badge>
                 <span>“{pair.rule.name}” also fires on “{pair.on.name}” frames{pair.severity === "bad" ? ": they will be mixed up." : "."}</span>
               </li>
             ))}

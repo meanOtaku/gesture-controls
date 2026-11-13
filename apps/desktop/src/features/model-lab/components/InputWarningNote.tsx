@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import { describeInput } from "../inspection";
 import type { InputWarning } from "../labelModels";
@@ -22,7 +22,7 @@ export function InputWarningNote({ warning }: { warning: InputWarning }) {
         <p>For about {<AnimatedNumber value={Math.round(warning.unfamiliarShare * 100)} />}% of the last few seconds, an input of this model has been far outside the range it had in the model&apos;s training recordings (or most of them well outside it), so what it scores means little right now: it may fire on everything, or on nothing.</p>
         <ul className="mt-1 list-disc pl-5" aria-label="Inputs furthest outside">
           {warning.worst.map((input) => (
-            <li key={input.name}><strong>{inputTitle(input.name)}</strong> is {number(input.value)}; in training it was {number(input.low)} to {number(input.high)}.</li>
+            <li key={input.name}><strong>{inputTitle(input.name)}</strong> is <AnimatedText>{number(input.value)}</AnimatedText>; in training it was <AnimatedText>{number(input.low)}</AnimatedText> to <AnimatedText>{number(input.high)}</AnimatedText>.</li>
           ))}
         </ul>
         <p className="mt-1">Usually the watch sits differently or touches the skin less well than in the training recordings, so the pulse moves in ways the model never saw. Check the fit, or train on recordings made the way you wear it now.</p>

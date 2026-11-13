@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useId, useRef, useState } from "react";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
@@ -88,7 +88,7 @@ export function LabelTiming({ request, offset, onOffset, disabled }: { request: 
             <tbody>
               {scores.map((s) => (
                 <tr key={s.offsetMs} className={verdict?.best.offsetMs === s.offsetMs ? "font-semibold" : ""}>
-                  <th scope="row" className="text-left font-normal">{signed(s.offsetMs)} ms</th>
+                  <th scope="row" className="text-left font-normal"><AnimatedText>{signed(s.offsetMs)}</AnimatedText> ms</th>
                   <td>{s.auc === null ? "–" : <AnimatedNumber value={s.auc} digits={3} />}</td>
                   <td>{s.auc !== null && <span aria-hidden="true" className="inline-block h-2 rounded-sm" style={{ width: `${Math.max(2, ((s.auc - 0.5) / Math.max(0.01, top - 0.5)) * 90)}px`, background: verdict?.best.offsetMs === s.offsetMs ? "#ff6f91" : "#999" }} />}</td>
                 </tr>
@@ -101,12 +101,12 @@ export function LabelTiming({ request, offset, onOffset, disabled }: { request: 
             <>
               <p className="field-hint" role="status">
                 {verdict.spread < TIMING_MATTERS_SPREAD
-                  ? <>{"The timing barely matters for these recordings: the best offset ("}{signed(verdict.best.offsetMs)}{" ms) scores only "}<AnimatedNumber value={verdict.spread} digits={3} />{" above the worst. "}</>
-                  : <>{"Best fit: "}{signed(verdict.best.offsetMs)}{" ms, "}<AnimatedNumber value={verdict.spread} digits={3} />{" above the worst offset. "}</>}
-                Each recording was scored by a model trained without it (logistic regression on the design&apos;s inputs), over {verdict.best.windows.toLocaleString()} windows. The offset is chosen using all of them, so its score is a little optimistic, and with few recordings the differences are small and noisy.
+                  ? <>{"The timing barely matters for these recordings: the best offset ("}<AnimatedText>{signed(verdict.best.offsetMs)}</AnimatedText>{" ms) scores only "}<AnimatedNumber value={verdict.spread} digits={3} />{" above the worst. "}</>
+                  : <>{"Best fit: "}<AnimatedText>{signed(verdict.best.offsetMs)}</AnimatedText>{" ms, "}<AnimatedNumber value={verdict.spread} digits={3} />{" above the worst offset. "}</>}
+                Each recording was scored by a model trained without it (logistic regression on the design&apos;s inputs), over <AnimatedText>{verdict.best.windows.toLocaleString()}</AnimatedText> windows. The offset is chosen using all of them, so its score is a little optimistic, and with few recordings the differences are small and noisy.
               </p>
               {verdict.best.offsetMs !== offset && verdict.spread >= TIMING_MATTERS_SPREAD && (
-                <div><Button type="button" variant="outline" disabled={disabled} onClick={() => onOffset(verdict.best.offsetMs)}>Use {signed(verdict.best.offsetMs)} ms</Button></div>
+                <div><Button type="button" variant="outline" disabled={disabled} onClick={() => onOffset(verdict.best.offsetMs)}>Use <AnimatedText>{signed(verdict.best.offsetMs)}</AnimatedText> ms</Button></div>
               )}
             </>
           )}

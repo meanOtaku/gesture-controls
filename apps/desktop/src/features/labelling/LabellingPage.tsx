@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../components/app/AnimatedNumber";
 import { LabelTimingEditor } from "./LabelTimingEditor";
 import { EditableLabelRail } from "./EditableLabelRail";
 import { invoke } from "@tauri-apps/api/core";
@@ -725,7 +725,7 @@ export function LabellingPage() {
           <Button variant="outline" onClick={() => void chooseFile(true)} disabled={busy}>Open folder…</Button>
           {recording && (
             <span className="hint">
-              Open: <strong>{recording.name}</strong> · {formatSeconds(recording.durationMs)}
+              Open: <strong>{recording.name}</strong> · <AnimatedText>{formatSeconds(recording.durationMs)}</AnimatedText>
               {recording.context && Object.keys(recording.context).length > 0 ? ` · recorded ${describeContext(recording.context)}` : ""}
             </span>
           )}
@@ -797,8 +797,8 @@ export function LabellingPage() {
                 : camera && "problem" in camera
                   ? `No camera contact: ${camera.problem}. `
                   : ""}
-              {selection ? <>{"Selected "}{formatSeconds(selection.startMs)}{" to "}{formatSeconds(selection.endMs)}{" ("}<AnimatedNumber value={Math.round(selection.endMs - selection.startMs)} />{" ms). "}</> : "Nothing selected. "}
-              Showing {formatSeconds(view.startMs)} to {formatSeconds(view.endMs)}.
+              {selection ? <>{"Selected "}<AnimatedText>{formatSeconds(selection.startMs)}</AnimatedText>{" to "}<AnimatedText>{formatSeconds(selection.endMs)}</AnimatedText>{" ("}<AnimatedNumber value={Math.round(selection.endMs - selection.startMs)} />{" ms). "}</> : "Nothing selected. "}
+              Showing <AnimatedText>{formatSeconds(view.startMs)}</AnimatedText> to <AnimatedText>{formatSeconds(view.endMs)}</AnimatedText>.
             </p>
             <p className="hint labelling-cursor" aria-label="Graph cursor">
               Cursor at {hoverMs === null ? "—" : formatSeconds(hoverMs)}.
@@ -808,7 +808,7 @@ export function LabellingPage() {
               <span>
                 <strong>{<AnimatedNumber value={problems.length} />} place{problems.length === 1 ? "" : "s"} to check</strong>{" "}
                 <span className="hint">
-                  {problemShown ? `At ${formatSeconds(problemShown.atMs)}: ${problemShown.text}.` : "Where the data is suspect, where the labels, the camera and the models disagree, or where a hold is too short to train on (orange on the overview)."}
+                  <AnimatedText>{problemShown ? `At ${formatSeconds(problemShown.atMs)}: ${problemShown.text}.` : "Where the data is suspect, where the labels, the camera and the models disagree, or where a hold is too short to train on (orange on the overview)."}</AnimatedText>
                 </span>
               </span>
               <span className="flex gap-2">

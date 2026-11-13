@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../components/app/AnimatedNumber";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -81,8 +81,8 @@ export function MissDetailsDrawer() {
                     {saved.summary.labels.map((label) => (
                       <tr key={label.label}>
                         <th scope="row">{label.label}</th>
-                        <td>{score(label.activation)}</td>
-                        <td>{score(label.peak)}</td>
+                        <td><AnimatedText>{score(label.activation)}</AnimatedText></td>
+                        <td><AnimatedText>{score(label.peak)}</AnimatedText></td>
                         <td>{label.peakMsBeforeMark === null ? "–" : <><AnimatedNumber value={(label.peakMsBeforeMark / 1000)} digits={1} />{" s"}</>}</td>
                         <td>{<AnimatedNumber value={label.detected} />}</td>
                         <td>{<AnimatedNumber value={label.acted} />}</td>

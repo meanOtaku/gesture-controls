@@ -4,9 +4,9 @@ import { useEffect, useRef, useState } from "react";
 
 /**
  * The quickest a number moves on to a newer value. A live reading arriving several times a second is held for this long
- * between rolls, so each roll can finish and be seen rather than the digits being restarted mid-turn.
+ * between rolls; NumberFlow carries a roll that is still turning on to the newer value, so it keeps moving without lagging far behind.
  */
-const STEP_MS = 700;
+const STEP_MS = 250;
 
 const inTest = (import.meta as { env?: { MODE?: string } }).env?.MODE === "test";
 

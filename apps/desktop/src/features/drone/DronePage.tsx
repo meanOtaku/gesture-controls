@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { SectionHeader } from "../../components/app/SectionHeader";
@@ -361,7 +361,7 @@ export function DronePage() {
             : <Button disabled={!state} onClick={() => run("drone_connect")}>Connect</Button>}
           {state && (
             <p className="subtitle">
-              {state.firmware && <>Firmware {state.firmware}. </>}Video {frameRate ?? "–"} frames a second, total {<AnimatedNumber value={state.videoFrames} />}, skipped {<AnimatedNumber value={state.videoSkipped} />}, damaged {<AnimatedNumber value={state.videoDamaged} />}, restarts {<AnimatedNumber value={state.videoRestarts} />}, repeats {<AnimatedNumber value={state.videoRepeats} />}, unknown packets {<AnimatedNumber value={state.unknownPackets} />}, commands sent {<AnimatedNumber value={state.framesSent} />}, send errors {<AnimatedNumber value={state.sendErrors} />}, watch {state.watchStreaming ? "streaming" : "not streaming"}
+              {state.firmware && <>Firmware {state.firmware}. </>}Video <AnimatedText>{String(frameRate ?? "–")}</AnimatedText> frames a second, total {<AnimatedNumber value={state.videoFrames} />}, skipped {<AnimatedNumber value={state.videoSkipped} />}, damaged {<AnimatedNumber value={state.videoDamaged} />}, restarts {<AnimatedNumber value={state.videoRestarts} />}, repeats {<AnimatedNumber value={state.videoRepeats} />}, unknown packets {<AnimatedNumber value={state.unknownPackets} />}, commands sent {<AnimatedNumber value={state.framesSent} />}, send errors {<AnimatedNumber value={state.sendErrors} />}, watch {state.watchStreaming ? "streaming" : "not streaming"}
             </p>
           )}
           {state?.report && (
@@ -408,9 +408,9 @@ export function DronePage() {
             {state && (
               <p className="subtitle">
                 {state.holdPhase === "calibrating" ? "Measuring the drone, sending" : state.holding ? "Sending" : "Would send"}{" "}
-                {state.correction
+                <AnimatedText>{state.correction
                   ? `aileron ${signed(state.correction.aileron)}, elevator ${signed(state.correction.elevator)}`
-                  : "nothing: the picture cannot be trusted"}
+                  : "nothing: the picture cannot be trusted"}</AnimatedText>
               </p>
             )}
           </div>

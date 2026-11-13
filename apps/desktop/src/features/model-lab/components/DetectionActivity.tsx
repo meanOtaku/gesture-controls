@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { ChevronDownIcon, ChevronRightIcon, Trash2Icon } from "lucide-react";
@@ -122,7 +122,7 @@ export function DetectionActivity({ desktopAvailable }: { desktopAvailable: bool
               </Button>
               <Button type="button" variant="ghost" aria-expanded={open} aria-controls={bodyId} onClick={toggle}>
                 {open ? <ChevronDownIcon aria-hidden="true" /> : <ChevronRightIcon aria-hidden="true" />}
-                {open ? "Collapse" : `Expand${entries.length > 0 ? ` (${entries.length})` : ""}`}
+                <AnimatedText>{open ? "Collapse" : `Expand${entries.length > 0 ? ` (${entries.length})` : ""}`}</AnimatedText>
               </Button>
             </div>
           }

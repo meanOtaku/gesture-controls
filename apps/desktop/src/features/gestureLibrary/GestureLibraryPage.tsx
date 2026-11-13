@@ -1,4 +1,4 @@
-import { AnimatedNumber, AnimatedWord } from "../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedWord, AnimatedText } from "../../components/app/AnimatedNumber";
 import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { SectionHeader } from "../../components/app/SectionHeader";
 import { Alert, AlertDescription } from "../../components/ui/alert";
@@ -130,7 +130,7 @@ export function GestureLibraryPage() {
                     <strong>{definition.name}</strong>
                     <span className="flex items-center gap-2">
                       {on && <Badge variant={held ? "default" : "secondary"}><AnimatedWord>{held ? "Detected" : "Not detected"}</AnimatedWord></Badge>}
-                      {definition.calibration && <Badge variant="outline">{percent(definition.calibration.balancedAccuracy)} on calibration</Badge>}
+                      {definition.calibration && <Badge variant="outline"><AnimatedText>{percent(definition.calibration.balancedAccuracy)}</AnimatedText> on calibration</Badge>}
                     </span>
                   </div>
                   <p className="field-hint">{describeRule(definition)}</p>

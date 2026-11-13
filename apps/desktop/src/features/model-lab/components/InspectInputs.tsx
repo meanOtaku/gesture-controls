@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { describeInput, percent, type Inspection } from "../inspection";
 
 /**
@@ -12,7 +12,7 @@ export function InspectInputs({ inspection }: { inspection: Inspection }) {
     <section aria-label="Inputs" className="flex flex-col gap-2">
       <h3 className="text-base font-semibold">What it leans on</h3>
       <p className="field-hint">
-        The model reads {inspection.inputCount.toLocaleString("en-US")} inputs, {inspection.sources?.includes("watchOrientation") ? "from the pulse sensor and the motion sensors" : "all from the pulse sensor"}, and {<AnimatedNumber value={inspection.trees} />} trees vote on each moment. These are the {<AnimatedNumber value={inspection.importance.length} />} inputs whose splits do the most to tell a gesture&apos;s start from the rest, as a share of everything the trees learn.
+        The model reads <AnimatedText>{inspection.inputCount.toLocaleString("en-US")}</AnimatedText> inputs, {inspection.sources?.includes("watchOrientation") ? "from the pulse sensor and the motion sensors" : "all from the pulse sensor"}, and {<AnimatedNumber value={inspection.trees} />} trees vote on each moment. These are the {<AnimatedNumber value={inspection.importance.length} />} inputs whose splits do the most to tell a gesture&apos;s start from the rest, as a share of everything the trees learn.
       </p>
       <div className="max-w-full overflow-auto">
         <table className="w-full text-sm" aria-label="Most important inputs">
@@ -43,7 +43,7 @@ function CnnInputs({ inspection }: { inspection: Inspection }) {
     <section aria-label="Inputs" className="flex flex-col gap-2">
       <h3 className="text-base font-semibold">What it reads</h3>
       <p className="field-hint">
-        The model reads {inspection.inputCount.toLocaleString("en-US")} inputs: the last second of 9 channels at 50 ticks a second. A CNN learns from the shape of those channels over time, so unlike trees it has no share per input to list.
+        The model reads <AnimatedText>{inspection.inputCount.toLocaleString("en-US")}</AnimatedText> inputs: the last second of 9 channels at 50 ticks a second. A CNN learns from the shape of those channels over time, so unlike trees it has no share per input to list.
       </p>
       <div className="max-w-full overflow-auto">
         <table className="w-full text-sm" aria-label="Channels the model reads">

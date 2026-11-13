@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { useMemo, useState } from "react";
 import { BarChart } from "../../../components/charts/BarChart";
@@ -109,7 +109,7 @@ export function InspectEvaluation({ inspection, other, otherName, model, desktop
 
       <div className="grid gap-4 md:grid-cols-2">
         <table className="text-sm" aria-label="Confusion at the cut-off">
-          <caption className="caption-top text-left text-xs text-muted-foreground">What it called, at a cut-off of {cutOffPercent(threshold)}</caption>
+          <caption className="caption-top text-left text-xs text-muted-foreground">What it called, at a cut-off of <AnimatedText>{cutOffPercent(threshold)}</AnimatedText></caption>
           <thead><tr><th /><th className="px-2 text-left">Called the gesture</th><th className="px-2 text-left">Called something else</th></tr></thead>
           <tbody>
             <tr><th scope="row" className="pr-2 text-left">Really the gesture</th><td className="px-2" style={{ background: "rgba(42,157,143,0.25)" }}>{<AnimatedNumber value={at.tp} />} hits</td><td className="px-2" style={{ background: "rgba(215,48,39,0.18)" }}>{<AnimatedNumber value={at.fn} />} misses</td></tr>
@@ -117,12 +117,12 @@ export function InspectEvaluation({ inspection, other, otherName, model, desktop
           </tbody>
         </table>
         <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm" aria-label="Rates at the cut-off">
-          <li>Found <strong>{percent(at.recall)}</strong> of the gesture (recall)</li>
-          <li><strong>{percent(at.precision)}</strong> of what it flagged was right (precision)</li>
-          <li>Wrongly flagged <strong>{percent(at.falseAlarmRate)}</strong> of the rest</li>
-          <li>F1 <strong>{fixed(at.f1, 2)}</strong> · accuracy <strong>{percent(at.accuracy)}</strong></li>
-          <li>ROC AUC <strong>{fixed(auc, 3)}</strong></li>
-          <li>Average precision <strong>{fixed(pr.averagePrecision, 3)}</strong></li>
+          <li>Found <strong><AnimatedText>{percent(at.recall)}</AnimatedText></strong> of the gesture (recall)</li>
+          <li><strong><AnimatedText>{percent(at.precision)}</AnimatedText></strong> of what it flagged was right (precision)</li>
+          <li>Wrongly flagged <strong><AnimatedText>{percent(at.falseAlarmRate)}</AnimatedText></strong> of the rest</li>
+          <li>F1 <strong><AnimatedText>{fixed(at.f1, 2)}</AnimatedText></strong> · accuracy <strong><AnimatedText>{percent(at.accuracy)}</AnimatedText></strong></li>
+          <li>ROC AUC <strong><AnimatedText>{fixed(auc, 3)}</AnimatedText></strong></li>
+          <li>Average precision <strong><AnimatedText>{fixed(pr.averagePrecision, 3)}</AnimatedText></strong></li>
         </ul>
       </div>
 
@@ -135,7 +135,7 @@ export function InspectEvaluation({ inspection, other, otherName, model, desktop
               { name: "This model", auc, ap: pr.averagePrecision, c: confusionAt(probabilities, labels, modelThreshold) },
               { name: otherName ?? "The other model", auc: area(otherRoc ?? []), ap: otherPr?.averagePrecision ?? 0, c: otherAt },
             ].map((row) => (
-              <tr key={row.name}><th scope="row" className="pr-2 text-left">{row.name}</th><td className="px-2">{fixed(row.auc, 3)}</td><td className="px-2">{fixed(row.ap, 3)}</td><td className="px-2">{percent(row.c.recall)}</td><td className="px-2">{percent(row.c.precision)}</td><td className="px-2">{percent(row.c.falseAlarmRate)}</td></tr>
+              <tr key={row.name}><th scope="row" className="pr-2 text-left">{row.name}</th><td className="px-2"><AnimatedText>{fixed(row.auc, 3)}</AnimatedText></td><td className="px-2"><AnimatedText>{fixed(row.ap, 3)}</AnimatedText></td><td className="px-2"><AnimatedText>{percent(row.c.recall)}</AnimatedText></td><td className="px-2"><AnimatedText>{percent(row.c.precision)}</AnimatedText></td><td className="px-2"><AnimatedText>{percent(row.c.falseAlarmRate)}</AnimatedText></td></tr>
             ))}
           </tbody>
         </table>
@@ -183,17 +183,17 @@ export function InspectEvaluation({ inspection, other, otherName, model, desktop
 
       <div className="max-w-full overflow-auto">
         <table className="w-full text-sm" aria-label="Each held-out recording">
-          <caption className="caption-top text-left text-xs text-muted-foreground">Recording by recording, at a cut-off of {cutOffPercent(threshold)}: a model that does well overall can do badly on one of them</caption>
+          <caption className="caption-top text-left text-xs text-muted-foreground">Recording by recording, at a cut-off of <AnimatedText>{cutOffPercent(threshold)}</AnimatedText>: a model that does well overall can do badly on one of them</caption>
           <thead><tr className="text-left"><th className="pr-3">Recording</th><th className="pr-3">Windows (gesture / other)</th><th className="pr-3">Average score</th><th className="pr-3">ROC AUC</th><th className="pr-3">Recall</th><th className="pr-3">False alarms</th></tr></thead>
           <tbody>
             {recordingRows.map((row) => (
               <tr key={row.recording} className="border-t border-input/40">
                 <th scope="row" className="pr-3 text-left font-medium">{row.recording.slice(0, 8)}</th>
                 <td className="pr-3">{<AnimatedNumber value={row.windows} />} ({<AnimatedNumber value={row.gestureWindows} />} / {<AnimatedNumber value={row.otherWindows} />})</td>
-                <td className="pr-3">{percent(row.meanScore)}</td>
-                <td className="pr-3">{row.auc === undefined ? "–" : fixed(row.auc, 2)}</td>
-                <td className="pr-3">{row.recall === undefined ? "–" : percent(row.recall)}</td>
-                <td className="pr-3">{row.falseAlarmRate === undefined ? "–" : percent(row.falseAlarmRate)}</td>
+                <td className="pr-3"><AnimatedText>{percent(row.meanScore)}</AnimatedText></td>
+                <td className="pr-3"><AnimatedText>{row.auc === undefined ? "–" : fixed(row.auc, 2)}</AnimatedText></td>
+                <td className="pr-3"><AnimatedText>{row.recall === undefined ? "–" : percent(row.recall)}</AnimatedText></td>
+                <td className="pr-3"><AnimatedText>{row.falseAlarmRate === undefined ? "–" : percent(row.falseAlarmRate)}</AnimatedText></td>
               </tr>
             ))}
           </tbody>

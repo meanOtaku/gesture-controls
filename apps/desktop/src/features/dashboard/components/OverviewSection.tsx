@@ -1,4 +1,4 @@
-import { AnimatedNumber, AnimatedWord } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedWord, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
@@ -80,7 +80,7 @@ export function OverviewSection({ connected, calibrated, watchConnected, gesture
           <ol className="setup-steps">
             {steps.map((step, index) => (
               <li key={step.key} data-complete={step.complete}>
-                <span className="step-number">{step.complete ? "✓" : String(index + 1)}</span>
+                <span className="step-number"><AnimatedText>{step.complete ? "✓" : String(index + 1)}</AnimatedText></span>
                 <div><strong>{step.title}</strong><p>{step.description}</p></div>
                 {onNavigate && step.navigateTo && (
                   <Button type="button" variant="outline" onClick={() => onNavigate(step.navigateTo!)}>

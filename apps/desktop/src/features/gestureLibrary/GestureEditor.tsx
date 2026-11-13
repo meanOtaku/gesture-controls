@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../components/app/AnimatedNumber";
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
@@ -257,11 +257,11 @@ export function GestureEditor({ initial, labels, onSave, onCancel, others = NO_O
               {<AnimatedNumber value={analysis.positiveFrames} />} gesture frames and {<AnimatedNumber value={analysis.negativeFrames} />} other frames. {analysis.advice ?? ""}
               {recorded && analysis.verdict === "needsMoreFrames" && skippedWhy(recorded.skipped, draft.hand)}
               {analysis.conditions.length > 0 && <> Proposed rule: {describeRule({ conditions: analysis.conditions, hand: draft.hand })}.</>}
-              {analysis.openHandFiresOn !== null && <> Fires on {percent(analysis.openHandFiresOn)} of the frames of a relaxed open hand{analysis.openHandFiresOn < 0.1 ? " (fine)" : ""}.</>}
+              {analysis.openHandFiresOn !== null && <> Fires on <AnimatedText>{percent(analysis.openHandFiresOn)}</AnimatedText> of the frames of a relaxed open hand{analysis.openHandFiresOn < 0.1 ? " (fine)" : ""}.</>}
               {analysis.confusions.length > 0 && (
                 <ul className="mt-2 list-disc pl-5" aria-label="Checked against your other gestures">
                   {analysis.confusions.map((confusion) => (
-                    <li key={confusion.name}>Also fires on {percent(confusion.firesOn)} of the “{confusion.name}” frames{confusion.firesOn < 0.1 ? " (fine)" : ""}.</li>
+                    <li key={confusion.name}>Also fires on <AnimatedText>{percent(confusion.firesOn)}</AnimatedText> of the “{confusion.name}” frames{confusion.firesOn < 0.1 ? " (fine)" : ""}.</li>
                   ))}
                 </ul>
               )}
@@ -314,7 +314,7 @@ export function GestureEditor({ initial, labels, onSave, onCancel, others = NO_O
         ))}
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" variant="outline" onClick={addCondition} disabled={draft.conditions.length >= MAX_CONDITIONS}>Add condition</Button>
-          {accuracy !== null && <Badge variant="outline">{percent(accuracy)} correct on the recorded frames</Badge>}
+          {accuracy !== null && <Badge variant="outline"><AnimatedText>{percent(accuracy)}</AnimatedText> correct on the recorded frames</Badge>}
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="field">

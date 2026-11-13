@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent } from "react";
 import { ImageIcon } from "lucide-react";
 import { SegmentedControl } from "../../../components/app/SegmentedControl";
@@ -543,9 +543,9 @@ export function RawImageViewerPanel() {
                     <>
                       {compactWindow.totalObservedSampleCount < maxValues && (
                         <p className="hint">
-                          Only {compactWindow.totalObservedSampleCount.toLocaleString()} observed sample
+                          Only <AnimatedText>{compactWindow.totalObservedSampleCount.toLocaleString()}</AnimatedText> observed sample
                           {compactWindow.totalObservedSampleCount === 1 ? "" : "s"} of{" "}
-                          {maxValues.toLocaleString()} pixels in this channel; the remaining pixels show the
+                          <AnimatedText>{maxValues.toLocaleString()}</AnimatedText> pixels in this channel; the remaining pixels show the
                           "no data" fill below (never a fabricated value).
                         </p>
                       )}
@@ -618,9 +618,9 @@ export function RawImageViewerPanel() {
                       <div className="flex flex-col gap-2">
                         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                           <span>
-                            Samples {compactWindow.startSampleIndex.toLocaleString()}–
-                            {Math.max(compactWindow.startSampleIndex, compactWindow.endSampleIndex - 1).toLocaleString()} of{" "}
-                            {compactWindow.totalObservedSampleCount.toLocaleString()}
+                            Samples <AnimatedText>{compactWindow.startSampleIndex.toLocaleString()}</AnimatedText>–
+                            <AnimatedText>{Math.max(compactWindow.startSampleIndex, compactWindow.endSampleIndex - 1).toLocaleString()}</AnimatedText> of{" "}
+                            <AnimatedText>{compactWindow.totalObservedSampleCount.toLocaleString()}</AnimatedText>
                           </span>
                           <span>
                             Frame {<AnimatedNumber value={compactCurrentFrame} />}
@@ -690,7 +690,7 @@ export function RawImageViewerPanel() {
                   <>
                     {rawWindow.totalRawRowCount < maxValues && (
                       <p className="hint">
-                        Short recording: only {rawWindow.totalRawRowCount.toLocaleString()} of {maxValues.toLocaleString()} pixels
+                        Short recording: only <AnimatedText>{rawWindow.totalRawRowCount.toLocaleString()}</AnimatedText> of <AnimatedText>{maxValues.toLocaleString()}</AnimatedText> pixels
                         have a recorded row; the remaining pixels show the "no data" fill below.
                       </p>
                     )}
@@ -818,8 +818,8 @@ export function RawImageViewerPanel() {
                     <div className="flex flex-col gap-2">
                       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                         <span>
-                          Rows {rawWindow.startRawRow.toLocaleString()}–{Math.max(rawWindow.startRawRow, rawWindow.endRawRow - 1).toLocaleString()} of{" "}
-                          {rawWindow.totalRawRowCount.toLocaleString()}
+                          Rows <AnimatedText>{rawWindow.startRawRow.toLocaleString()}</AnimatedText>–<AnimatedText>{Math.max(rawWindow.startRawRow, rawWindow.endRawRow - 1).toLocaleString()}</AnimatedText> of{" "}
+                          <AnimatedText>{rawWindow.totalRawRowCount.toLocaleString()}</AnimatedText>
                         </span>
                         <span>
                           Frame {<AnimatedNumber value={currentFrame} />}

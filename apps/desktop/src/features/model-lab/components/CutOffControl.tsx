@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AnimatedText } from "../../../components/app/AnimatedNumber";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 
@@ -88,29 +89,29 @@ export function CutOffControl({ value, onChange, trained, running, onApply, appl
       {typed !== null && typed.trim() !== "" && !typedOk && <p className="field-hint text-destructive">Enter a percentage above 0 and at most 100.</p>}
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Button type="button" variant="outline" size="sm" disabled={round3(value) === round3(trained)} onClick={() => go(trained)}>
-          Trained at {cutOffPercent(trained)}
+          Trained at <AnimatedText>{cutOffPercent(trained)}</AnimatedText>
         </Button>
         {running != null && round3(running) !== round3(trained) && (
           <Button type="button" variant="outline" size="sm" disabled={round3(value) === round3(running)} onClick={() => go(running)}>
-            Runs at {cutOffPercent(running)}
+            Runs at <AnimatedText>{cutOffPercent(running)}</AnimatedText>
           </Button>
         )}
         {onApply && round3(value) !== round3(now) && !confirming && (
           <Button type="button" size="sm" disabled={applying} onClick={() => setConfirming(true)}>
-            Use {cutOffPercent(value)} for this model
+            Use <AnimatedText>{cutOffPercent(value)}</AnimatedText> for this model
           </Button>
         )}
       </div>
       {onApply && confirming && round3(value) !== round3(now) && (
         <div className="flex flex-col gap-2 rounded-md border p-2 text-sm" role="group" aria-label="Use this cut-off">
           <p>
-            The model will run at {cutOffPercent(value)} instead of {cutOffPercent(now)}, from now on.{note ? ` ${note}` : ""}
+            The model will run at <AnimatedText>{cutOffPercent(value)}</AnimatedText> instead of <AnimatedText>{cutOffPercent(now)}</AnimatedText>, from now on.{note ? ` ${note}` : ""}
           </p>
           <div className="flex gap-2">
             <Button type="button" size="sm" disabled={applying} onClick={() => { setConfirming(false); onApply(round3(value)); }}>
-              Use {cutOffPercent(value)}
+              Use <AnimatedText>{cutOffPercent(value)}</AnimatedText>
             </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => setConfirming(false)}>Keep {cutOffPercent(now)}</Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setConfirming(false)}>Keep <AnimatedText>{cutOffPercent(now)}</AnimatedText></Button>
           </div>
         </div>
       )}

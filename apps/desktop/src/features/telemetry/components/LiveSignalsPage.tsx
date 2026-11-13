@@ -1,4 +1,4 @@
-import { AnimatedNumber, AnimatedWord } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedWord, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { useState, useSyncExternalStore } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
@@ -120,7 +120,7 @@ export function LiveSignalsPage() {
         measurementError={measurementError}
         onRequestMeasurement={(tracker, measuring) => { void requestMeasurement(tracker, measuring); }}
       />
-      <p className="hint telemetry-note">Graphs retain the latest {<AnimatedNumber value={MAX_VISIBLE_SAMPLES} />} points. Timeline recording is bounded to the most recent {MAX_CSV_ROWS.toLocaleString()} rows (~{formatBytes(MAX_CSV_ROWS * ESTIMATED_BYTES_PER_CSV_ROW)} max).</p>
+      <p className="hint telemetry-note">Graphs retain the latest {<AnimatedNumber value={MAX_VISIBLE_SAMPLES} />} points. Timeline recording is bounded to the most recent <AnimatedText>{MAX_CSV_ROWS.toLocaleString()}</AnimatedText> rows (~<AnimatedText>{formatBytes(MAX_CSV_ROWS * ESTIMATED_BYTES_PER_CSV_ROW)}</AnimatedText> max).</p>
     </div>
   </main>;
 }

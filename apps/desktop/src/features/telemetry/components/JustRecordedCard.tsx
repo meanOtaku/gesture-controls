@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { useState, useSyncExternalStore } from "react";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
@@ -49,7 +49,7 @@ export function JustRecordedCard({ recording }: { recording: boolean }) {
       <CardContent className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="text-sm">
-            <strong>Saved:</strong> {last.rowCount.toLocaleString()} rows, {<AnimatedNumber value={last.intervalCount} />} labelled stretch{last.intervalCount === 1 ? "" : "es"}. Check its labels now, while you remember the session.
+            <strong>Saved:</strong> <AnimatedText>{last.rowCount.toLocaleString()}</AnimatedText> rows, {<AnimatedNumber value={last.intervalCount} />} labelled stretch{last.intervalCount === 1 ? "" : "es"}. Check its labels now, while you remember the session.
           </span>
           <span className="flex gap-2">
             <Button type="button" onClick={() => void review()} disabled={busy} aria-busy={busy}>{busy ? "Opening…" : "Review it in Labelling"}</Button>

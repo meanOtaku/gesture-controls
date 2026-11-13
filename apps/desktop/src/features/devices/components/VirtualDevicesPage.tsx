@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Button } from "../../../components/ui/button";
@@ -76,14 +76,14 @@ export function VirtualDevicesPage({ automation, onMakeRecipe }: VirtualDevicesP
               <CardContent className="flex flex-col gap-3">
                 <DevicePreview device={device} degrees={degrees} />
                 <p className="device-readout" aria-live="polite">
-                  Moves its target by <strong>{signed(percent, "% of range")}</strong>
+                  Moves its target by <strong><AnimatedText>{signed(percent, "% of range")}</AnimatedText></strong>
                 </p>
                 <p className="field-hint">
-                  That is {signed(percent, " volume points")}, {signed(percent, "% brightness")} or {signed(percent * 10, " px of scroll")}.
+                  That is <AnimatedText>{signed(percent, " volume points")}</AnimatedText>, <AnimatedText>{signed(percent, "% brightness")}</AnimatedText> or <AnimatedText>{signed(percent * 10, " px of scroll")}</AnimatedText>.
                 </p>
                 <p className="field-hint">{summary}</p>
                 <p className="field-hint">
-                  Defaults for volume: {specs.a.label.toLowerCase()} {specs.a.defaultValue.toFixed(specs.a.step < 1 ? 2 : 0)} {specs.a.unit}
+                  Defaults for volume: {specs.a.label.toLowerCase()} <AnimatedText>{specs.a.defaultValue.toFixed(specs.a.step < 1 ? 2 : 0)}</AnimatedText> {specs.a.unit}
                   {specs.b && <>{", "}{specs.b.label.toLowerCase()}{" "}<AnimatedNumber value={specs.b.defaultValue} />{" "}{specs.b.unit}</>}
                 </p>
                 <p className="field-hint">

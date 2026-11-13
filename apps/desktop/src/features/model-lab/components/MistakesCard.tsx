@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { lineOf } from "../recordingNames";
 import type { DatasetSummary } from "../types";
 import { invoke } from "@tauri-apps/api/core";
@@ -172,8 +172,8 @@ export function MistakesCard({ desktopAvailable, models, datasets }: { desktopAv
                     <ul className="mistake-list" aria-label={`Mistakes in ${lineOf(datasets, recording.id, recording.name)}`}>
                       {listed.map((mistake) => (
                         <li key={`${mistake.kind}-${mistake.atMs}`} className={`mistake-${mistake.kind}`}>
-                          <span className="font-mono">{seconds(mistake.atMs)}</span>
-                          <span>{describeMistake(mistake, report.threshold)}</span>
+                          <span className="font-mono"><AnimatedText>{seconds(mistake.atMs)}</AnimatedText></span>
+                          <span><AnimatedText>{describeMistake(mistake, report.threshold)}</AnimatedText></span>
                           <Button type="button" size="sm" variant="outline" onClick={() => open(recording.id, mistake)}>Open</Button>
                         </li>
                       ))}

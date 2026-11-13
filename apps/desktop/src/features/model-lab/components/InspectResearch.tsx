@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { LineChart } from "../../../components/charts/LineChart";
 import type { Inspection } from "../inspection";
 import { percent } from "../inspection";
@@ -55,7 +55,7 @@ export function InspectResearch({ inspection }: { inspection: Inspection }) {
                   <td className="pr-3">{<AnimatedNumber value={fold.windows} />} ({<AnimatedNumber value={fold.gestureWindows} />} / {<AnimatedNumber value={fold.otherWindows} />})</td>
                   {fold.skipped ? <td className="pr-3 text-muted-foreground" colSpan={2}>Skipped: {fold.skipped}</td> : (
                     <>
-                      <td className="pr-3">{fold.meanScore === undefined ? "–" : percent(fold.meanScore)}</td>
+                      <td className="pr-3"><AnimatedText>{fold.meanScore === undefined ? "–" : percent(fold.meanScore)}</AnimatedText></td>
                       <td className="pr-3">{fold.auc === null || fold.auc === undefined ? "– (one kind of window only)" : <AnimatedNumber value={fold.auc} digits={2} />}</td>
                     </>
                   )}
