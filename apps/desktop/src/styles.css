@@ -627,3 +627,11 @@ number-flow-react {
 @supports (animation-timeline: scroll()) {
   [data-slot="sidebar-content"] { animation: sidebar-fade-top linear both; animation-timeline: scroll(self); animation-range: 0 1.5rem; }
 }
+
+/* A session's recordings share one colour in the Train list, so a set reads at a glance. */
+.session-badge { color: #0e7490; border-color: currentColor; }
+.session-badge[data-session="1"] { color: #15803d; }
+.session-badge[data-session="2"] { color: #b45309; }
+.session-badge[data-session="3"] { color: #7c3aed; }
+.session-badge[data-session="4"] { color: #be123c; }
+.session-badge[data-session="5"] { color: #4d7c0f; }

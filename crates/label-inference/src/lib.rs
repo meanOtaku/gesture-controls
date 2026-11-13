@@ -51,6 +51,6 @@ pub use runtime::{InputWarning, LabelRuntime, RuntimeMode, RuntimeOutput};
 pub use training::{
     BegunRun, MIN_WINDOW_SAMPLES, RecordingInfo, RunPlan, TrainingError, begin_run, cnn_contract,
     complete_run, evaluation_only_run, fail_run, monitor_only_run, pinch_start_contract,
-    plan_split, plan_split_keeping, ppg_onset_contract, trainer_backend,
+    plan_split, plan_split_keeping, plan_split_sessions, ppg_onset_contract, trainer_backend,
 };
 pub use trees::{TreeEnsemble, TreesError};

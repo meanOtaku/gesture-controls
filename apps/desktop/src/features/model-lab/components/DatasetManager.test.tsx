@@ -35,8 +35,19 @@ describe("DatasetManager finding duplicates", () => {
   const relabelled: DatasetSummary = { ...dataset, id: "b", sequence: 2, name: "Relabelled", contentSha: "2", quality: { poorContactShare: 0, holds: { pinch_in: 13 }, shortHolds: 0 } };
   const alone: DatasetSummary = { ...dataset, id: "c", sequence: 3, name: "Alone", contentSha: "3" };
 
+  it("lists overlapping windows, like misses saved seconds apart, without offering to delete them", async () => {
+    invokeMock.mockResolvedValueOnce({ copies: [], overlaps: [["a", "b"]] });
+    setup({ datasets: [original, relabelled, alone] });
+    fireEvent.click(screen.getByRole("button", { name: "Find duplicates" }));
+    const note = await screen.findByRole("note");
+    expect(note).toHaveTextContent(/Overlapping, not copies/);
+    expect(note).toHaveTextContent(/#1 Original, #2 Relabelled/);
+    expect(screen.queryByRole("group", { name: "Session 1" })).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent("No duplicates");
+  });
+
   it("says when there are none", async () => {
-    invokeMock.mockResolvedValueOnce([]);
+    invokeMock.mockResolvedValueOnce({ copies: [], overlaps: [] });
     setup({ datasets: [original, alone] });
     fireEvent.click(screen.getByRole("button", { name: "Find duplicates" }));
     expect(await screen.findByRole("status")).toHaveTextContent("No duplicates");
@@ -44,7 +55,7 @@ describe("DatasetManager finding duplicates", () => {
   });
 
   it("makes you choose between copies labelled differently, then deletes the rest after the undo window", async () => {
-    invokeMock.mockResolvedValueOnce([["a", "b"]]);
+    invokeMock.mockResolvedValueOnce({ copies: [["a", "b"]], overlaps: [] });
     const onDelete = vi.fn().mockResolvedValue(undefined);
     setup({ datasets: [original, relabelled, alone], onDelete });
     fireEvent.click(screen.getByRole("button", { name: "Find duplicates" }));
@@ -64,7 +75,7 @@ describe("DatasetManager finding duplicates", () => {
   });
 
   it("suggests the sealed copy and warns before a sealed one is deleted", async () => {
-    invokeMock.mockResolvedValueOnce([["a", "b"]]);
+    invokeMock.mockResolvedValueOnce({ copies: [["a", "b"]], overlaps: [] });
     setup({ datasets: [original, { ...relabelled, sealed: true }] });
     fireEvent.click(screen.getByRole("button", { name: "Find duplicates" }));
     const group = await screen.findByRole("group", { name: "Session 1" });

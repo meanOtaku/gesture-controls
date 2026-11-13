@@ -304,3 +304,32 @@ def test_a_model_that_flags_every_other_moment_is_not_kept_however_good_its_f1()
     metrics = lt.evaluate(probability, y, 0.05, "trainingRecordings")
     assert metrics["f1"] > 0.95 and metrics["falseActivationRate"] == 1.0
     assert "wrongly flagged 100%" in (lt.verdict(metrics) or "")
+
+
+def test_recordings_of_one_session_must_stay_on_one_side_and_name_real_recordings(tmp_path: Path) -> None:
+    spec = spec_for(tmp_path, train=2, evaluation=1)
+    a, b = spec["train"]
+    held = spec["evaluation"][0]
+    lt.parse_spec({**spec, "sessions": {a: a, b: a}})
+    with pytest.raises(lt.TrainingRefused, match="split between training and evaluation"):
+        lt.parse_spec({**spec, "sessions": {a: a, held: a}})
+    with pytest.raises(lt.TrainingRefused, match="sessions must name recordings"):
+        lt.parse_spec({**spec, "sessions": {"nope": a}})
+    with pytest.raises(lt.TrainingRefused, match="decideFromNs"):
+        lt.parse_spec({**spec, "decideFromNs": {a: "soon"}})
+
+
+def test_a_moment_two_recordings_of_one_session_share_is_decided_in_only_one(tmp_path: Path) -> None:
+    raw = spec_for(tmp_path, train=2, evaluation=1)
+    a, b = raw["train"]
+    recordings = lt.load_spec_recordings(lt.parse_spec(raw))
+    every = lt.examples(lt.parse_spec(raw), recordings, [b])
+    middle = int(np.median(every.decisions))
+    trimmed = lt.examples(lt.parse_spec({**raw, "sessions": {a: a, b: a}, "decideFromNs": {b: middle}}), recordings, [b])
+    assert 0 < trimmed.y.shape[0] < every.y.shape[0]
+    assert (trimmed.decisions > middle).all()
+    # The replay scores only its own moments too.
+    spec = lt.parse_spec({**raw, "decideFromNs": {b: middle}})
+    scored = lt.timeline(spec, recordings[b], lambda x: np.zeros(len(x)))
+    assert scored is not None and (scored[0] > middle).all()
+

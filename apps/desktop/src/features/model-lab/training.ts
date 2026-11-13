@@ -204,6 +204,9 @@ export interface TrainPlan {
   inputs: number;
   /** With a training plan: per stage, what it trains on and what is held out for testing. */
   stages?: StagePlan[];
+  /** The chosen recordings that hold one session (they share watch samples, as misses saved seconds apart do), set by set:
+   * each set trains or tests together, and each moment counts once. */
+  sessions?: string[][];
 }
 
 /** Mirrors `StagePlanView`. */

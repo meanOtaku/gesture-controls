@@ -167,6 +167,64 @@ pub fn plan_split_keeping(
     Ok(split)
 }
 
+/// Like [`plan_split_keeping`], but each set in `sessions` (recordings that hold one session: they share watch samples,
+/// as misses saved seconds apart do) stays on one side, so a model is never tested on samples it trained on. A set goes
+/// into the split as one recording (its first member, with every member's labels) and comes out as all of them; a set
+/// with a member that may only train, only trains. With no sets this is [`plan_split_keeping`] exactly.
+pub fn plan_split_sessions(
+    recordings: &[RecordingInfo],
+    mapping: &LabelMapping,
+    target: &LabelId,
+    train_only: &[RecordingId],
+    sessions: &[Vec<RecordingId>],
+) -> Result<Split, TrainingError> {
+    let sets: Vec<&Vec<RecordingId>> = sessions.iter().filter(|set| set.len() > 1).collect();
+    if sets.is_empty() {
+        return plan_split_keeping(recordings, mapping, target, train_only);
+    }
+    let set_of = |id: &RecordingId| sets.iter().position(|set| set.contains(id));
+    let mut merged: Vec<RecordingInfo> = Vec::new();
+    let mut merged_train_only: Vec<RecordingId> = Vec::new();
+    for recording in recordings {
+        match set_of(&recording.id) {
+            None => {
+                merged.push(recording.clone());
+                if train_only.contains(&recording.id) {
+                    merged_train_only.push(recording.id.clone());
+                }
+            }
+            Some(index) => {
+                let set = sets[index];
+                if set[0] != recording.id && recordings.iter().any(|r| r.id == set[0]) {
+                    continue;
+                }
+                let members: Vec<&RecordingInfo> = recordings.iter().filter(|r| set.contains(&r.id)).collect();
+                merged.push(RecordingInfo {
+                    id: recording.id.clone(),
+                    sha256: recording.sha256.clone(),
+                    labels: members.iter().flat_map(|r| r.labels.iter().cloned()).collect(),
+                });
+                if members.iter().any(|r| train_only.contains(&r.id)) {
+                    merged_train_only.push(recording.id.clone());
+                }
+            }
+        }
+    }
+    let split = plan_split_keeping(&merged, mapping, target, &merged_train_only)?;
+    let expand = |side: Vec<RecordingId>| -> Vec<RecordingId> {
+        side.into_iter()
+            .flat_map(|id| match set_of(&id) {
+                Some(index) => recordings.iter().filter(|r| sets[index].contains(&r.id)).map(|r| r.id.clone()).collect(),
+                None => vec![id],
+            })
+            .collect()
+    };
+    Ok(Split {
+        train: expand(split.train),
+        evaluation: expand(split.evaluation),
+    })
+}
+
 /// Everything about a training request that is decided up front.
 #[derive(Debug, Clone)]
 pub struct RunPlan {
@@ -178,6 +236,9 @@ pub struct RunPlan {
     pub recordings: Vec<RecordingInfo>,
     /// Recordings that may train but never test (see [`plan_split_keeping`]); empty for an ordinary run.
     pub train_only: Vec<RecordingId>,
+    /// Recordings that hold one session, set by set: each set stays on one side of the split (see
+    /// [`plan_split_sessions`]). Empty when no two share samples.
+    pub sessions: Vec<Vec<RecordingId>>,
     /// Ends of the unique names for this run's records, e.g. a short random string.
     pub unique: String,
 }
@@ -213,11 +274,12 @@ pub fn begin_run<P: Persist>(
     {
         return Err(TrainingError::UnmappedLabel(missing.clone()));
     }
-    let split = plan_split_keeping(
+    let split = plan_split_sessions(
         &plan.recordings,
         &plan.mapping,
         &plan.target,
         &plan.train_only,
+        &plan.sessions,
     )?;
 
     let run_id = RunId::new(format!("run-{}", plan.unique))?;
@@ -472,6 +534,24 @@ mod tests {
         ]
     }
 
+    #[test]
+    fn recordings_of_one_session_stay_on_one_side_of_the_split() {
+        let mut recordings = sessions();
+        recordings.push(info("s1b", &["pinch"]));
+        recordings.push(info("s1c", &["idle"]));
+        let id = |s: &str| RecordingId::new(s).unwrap();
+        let set = vec![id("s1"), id("s1b"), id("s1c")];
+        let split = plan_split_sessions(&recordings, &mapping(), &label("pinch"), &[], std::slice::from_ref(&set)).unwrap();
+        let held = set.iter().filter(|r| split.evaluation.contains(r)).count();
+        assert!(held == 0 || held == set.len(), "{split:?}");
+        assert_eq!(split.train.len() + split.evaluation.len(), recordings.len());
+        // With no sets it splits exactly as before.
+        assert_eq!(
+            plan_split_sessions(&sessions(), &mapping(), &label("pinch"), &[], &[]).unwrap(),
+            plan_split(&sessions(), &mapping(), &label("pinch")).unwrap()
+        );
+    }
+
     fn plan(recordings: Vec<RecordingInfo>) -> RunPlan {
         let input = ppg_onset_contract();
         RunPlan {
@@ -485,6 +565,7 @@ mod tests {
             },
             recordings,
             train_only: Vec::new(),
+            sessions: Vec::new(),
             unique: "abc12345".into(),
         }
     }

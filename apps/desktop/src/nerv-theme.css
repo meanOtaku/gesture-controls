@@ -750,3 +750,7 @@ html[data-theme="nerv"] details > summary::marker { color: var(--eva-orange); }
 html[data-theme="nerv"] .nerv-hand-preview-slot:empty { display: none; }
 html[data-theme="nerv"] .nerv-hand-preview-slot .labelling-hand { border: 0; padding: 12px; }
 html[data-theme="nerv"] .nerv-hand-preview-slot canvas { width: 100% !important; height: auto !important; aspect-ratio: 4 / 3; }
+/* A session's recordings share one colour in the Train list, so a set reads at a glance. */
+html[data-theme="nerv"] .session-badge { color: var(--eva-cyan); border-color: var(--eva-cyan); }
+html[data-theme="nerv"] .session-badge[data-session="1"] { color: var(--eva-green); border-color: var(--eva-green); }
+html[data-theme="nerv"] .session-badge[data-session="2"] { color: var(--eva-amber); border-color: var(--eva-amber); }

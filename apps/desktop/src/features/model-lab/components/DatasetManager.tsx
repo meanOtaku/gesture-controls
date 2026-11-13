@@ -107,25 +107,27 @@ function SessionCopiesCard({ copies, number, disabled, onDelete }: { copies: Ses
 }
 
 /**
- * Finds recordings of one session, labelled alike or not, by the check training refuses them with, and removes the extras.
- * Asked for, not automatic: it reads every recording's motion rows.
+ * Finds recordings that hold one session. Copies of a recording (labelled alike or not) can be cut down to one; windows
+ * that only overlap, like misses saved seconds apart, each hold moments of their own and train together, so they are only
+ * listed. Asked for, not automatic: it reads every recording's motion rows.
  */
 function SessionCopiesFinder({ datasets, disabled, onDelete }: { datasets: DatasetSummary[]; disabled: boolean; onDelete: (ids: string[]) => void }) {
-  const [sets, setSets] = useState<string[][] | null>(null);
+  const [sets, setSets] = useState<{ copies: string[][]; overlaps: string[][] } | null>(null);
   const [looking, setLooking] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const find = async () => {
     setLooking(true);
     setProblem(null);
     try {
-      setSets(await invoke<string[][]>("find_same_session_recordings"));
+      setSets(await invoke<{ copies: string[][]; overlaps: string[][] }>("find_same_session_recordings"));
     } catch (err) {
       setProblem(String(err));
     } finally {
       setLooking(false);
     }
   };
-  const found = sets ? sessionCopies(sets, datasets) : [];
+  const found = sets ? sessionCopies(sets.copies, datasets) : [];
+  const overlapping = sets ? sessionCopies(sets.overlaps, datasets) : [];
   return (
     <div className="flex flex-col gap-2" role="group" aria-label="Duplicate sessions">
       <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -135,12 +137,23 @@ function SessionCopiesFinder({ datasets, disabled, onDelete }: { datasets: Datas
         {sets && !looking && (
           <span role="status">
             {found.length === 0
-              ? "No duplicates: every recording is its own session."
-              : <><AnimatedNumber value={found.length} />{" session"}{found.length === 1 ? " is" : "s are"}{" held more than once. Training refuses copies chosen together, because one could be trained on and the other tested on."}</>}
+              ? "No duplicates: no recording is a copy of another."
+              : <><AnimatedNumber value={found.length} />{" recording"}{found.length === 1 ? " is" : "s are"}{" held more than once. Copies chosen together train as one session, so nothing is tested on what it trained on, but they take room and time: keep one."}</>}
           </span>
         )}
       </div>
       {problem && <p role="alert" className="text-sm text-destructive">Could not look for duplicates: {problem}</p>}
+      {overlapping.length > 0 && (
+        <div className="flex flex-col gap-1 text-sm" role="note">
+          <p className="m-0">
+            {"Overlapping, not copies: "}<AnimatedNumber value={overlapping.length} />{overlapping.length === 1 ? " set" : " sets"}
+            {" of recordings saved seconds apart share samples (each miss keeps the 45 seconds before it). Each holds moments of its own, so keep them: they train together and each moment counts once."}
+          </p>
+          <ul className="m-0 list-disc pl-5 text-muted-foreground">
+            {overlapping.map((set) => <li key={set.recordings.map((dataset) => dataset.id).join()}>{set.recordings.map(recordingName).join(", ")}</li>)}
+          </ul>
+        </div>
+      )}
       {found.map((copies, index) => (
         <SessionCopiesCard key={copies.recordings.map((dataset) => dataset.id).join()} copies={copies} number={index + 1} disabled={disabled} onDelete={onDelete} />
       ))}

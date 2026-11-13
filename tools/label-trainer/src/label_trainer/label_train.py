@@ -148,6 +148,21 @@ class Spec:
     hard_negatives: bool = False
     # A training plan: the CNN trains through these in order (`fit`). Empty trains on everything at once.
     stages: tuple[TrainingStage, ...] = ()
+    # Recordings that hold one session (they share watch samples, as misses saved seconds apart do): each recording's
+    # session, named by its first recording. A session stays on one side of every split, the desktop's and the folds here.
+    sessions: dict[str, str] = field(default_factory=dict)
+    # For a recording of a session whose start is also in an earlier one: the watch time (ns) up to which that earlier one
+    # has its moments. Its decisions start after it, so no moment counts twice; its earlier samples are still history.
+    decide_from_ns: dict[str, int] = field(default_factory=dict)
+
+    def session_of(self, rid: str) -> str:
+        """The session a recording belongs to: its own id unless it shares one with others."""
+        return self.sessions.get(rid, rid)
+
+    def decided(self, rid: str, times: np.ndarray) -> np.ndarray:
+        """Which of `times` are this recording's own to decide (all of them, unless an earlier recording of its session has them)."""
+        start = self.decide_from_ns.get(rid)
+        return np.ones(len(times), dtype=bool) if start is None else np.asarray(times) > start
 
     @property
     def cnn(self) -> bool:
@@ -210,6 +225,16 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
     if not isinstance(hard_negatives, bool):
         raise TrainingRefused(f"hardNegatives must be true or false, got {hard_negatives!r}")
     stages = parse_stages(raw.get("stages") or [], backend, train)
+    sessions = raw.get("sessions", {}) or {}
+    if not isinstance(sessions, dict) or any(rid not in recordings or session not in recordings for rid, session in sessions.items()):
+        raise TrainingRefused("sessions must name recordings of the spec")
+    for session in set(sessions.values()):
+        members = [rid for rid, s in sessions.items() if s == session]
+        if len({rid in train for rid in members}) > 1:
+            raise TrainingRefused(f"the recordings of one session ({', '.join(sorted(members))}) are split between training and evaluation")
+    decide_from_ns = raw.get("decideFromNs", {}) or {}
+    if not isinstance(decide_from_ns, dict) or any(rid not in recordings or isinstance(t, bool) or not isinstance(t, int) for rid, t in decide_from_ns.items()):
+        raise TrainingRefused("decideFromNs must give recordings of the spec a whole number of nanoseconds")
     return Spec(
         target=target,
         negatives=list(raw.get("negatives", [])),
@@ -226,6 +251,8 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         label_timing=dict(label_timing),
         hard_negatives=hard_negatives,
         stages=stages,
+        sessions={str(rid): str(session) for rid, session in sessions.items()},
+        decide_from_ns={str(rid): int(t) for rid, t in decide_from_ns.items()},
     )
 
 
@@ -355,7 +382,7 @@ def examples(spec: Spec, recordings: dict[str, Recording], ids: list[str]) -> Ex
         if spec.cnn:
             d, y, k = cnn_examples(spec, recordings[rid])
             x = inputs(spec, recordings[rid], d)
-            ok = np.isfinite(x).all(axis=1)
+            ok = np.isfinite(x).all(axis=1) & spec.decided(rid, d)
             if spec.steady_starts:
                 ok &= still_mask(recordings[rid], d, spec.decision_delay_ms)
             xs.append(x[ok]); ys.append(y[ok]); groups += [rid] * int(ok.sum())
@@ -370,7 +397,7 @@ def examples(spec: Spec, recordings: dict[str, Recording], ids: list[str]) -> Ex
             most = max(ppg_onset.PER_KIND, round(NOISE_PER_MINUTE * (int(ts[-1]) - int(ts[0])) / 60e9))
         d, y, k = ppg_onset.sample_decisions(ts, held, spec.target, set(spec.excludes), early, most)
         x = inputs(spec, recording, d)
-        ok = np.isfinite(x).all(axis=1)
+        ok = np.isfinite(x).all(axis=1) & spec.decided(rid, d)
         if spec.steady_starts:
             ok &= still_mask(recording, d)
         xs.append(x[ok]); ys.append(y[ok]); groups += [rid] * int(ok.sum())
@@ -522,10 +549,13 @@ def out_of_fold_threshold(spec: Spec, train: Examples, recordings: dict[str, Rec
     from sklearn.metrics import roc_auc_score
 
     groups = sorted(set(train.groups.tolist()))
-    if len(groups) < 2:
+    sessions = sorted({spec.session_of(g) for g in groups})
+    if len(sessions) < 2:
         return ACTIVATION, "default", None, None
-    folds = min(MAX_THRESHOLD_FOLDS, len(groups))
-    fold_of = {group: index % folds for index, group in enumerate(groups)}
+    # By session, so the recordings of one session are always left out together.
+    folds = min(MAX_THRESHOLD_FOLDS, len(sessions))
+    fold_of_session = {session: index % folds for index, session in enumerate(sessions)}
+    fold_of = {group: fold_of_session[spec.session_of(group)] for group in groups}
     fold = np.array([fold_of[g] for g in train.groups.tolist()])
     held_out = np.full(train.y.shape[0], np.nan)
     timelines: list[tuple[Recording, np.ndarray, np.ndarray]] = []
@@ -653,7 +683,8 @@ def timeline(spec: Spec, recording: Recording, predict) -> tuple[np.ndarray, np.
     None when it has none."""
     ts, _ = pulse_of(recording)
     x = inputs(spec, recording, ts)
-    ok = np.isfinite(x).all(axis=1)
+    # Only the moments that are this recording's own: one an earlier recording of its session has is scored there.
+    ok = np.isfinite(x).all(axis=1) & spec.decided(recording.session_id, ts)
     if not ok.any():
         return None
     return ts[ok], predict(x[ok])
@@ -933,8 +964,11 @@ def run_research_checks(spec: Spec, recordings: dict[str, Recording]) -> dict[st
 
         everything = examples(spec, recordings, sorted(spec.recordings))
         print("Running the research checks: they retrain the model several times, so this takes a while", flush=True)
-        return run_research(lambda xs, ys: fit(xs, ys, spec.seed, backend=spec.backend), everything.x, everything.y, everything.groups,
-                            spec.train, spec.evaluation, spec.seed, lambda line: print(line, flush=True))
+        # By session: leaving one recording of a session out while training on its twin would test on samples it trained on.
+        session = np.array([spec.session_of(g) for g in everything.groups.tolist()], dtype=object)
+        sessions_in = lambda ids: sorted({spec.session_of(rid) for rid in ids})  # noqa: E731
+        return run_research(lambda xs, ys: fit(xs, ys, spec.seed, backend=spec.backend), everything.x, everything.y, session,
+                            sessions_in(spec.train), sessions_in(spec.evaluation), spec.seed, lambda line: print(line, flush=True))
     except Exception as error:  # noqa: BLE001 - an extra must never stop a model being shipped
         print(f"could not run the research checks: {type(error).__name__}: {error}", flush=True)
         return None

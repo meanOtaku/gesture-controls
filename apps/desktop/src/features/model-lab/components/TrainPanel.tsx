@@ -63,6 +63,11 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
   const request = useMemo(() => target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, research, labelOffsetMs: labelOffset, method, hardNegatives, stages: planStages }), [target, selected, others, roles, research, labelOffset, method, hardNegatives, planStages]);
   const requestKey = JSON.stringify(request);
   const coverage = useMemo(() => plan ? splitCoverage(datasets, plan.train, plan.evaluation, target) : [], [datasets, plan, target]);
+  const sessionsKey = JSON.stringify(plan?.sessions ?? []);
+  const sessionOf = useMemo(() => {
+    const sets: string[][] = JSON.parse(sessionsKey);
+    return new Map(sets.flatMap((set, index) => set.map((id) => [id, { number: index + 1, size: set.length }] as const)));
+  }, [sessionsKey]);
 
   useEffect(() => {
     if (!desktopAvailable) return;
@@ -187,7 +192,7 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
 
         {target !== "" && (
           <>
-            <TrainingRecordings candidates={candidates} selected={selected} disabled={running !== null} labels={labels} target={target} sealedCount={sealedCount} toggleRecording={toggleRecording} />
+            <TrainingRecordings candidates={candidates} selected={selected} disabled={running !== null} labels={labels} target={target} sealedCount={sealedCount} sessionOf={sessionOf} toggleRecording={toggleRecording} />
 
             {others.length > 0 && (
               <fieldset className="flex flex-col gap-2">
@@ -316,8 +321,11 @@ function SplitCoverageTable({ rows, label }: { rows: SplitCondition[]; label: st
 
 
 /** Progress and runtime polling must not rebuild the recording checkboxes and swatches. */
-const TrainingRecordings = memo(function TrainingRecordings({ candidates, selected, disabled, labels, target, sealedCount, toggleRecording }: {
-  candidates: DatasetSummary[]; selected: Set<string>; disabled: boolean; labels: DatasetLabel[]; target: string; sealedCount: number; toggleRecording: (id: string) => void;
+const TrainingRecordings = memo(function TrainingRecordings({ candidates, selected, disabled, labels, target, sealedCount, sessionOf, toggleRecording }: {
+  candidates: DatasetSummary[]; selected: Set<string>; disabled: boolean; labels: DatasetLabel[]; target: string; sealedCount: number;
+  /** For a chosen recording that shares a session with others: which set (from 1), and how many are in it. */
+  sessionOf: ReadonlyMap<string, { number: number; size: number }>;
+  toggleRecording: (id: string) => void;
 }) {
   return (
             <fieldset className="flex flex-col gap-2">
@@ -333,9 +341,21 @@ const TrainingRecordings = memo(function TrainingRecordings({ candidates, select
                       <Badge variant="outline" aria-label={`Dataset group: ${dataset.group?.trim() || "Ungrouped"}`}>Group: {dataset.group?.trim() || "Ungrouped"}</Badge>
                       <small className="text-muted-foreground">{datasetLabels(dataset).map((label) => <LabelSwatch key={label} label={label} catalogue={labels} />)}{datasetLabels(dataset).join(", ")}</small>
                       {hasLabel(dataset, target) && <Badge variant="secondary">has {target}</Badge>}
+                      {sessionOf.has(dataset.id) && (
+                        <Badge variant="outline" className="session-badge" data-session={(sessionOf.get(dataset.id)!.number - 1) % 6}
+                          title={`Shares watch samples with ${sessionOf.get(dataset.id)!.size - 1} other chosen recording${sessionOf.get(dataset.id)!.size === 2 ? "" : "s"}: they train or test together, and each moment counts once.`}>
+                          Session {sessionOf.get(dataset.id)!.number}
+                        </Badge>
+                      )}
                     </li>
                   ))}
                 </ul>
+              )}
+              {sessionOf.size > 0 && (
+                <p className="field-hint">
+                  Recordings marked Session share watch samples, as misses saved seconds apart do. Each session trains or is tested
+                  as one, and a moment two of them hold counts once, so there is nothing to leave out.
+                </p>
               )}
               {sealedCount > 0 && <p className="field-hint">{<AnimatedNumber value={sealedCount} />} sealed recording{sealedCount === 1 ? " is" : "s are"} kept out for the final test.</p>}
             </fieldset>

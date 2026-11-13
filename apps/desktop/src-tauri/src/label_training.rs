@@ -21,7 +21,7 @@ use std::sync::Mutex;
 use chrono::{SecondsFormat, Utc};
 use label_inference::{
     RecordingInfo, RunPlan, begin_run, cnn_contract, complete_run, fail_run, monitor_only_run,
-    pinch_start_contract, plan_split, stage_bundle, trainer_backend,
+    pinch_start_contract, plan_split_sessions, stage_bundle, trainer_backend,
 };
 use model_lab_core::{
     ArtifactRef, ExampleRole, InputContract, LabelId, LabelMapping, QualityRules, RecordingId,
@@ -209,6 +209,13 @@ struct Checked {
     label_offset_ms: i32,
     /// How each recording's labels were timed, for the trainer to judge on the trusted ones (`label_timing_of`).
     label_timing: BTreeMap<String, &'static str>,
+    /// Recordings that hold one session (they share watch samples, as misses saved seconds apart do), set by set, each in
+    /// the order its samples begin: a set stays on one side of the split. Filled by `recordings_for`.
+    sessions: Vec<Vec<RecordingId>>,
+    /// For a recording whose start is also in an earlier one of its session: the watch time (ns) up to which that earlier
+    /// one already has its moments. The trainer takes its decisions only after it, so no moment counts twice; the earlier
+    /// samples are still there as history.
+    decide_from_ns: BTreeMap<String, i64>,
 }
 
 fn label_id(raw: &str) -> Result<LabelId, String> {
@@ -339,6 +346,8 @@ fn check_request(
         stages,
         label_offset_ms,
         label_timing,
+        sessions: Vec::new(),
+        decide_from_ns: BTreeMap::new(),
     })
 }
 
@@ -403,6 +412,9 @@ fn build_spec(
         "hardNegatives": checked.hard_negatives,
         "labelOffsetMs": checked.label_offset_ms,
         "labelTiming": checked.label_timing,
+        // Recordings of one session, by the session's first recording, and where each starts deciding (`session_plan`).
+        "sessions": checked.sessions.iter().flat_map(|set| set.iter().map(move |id| (id.to_string(), set[0].to_string()))).collect::<BTreeMap<_, _>>(),
+        "decideFromNs": checked.decide_from_ns,
         // Train and test only on moments the runtime's steadiness gate would let a gesture start at (`steadiness.py`),
         // when the setting asks for the gate (`steady_starts_only`, set by the caller).
         "steadyStarts": false,
@@ -429,6 +441,10 @@ pub struct PlanView {
     /// The training plan as it will run: per stage, the recordings it trains on and those held out for evaluation.
     #[serde(default)]
     pub stages: Vec<StagePlanView>,
+    /// The chosen recordings that hold one session (they share watch samples), set by set: each set stays on one side and
+    /// each moment counts once (`session_plan`).
+    #[serde(default)]
+    pub sessions: Vec<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -517,30 +533,55 @@ fn recordings_for(app: &AppHandle, request: &TrainRequest) -> Result<Checked, St
     if let Ok(bundles) = crate::recording_bundle::recording_bundles_dir(app) {
         crate::model_lab::describe(&mut index.datasets, &dir, &bundles);
     }
-    let checked = check_request(request, &index.datasets, &|id| {
+    let mut checked = check_request(request, &index.datasets, &|id| {
         dataset_sha(&dataset_csv_path(&dir, id))
     })?;
     let stamps = checked
         .recordings
         .iter()
         .map(|r| {
-            let name = index
-                .datasets
-                .iter()
-                .find(|d| d.id == r.id.as_str())
-                .map_or_else(|| r.id.to_string(), |d| d.original_filename.clone());
             Ok((
-                name,
+                r.id.to_string(),
                 session_stamps(&dataset_csv_path(&dir, r.id.as_str()))?,
             ))
         })
         .collect::<Result<Vec<_>, String>>()?;
-    if let Some((a, b)) = same_session(&stamps) {
-        return Err(format!(
-            "'{a}' and '{b}' are the same session (they hold the same watch samples): leave one out, or one could be trained on and the other tested on, and their labels may disagree"
-        ));
-    }
+    // Recordings that hold one session train together instead of being refused: they stay on one side of the split,
+    // and each moment is decided in only one of them.
+    let (sessions, decide_from_ns) = session_plan(&stamps);
+    checked.sessions = sessions
+        .into_iter()
+        .map(|set| set.into_iter().map(RecordingId::new).collect::<Result<Vec<_>, _>>())
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
+    checked.decide_from_ns = decide_from_ns;
     Ok(checked)
+}
+
+/// Each set of recordings that hold one session, its members in the order their samples begin, and for each member after
+/// the first, the latest sample of the members before it: the trainer decides only after that, so a moment two of them
+/// share is counted once. A member wholly inside the ones before it decides nothing.
+fn session_plan(recordings: &[(String, Vec<i64>)]) -> (Vec<Vec<String>>, BTreeMap<String, i64>) {
+    let span = |id: &str| {
+        recordings
+            .iter()
+            .find(|(rid, _)| rid == id)
+            .and_then(|(_, stamps)| Some((*stamps.iter().min()?, *stamps.iter().max()?)))
+    };
+    let mut sets = session_sets(recordings);
+    let mut decide_from = BTreeMap::new();
+    for set in &mut sets {
+        set.sort_by_key(|id| span(id).map_or(i64::MAX, |(first, _)| first));
+        let mut covered: Option<i64> = None;
+        for id in set.iter() {
+            let Some((_, last)) = span(id) else { continue };
+            if let Some(until) = covered {
+                decide_from.insert(id.clone(), until);
+            }
+            covered = Some(covered.map_or(last, |until| until.max(last)));
+        }
+    }
+    (sets, decide_from)
 }
 
 /// The watch timestamps of a recording's motion rows (every row, for a single-file recording).
@@ -586,6 +627,7 @@ fn same_session_pairs(recordings: &[(String, Vec<i64>)]) -> Vec<(usize, usize)> 
 }
 
 /// The first two recordings, by name, that hold one session.
+#[cfg(test)]
 fn same_session(recordings: &[(String, Vec<i64>)]) -> Option<(&str, &str)> {
     same_session_pairs(recordings)
         .first()
@@ -614,7 +656,7 @@ fn session_sets(recordings: &[(String, Vec<i64>)]) -> Vec<Vec<String>> {
 /// The recordings in Model Lab that hold one session, by the check training refuses them with, whether or not their labels
 /// agree. It reads every recording's motion rows, so it runs when asked. A recording that cannot be read is left out.
 #[tauri::command]
-pub async fn find_same_session_recordings(app: AppHandle) -> Result<Vec<Vec<String>>, String> {
+pub async fn find_same_session_recordings(app: AppHandle) -> Result<SameSessionSets, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let dir = datasets_dir(&app)?;
         let stamps: Vec<(String, Vec<i64>)> = load_index(&app)
@@ -628,10 +670,52 @@ pub async fn find_same_session_recordings(app: AppHandle) -> Result<Vec<Vec<Stri
                 }
             })
             .collect();
-        Ok(session_sets(&stamps))
+        Ok(split_copies(&stamps, session_sets(&stamps)))
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// Recordings that hold one session, sorted by what they are: copies of one recording (worth keeping only one of), and
+/// windows that overlap, like misses saved seconds apart, which each hold moments of their own and train together.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SameSessionSets {
+    pub copies: Vec<Vec<String>>,
+    pub overlaps: Vec<Vec<String>>,
+}
+
+/// The share of a recording's samples another must hold for the two to be copies, not overlapping windows. Below one, as
+/// an export may lose a few rows at each end.
+const COPY_SHARE: f64 = 0.95;
+
+/// Each set as copies when one of its recordings holds nearly all of every other's samples, else as overlapping windows.
+fn split_copies(recordings: &[(String, Vec<i64>)], sets: Vec<Vec<String>>) -> SameSessionSets {
+    let stamps_of = |id: &str| {
+        recordings
+            .iter()
+            .find(|(rid, _)| rid == id)
+            .map(|(_, stamps)| stamps.iter().copied().collect::<std::collections::HashSet<i64>>())
+            .unwrap_or_default()
+    };
+    let mut out = SameSessionSets::default();
+    for set in sets {
+        let members: Vec<_> = set.iter().map(|id| stamps_of(id)).collect();
+        let holds_all = |big: usize| {
+            members.iter().enumerate().all(|(i, small)| {
+                i == big
+                    || small.is_empty()
+                    || small.iter().filter(|t| members[big].contains(t)).count() as f64
+                        >= COPY_SHARE * small.len() as f64
+            })
+        };
+        if (0..members.len()).any(holds_all) {
+            out.copies.push(set);
+        } else {
+            out.overlaps.push(set);
+        }
+    }
+    out
 }
 
 /// The trainer, with PyTorch installed for the CNN.
@@ -705,7 +789,7 @@ pub async fn suggest_label_offset(
     request: TrainRequest,
 ) -> Result<Vec<OffsetScore>, String> {
     let checked = recordings_for(&app, &request)?;
-    let split = plan_split(&checked.recordings, &checked.mapping, &checked.target)
+    let split = plan_split_sessions(&checked.recordings, &checked.mapping, &checked.target, &[], &checked.sessions)
         .map_err(|e| e.to_string())?;
     if !Path::new(TRAINER_PROJECT_DIR)
         .join("pyproject.toml")
@@ -762,7 +846,7 @@ fn plan_label_training_blocking(app: &AppHandle, request: &TrainRequest) -> Plan
             contract.features.len()
         });
     let result = recordings_for(app, request).and_then(|checked| {
-        plan_split(&checked.recordings, &checked.mapping, &checked.target)
+        plan_split_sessions(&checked.recordings, &checked.mapping, &checked.target, &[], &checked.sessions)
             .map(|split| (checked, split))
             .map_err(|e| e.to_string())
     });
@@ -780,6 +864,11 @@ fn plan_label_training_blocking(app: &AppHandle, request: &TrainRequest) -> Plan
                 problem,
                 inputs,
                 stages,
+                sessions: checked
+                    .sessions
+                    .iter()
+                    .map(|set| set.iter().map(ToString::to_string).collect())
+                    .collect(),
             }
         }
         Err(problem) => PlanView {
@@ -788,6 +877,7 @@ fn plan_label_training_blocking(app: &AppHandle, request: &TrainRequest) -> Plan
             problem: Some(problem),
             inputs,
             stages: Vec::new(),
+            sessions: Vec::new(),
         },
     }
 }
@@ -921,6 +1011,7 @@ pub async fn start_label_training(
         },
         recordings: checked.recordings.clone(),
         train_only: Vec::new(),
+        sessions: checked.sessions.clone(),
         unique,
     };
     let begun =
@@ -1417,6 +1508,40 @@ mod tests {
     }
 
     #[test]
+    fn copies_are_told_from_overlapping_windows() {
+        let window = |end_s: i64| ((end_s - 45) * 50..end_s * 50).map(|k| k * 20_000_000).collect::<Vec<_>>();
+        let a = window(100);
+        let recordings = vec![
+            ("a".to_string(), a.clone()),
+            ("copy".to_string(), a[40..2200].to_vec()),
+            ("m1".to_string(), window(300)),
+            ("m2".to_string(), window(310)),
+        ];
+        let found = split_copies(&recordings, session_sets(&recordings));
+        assert_eq!(found.copies, vec![vec!["a".to_string(), "copy".into()]]);
+        assert_eq!(found.overlaps, vec![vec!["m1".to_string(), "m2".into()]]);
+    }
+
+    #[test]
+    fn misses_saved_seconds_apart_train_together_each_moment_decided_once() {
+        // Three 45 s windows marked 10 s apart, as the miss recorder saves them, and one unrelated recording.
+        let window = |end_s: i64| ((end_s - 45) * 50..end_s * 50).map(|k| k * 20_000_000).collect::<Vec<_>>();
+        let recordings = vec![
+            ("m3".to_string(), window(120)),
+            ("m1".to_string(), window(100)),
+            ("other".to_string(), (0..2000).map(|k| 9_000_000_000_000 + k * 19_998_877).collect()),
+            ("m2".to_string(), window(110)),
+        ];
+        let (sets, decide_from) = session_plan(&recordings);
+        assert_eq!(sets, vec![vec!["m1".to_string(), "m2".into(), "m3".into()]]);
+        let last = |id: &str| *recordings.iter().find(|(r, _)| r == id).unwrap().1.iter().max().unwrap();
+        assert_eq!(decide_from.get("m1"), None);
+        assert_eq!(decide_from.get("m2"), Some(&last("m1")));
+        assert_eq!(decide_from.get("m3"), Some(&last("m2")));
+        assert_eq!(decide_from.get("other"), None);
+    }
+
+    #[test]
     fn recordings_sharing_a_session_are_gathered_into_one_set() {
         let stamps = |from: i64, to: i64| (from..to).map(|k| k * 19_998_877).collect::<Vec<_>>();
         let recordings: Vec<(String, Vec<i64>)> = [
@@ -1509,7 +1634,7 @@ mod tests {
         r.label_offset_ms = Some(-250);
         r.research = true;
         let checked = check_request(&r, &datasets(), &sha).unwrap();
-        let split = plan_split(&checked.recordings, &checked.mapping, &checked.target).unwrap();
+        let split = plan_split_sessions(&checked.recordings, &checked.mapping, &checked.target, &[], &checked.sessions).unwrap();
         let paths: BTreeMap<String, PathBuf> = checked
             .recordings
             .iter()
@@ -1612,7 +1737,7 @@ mod tests {
         let checked = check_request(&r, &datasets(), &sha).unwrap();
         assert_eq!(checked.backend, CNN_BACKEND);
         assert_eq!(checked.input, cnn_contract());
-        let split = plan_split(&checked.recordings, &checked.mapping, &checked.target).unwrap();
+        let split = plan_split_sessions(&checked.recordings, &checked.mapping, &checked.target, &[], &checked.sessions).unwrap();
         assert_eq!(
             build_spec(&checked, &split, &BTreeMap::new())["backend"],
             CNN_BACKEND
