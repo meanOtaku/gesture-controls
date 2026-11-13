@@ -167,7 +167,7 @@ describe("LabelModelsPanel", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Switch to Live" }));
     await waitFor(() => expect(calls("set_label_runtime_mode")).toEqual([["set_label_runtime_mode", { mode: "live" }]]));
     // The switch is disabled while the Live change finishes; wait for it before asking for Off.
-    await waitFor(() => expect(within(group).getByRole("radio", { name: /Off/ })).not.toHaveAttribute("aria-disabled", "true"));
+    await waitFor(() => expect(within(group).getByRole("radio", { name: /Off/ })).not.toBeDisabled());
     fireEvent.click(within(group).getByRole("radio", { name: /Off/ }));
     await waitFor(() => expect(calls("set_label_runtime_mode")).toContainEqual(["set_label_runtime_mode", { mode: "off" }]));
   });
@@ -177,7 +177,7 @@ describe("LabelModelsPanel", () => {
     expect(await screen.findByText("snap has no running model")).toBeInTheDocument();
     expect(screen.getByText(/the model file was changed/)).toBeInTheDocument();
     expect(screen.getByText("The model registry could not be opened")).toBeInTheDocument();
-    expect(within(screen.getByRole("radiogroup")).getByRole("radio", { name: /Live/ })).toHaveAttribute("aria-disabled", "true");
+    expect(within(screen.getByRole("radiogroup")).getByRole("radio", { name: /Live/ })).toBeDisabled();
   });
 
   it("offers delete only for an archived model, and asks before deleting for good", async () => {

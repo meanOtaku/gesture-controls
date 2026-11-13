@@ -1,0 +1,137 @@
+[
+  {
+    "startMs": 3112.845556,
+    "endMs": 3583.426611,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 4264.090673,
+    "endMs": 4644.400731,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 4644.400732,
+    "endMs": 7552.744045,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 7566.794531,
+    "endMs": 8007.285253,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 8837.943212,
+    "endMs": 9308.280126,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 9308.280127,
+    "endMs": 12099.784033,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 12099.784034,
+    "endMs": 12510.245459,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 13501.112255,
+    "endMs": 13871.5041,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 13871.504101,
+    "endMs": 15943.128857,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 15953.16914,
+    "endMs": 16403.761181,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 17494.917187,
+    "endMs": 17955.366406,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 17965.376171,
+    "endMs": 19737.074169,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 19747.083935,
+    "endMs": 20262.744045,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 21378.423144,
+    "endMs": 21758.672167,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 21758.672168,
+    "endMs": 24301.000048,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 24305.3988,
+    "endMs": 24791.448046,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 25676.3988,
+    "endMs": 26143.285204,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 26143.285205,
+    "endMs": 28926.000048,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 28936.3988,
+    "endMs": 29376.439502,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 30067.11333,
+    "endMs": 30487.554002,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 30487.554003,
+    "endMs": 32259.740283,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 32276.3988,
+    "endMs": 32770.329882,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 33140.691211,
+    "endMs": 33701.116015,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 35182.378222,
+    "endMs": 35602.727343,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 37795.476367,
+    "endMs": 38235.936572,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 40929.043359,
+    "endMs": 41359.402246,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 43431.210107,
+    "endMs": 43921.749658,
+    "label": "pinch_in"
+  }
+]

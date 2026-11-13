@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { useSyncExternalStore } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
@@ -61,18 +62,18 @@ export function CameraCapturePanel() {
         {on && (
           <>
             <ul className="flex flex-wrap items-center gap-2" aria-label="Tracking status">
-              <li><Badge variant={hands.length > 0 ? "default" : "secondary"}>{hands.length === 0 ? "No hand in view" : hands.length === 1 ? "1 hand" : `${hands.length} hands`}</Badge></li>
+              <li><Badge variant={hands.length > 0 ? "default" : "secondary"}>{hands.length === 0 ? "No hand in view" : hands.length === 1 ? "1 hand" : <><AnimatedNumber value={hands.length} />{" hands"}</>}</Badge></li>
               <li><Badge variant="outline">{speedLabel(state)}</Badge></li>
               {state.engine && <li><Badge variant="outline">Hand model: {state.engine}</Badge></li>}
               {hands.map((hand, index) => (
-                <li key={index}><Badge variant="outline">{physicalHand(hand)} hand · {Math.round(hand.score * 100)}%</Badge></li>
+                <li key={index}><Badge variant="outline">{physicalHand(hand)} hand · {<AnimatedNumber value={Math.round(hand.score * 100)} />}%</Badge></li>
               ))}
             </ul>
             {measures.map(({ hand, measures: m }, index) => (
               <div key={index} className="camera-measure" role="meter" aria-label={`Thumb to index distance, ${physicalHand(hand)} hand`} aria-valuemin={0} aria-valuemax={150} aria-valuenow={m?.pinch.index == null ? 0 : Math.round(Math.min(1.5, m.pinch.index) * 100)}>
                 <span>Thumb to index</span>
                 <div className="gesture-meter"><div className="gesture-meter-fill" style={{ width: `${m?.pinch.index == null ? 0 : Math.min(100, (m.pinch.index / 1.5) * 100)}%` }} /></div>
-                <small>{m?.pinch.index == null ? "no reading" : `${m.pinch.index.toFixed(2)} hand sizes`}</small>
+                <small>{m?.pinch.index == null ? "no reading" : <><AnimatedNumber value={m.pinch.index} digits={2} />{" hand sizes"}</>}</small>
               </div>
             ))}
           </>
@@ -84,11 +85,11 @@ export function CameraCapturePanel() {
         </div>
         <p className="field-hint" role="status">
           {state.collecting
-            ? `Recording the camera${state2.collecting ? "s" : ""}: ${state.collectedFrames} frames kept${state2.collecting ? ` (second camera: ${state2.collectedFrames})` : ""}${state.truncated ? " (the limit was reached, so the end of this recording has no camera data)" : ""}.`
+            ? <>{"Recording the camera"}{state2.collecting ? "s" : ""}{": "}<AnimatedNumber value={state.collectedFrames} />{" frames kept"}{state2.collecting ? ` (second camera: ${state2.collectedFrames})` : ""}{state.truncated ? " (the limit was reached, so the end of this recording has no camera data)" : ""}{"."}</>
             : !watchStreaming
               ? "Clock alignment with the watch starts once the watch is streaming."
               : sync
-                ? `Clock alignment with the watch: ${sync.samples} samples, link jitter about ${sync.jitterMs.toFixed(0)} ms.`
+                ? <>{"Clock alignment with the watch: "}<AnimatedNumber value={sync.samples} />{" samples, link jitter about "}<AnimatedNumber value={sync.jitterMs} digits={0} />{" ms."}</>
                 : "Clock alignment with the watch: collecting samples…"}
         </p>
       </CardContent>

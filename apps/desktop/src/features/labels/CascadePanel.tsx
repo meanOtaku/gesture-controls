@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../components/app/AnimatedNumber";
 import { useId, useState } from "react";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
@@ -64,7 +65,7 @@ export function CascadePanel({ plan, onCancel, onOpenLabel, onRun }: Props) {
           <p className="field-hint">Capital letters do not matter.</p>
         </div>
       )}
-      {progress && !failure && <p className="hint" role="status">Working: {progress.done} of {progress.total} steps…</p>}
+      {progress && !failure && <p className="hint" role="status">Working: {<AnimatedNumber value={progress.done} />} of {<AnimatedNumber value={progress.total} />} steps…</p>}
       {failure && <p className="field-error" role="alert">{failure}</p>}
       <div className="flex gap-2">
         <Button type="button" variant={plan.mode === "delete" ? "destructive" : "default"} disabled={blocked || running} onClick={() => void confirm()}>

@@ -1,0 +1,32 @@
+[
+  {
+    "startMs": 32276.3988,
+    "endMs": 32770.329882,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 33140.691211,
+    "endMs": 33701.116015,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 35182.378222,
+    "endMs": 35602.727343,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 37795.476367,
+    "endMs": 38235.936572,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 40929.043359,
+    "endMs": 41359.402246,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 43431.210107,
+    "endMs": 43921.749658,
+    "label": "pinch_in"
+  }
+]

@@ -53,8 +53,26 @@ const renderNav = (props: Partial<Parameters<typeof AppNav>[0]> = {}) => {
 };
 
 describe("AppNav", () => {
-  it("orders the pages as the app is used: devices, record, label, train, automate, then settings", () => {
-    expect(NAV_ORDER).toEqual(["main", "watch", "headphone", "signals", "recorder", "recordings", "datasets", "labelling", "labels", "gestureLibrary", "modelLab", "networkLab", "gestures", "recipes", "devices", "drone", "settings"]);
+  it("orders the pages with what is used every day first: use, devices, then record, label and train, then settings", () => {
+    expect(NAV_ORDER).toEqual(["main", "gestures", "recipes", "devices", "watch", "headphone", "drone", "signals", "recorder", "recordings", "datasets", "labelling", "labels", "gestureLibrary", "modelLab", "networkLab", "settings"]);
+  });
+
+  it("folds the pages for making a model away, remembers it, and never hides the page you are on", () => {
+    window.localStorage.removeItem("navLabOpen");
+    renderNav({ activeTab: "recipes" });
+    const toggle = screen.getByRole("button", { name: "Make a model" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Recorder" })).toBeVisible();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: "Recorder" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Recipes" })).toBeInTheDocument();
+    cleanup();
+    // Folded is remembered, but a model-making page that is open is always shown, and its heading cannot fold it.
+    renderNav({ activeTab: "labelling" });
+    expect(screen.getByRole("button", { name: "Labelling" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: "Make a model" })).toBeDisabled();
+    window.localStorage.removeItem("navLabOpen");
   });
 
   it("lists every destination, grouped, with the current page marked", () => {
@@ -64,7 +82,7 @@ describe("AppNav", () => {
     }
     expect(screen.queryByRole("button", { name: "Live data" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Recorder" })).toHaveAttribute("aria-current", "page");
-    for (const group of ["Devices", "Record", "Label", "Train", "Automate"]) expect(screen.getByText(group)).toBeInTheDocument();
+    for (const group of ["Use", "Devices", "Record", "Label", "Train"]) expect(screen.getByText(group)).toBeInTheDocument();
   });
 
   it("says each device's state to screen readers as well as by colour, without changing the button's name", () => {
@@ -89,7 +107,7 @@ describe("AppNav", () => {
       fireEvent.keyDown(window, { key: String((index + 1) % 10), ctrlKey: true });
       expect(onSelect).toHaveBeenLastCalledWith(tab);
     });
-    expect(onSelect).toHaveBeenLastCalledWith("gestureLibrary");
+    expect(onSelect).toHaveBeenLastCalledWith("recordings");
   });
 
   it("opens Settings with Ctrl+comma, since the eleventh and later tabs have no number", () => {
@@ -104,11 +122,12 @@ describe("AppNav", () => {
     const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
     const prefix = isMac ? "⌘" : "Ctrl+";
     expect(shortcutFor("main")).toBe(`${prefix}1`);
-    expect(shortcutFor("datasets")).toBe(`${prefix}7`);
-    expect(shortcutFor("gestureLibrary")).toBe(`${prefix}0`);
+    expect(shortcutFor("recipes")).toBe(`${prefix}3`);
+    expect(shortcutFor("drone")).toBe(`${prefix}7`);
+    expect(shortcutFor("recordings")).toBe(`${prefix}0`);
     // The eleventh and later tabs have no number.
     expect(shortcutFor("modelLab")).toBeNull();
-    expect(shortcutFor("recipes")).toBeNull();
+    expect(shortcutFor("datasets")).toBeNull();
     expect(shortcutFor("settings")).toBe(`${prefix},`);
   });
 

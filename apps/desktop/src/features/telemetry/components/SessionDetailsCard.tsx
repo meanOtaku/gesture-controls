@@ -39,7 +39,7 @@ export function SessionDetailsCard({ context, onChange, recording }: SessionDeta
             {options ? (
               <Select value={context[field] ?? NOT_SAID} onValueChange={(value) => set(field, value === NOT_SAID || value === null ? "" : value)} disabled={recording}>
                 <SelectTrigger id={`session-${field}`} aria-label={title}>
-                  <SelectValue>{(value: string) => (value === NOT_SAID || !value ? "Not said" : options.find((option) => option.value === value)?.title ?? value)}</SelectValue>
+                  <SelectValue>{context[field] ? options.find((option) => option.value === context[field])?.title ?? context[field] : "Not said"}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={NOT_SAID}>Not said</SelectItem>

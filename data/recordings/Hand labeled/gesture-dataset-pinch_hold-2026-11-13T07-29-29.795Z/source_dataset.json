@@ -1,0 +1,14 @@
+{
+  "formatVersion": 1,
+  "ppgRows": 1125,
+  "imuRows": 4496,
+  "labels": [
+    "pinch_hold",
+    "pinch_in",
+    "pinch_out"
+  ],
+  "context": {
+    "capture": "miss recorder",
+    "miss": "did not fire"
+  }
+}

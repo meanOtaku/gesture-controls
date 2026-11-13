@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { AnimatedText } from "../../../components/app/AnimatedNumber";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
@@ -94,13 +95,13 @@ export function WatchPowerCard() {
           </p>
         ) : view.live ? (
           <>
-            <p className="hint">Over the last {minutes(view.live.seconds)}:</p>
+            <p className="hint">Over the last <AnimatedText>{minutes(view.live.seconds)}</AnimatedText>:</p>
             {view.live.charging && <Alert role="note"><AlertDescription>The watch is charging: its battery figures do not count.</AlertDescription></Alert>}
             <dl className="power-grid">
               {describeRates(view.live).map((row) => (
                 <div key={row.title} title={row.hint}>
                   <dt>{row.title}</dt>
-                  <dd>{row.value}</dd>
+                  <dd><AnimatedText>{row.value}</AnimatedText></dd>
                 </div>
               ))}
             </dl>
@@ -118,7 +119,7 @@ export function WatchPowerCard() {
           {run ? (
             <div className="flex flex-wrap items-center gap-3">
               <span>
-                <strong>{run.label}</strong>: {run.rates ? `${minutes(run.rates.seconds)} so far, ${fixed(run.rates.averageDrawMa)} mA` : "waiting for the watch's next report"}
+                <strong>{run.label}</strong>: <AnimatedText>{run.rates ? `${minutes(run.rates.seconds)} so far, ${fixed(run.rates.averageDrawMa)} mA` : "waiting for the watch's next report"}</AnimatedText>
               </span>
               <Button type="button" onClick={() => void stop()}>Stop and keep</Button>
             </div>
@@ -150,12 +151,12 @@ export function WatchPowerCard() {
                       {measurement.label} <small className="text-muted-foreground">{measurement.startedAt.slice(0, 16).replace("T", " ")}</small>
                       {measurement.notes.length > 0 && <div className="text-xs text-destructive">{measurement.notes.join(" ")}</div>}
                     </td>
-                    <td>{measurement.rates ? minutes(measurement.rates.seconds) : "–"}</td>
-                    <td>{fixed(measurement.rates?.averageDrawMa)} mA</td>
-                    <td>{fixed(measurement.rates?.batteryPercentPerHour)} %/h</td>
-                    <td>{fixed(measurement.rates?.cpuPercent)} %</td>
-                    <td>{fixed(measurement.rates?.sensorDeliveriesPerSecond, 0)}/s</td>
-                    <td>{fixed(measurement.delayP50Ms, 0)} / {fixed(measurement.delayP95Ms, 0)} ms</td>
+                    <td><AnimatedText>{measurement.rates ? minutes(measurement.rates.seconds) : "–"}</AnimatedText></td>
+                    <td><AnimatedText>{fixed(measurement.rates?.averageDrawMa)}</AnimatedText> mA</td>
+                    <td><AnimatedText>{fixed(measurement.rates?.batteryPercentPerHour)}</AnimatedText> %/h</td>
+                    <td><AnimatedText>{fixed(measurement.rates?.cpuPercent)}</AnimatedText> %</td>
+                    <td><AnimatedText>{fixed(measurement.rates?.sensorDeliveriesPerSecond, 0)}</AnimatedText>/s</td>
+                    <td><AnimatedText>{fixed(measurement.delayP50Ms, 0)}</AnimatedText> / <AnimatedText>{fixed(measurement.delayP95Ms, 0)}</AnimatedText> ms</td>
                     <td><Button type="button" size="sm" variant="ghost" aria-label={`Delete ${measurement.label}`} onClick={() => void remove(measurement.id)}>Delete</Button></td>
                   </tr>
                 ))}

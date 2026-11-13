@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Button } from "../../../components/ui/button";
@@ -44,7 +45,7 @@ export function VirtualDevicesPage({ automation, onMakeRecipe }: VirtualDevicesP
         <CardContent className="field">
           <div className="field-head">
             <label htmlFor={sliderId}>Wrist rotation</label>
-            <span className="field-unit-inline">{degrees > 0 ? "+" : ""}{degrees}°</span>
+            <span className="field-unit-inline">{degrees > 0 ? "+" : ""}{<AnimatedNumber value={degrees} />}°</span>
           </div>
           <input
             id={sliderId}
@@ -83,7 +84,7 @@ export function VirtualDevicesPage({ automation, onMakeRecipe }: VirtualDevicesP
                 <p className="field-hint">{summary}</p>
                 <p className="field-hint">
                   Defaults for volume: {specs.a.label.toLowerCase()} {specs.a.defaultValue.toFixed(specs.a.step < 1 ? 2 : 0)} {specs.a.unit}
-                  {specs.b && `, ${specs.b.label.toLowerCase()} ${specs.b.defaultValue} ${specs.b.unit}`}
+                  {specs.b && <>{", "}{specs.b.label.toLowerCase()}{" "}<AnimatedNumber value={specs.b.defaultValue} />{" "}{specs.b.unit}</>}
                 </p>
                 <p className="field-hint">
                   {usedBy.length === 0 ? "No recipe uses it yet." : `Used by ${usedBy.map((recipe) => recipe.name).join(", ")}.`}

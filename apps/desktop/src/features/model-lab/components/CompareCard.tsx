@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { lineOf } from "../recordingNames";
 import type { DatasetSummary } from "../types";
 import { invoke } from "@tauri-apps/api/core";
@@ -83,13 +84,13 @@ export function CompareCard({ desktopAvailable, models, datasets }: { desktopAva
         </ul>
         <div>
           <Button type="button" onClick={() => void run()} disabled={!desktopAvailable || running || picked.length < 2} aria-busy={running}>
-            {running ? "Comparing…" : picked.length >= 2 ? `Compare ${picked.length} models` : "Compare models"}
+            {running ? "Comparing…" : picked.length >= 2 ? <>{"Compare "}<AnimatedNumber value={picked.length} />{" models"}</> : "Compare models"}
           </Button>
         </div>
         {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
         {comparison && (
           <section aria-label="Comparison" className="flex flex-col gap-3">
-            <p className="hint">On {comparison.recordings.length} recording{comparison.recordings.length === 1 ? "" : "s"} none of them trained on, {starts} starts over {minutes.toFixed(1)} minutes, each at its own threshold. False activations are those with no gesture under way, counted an hour of that time.</p>
+            <p className="hint">On {<AnimatedNumber value={comparison.recordings.length} />} recording{comparison.recordings.length === 1 ? "" : "s"} none of them trained on, {<AnimatedNumber value={starts} />} starts over {<AnimatedNumber value={minutes} digits={1} />} minutes, each at its own threshold. False activations are those with no gesture under way, counted an hour of that time.</p>
             <table className="compare-table">
               <thead>
                 <tr>
@@ -102,16 +103,16 @@ export function CompareCard({ desktopAvailable, models, datasets }: { desktopAva
                 {comparison.recordings.map((row) => (
                   <tr key={row.id}>
                     <td>{lineOf(datasets, row.id, row.name)} <small className="text-muted-foreground">({TIMING_NAME[row.labelTiming]})</small></td>
-                    <td>{row.starts}</td>
+                    <td>{<AnimatedNumber value={row.starts} />}</td>
                     {row.caught.map((caught, i) => {
                       const best = Math.max(...row.caught) === caught && row.caught.filter((c) => c === caught).length === 1;
-                      return <td key={i} className={best ? "compare-best" : undefined}>{caught} ({pct(caught, row.starts)}) · {row.falseActivations[i]}</td>;
+                      return <td key={i} className={best ? "compare-best" : undefined}>{<AnimatedNumber value={caught} />} ({pct(caught, row.starts)}) · {<AnimatedNumber value={row.falseActivations[i]} />}</td>;
                     })}
                   </tr>
                 ))}
                 <tr className="compare-total">
                   <th>{totals[0]?.cohort === "camera" ? "Camera-timed" : "All"}</th>
-                  <th>{totals[0]?.starts ?? starts}</th>
+                  <th>{<AnimatedNumber value={totals[0]?.starts ?? starts} />}</th>
                   {totals.map((total, i) => <th key={i}>{pct(total.caught, total.starts)} · {perHour(total)}/h</th>)}
                 </tr>
               </tbody>
@@ -123,8 +124,8 @@ export function CompareCard({ desktopAvailable, models, datasets }: { desktopAva
                 const own = model.points.length > 0 ? pointAt(model, model.threshold) : null;
                 return (
                   <li key={model.version} style={{ color: seriesColor(i) }}>
-                    <strong>{model.version}</strong>: threshold {model.threshold.toFixed(2)}
-                    {own ? `, ${Math.round(caughtShare(own) * 100)}% at ${Math.round(falsePerHour(own))} false an hour` : ""}
+                    <strong>{model.version}</strong>: threshold {<AnimatedNumber value={model.threshold} digits={2} />}
+                    {own ? <>{", "}<AnimatedNumber value={Math.round(caughtShare(own) * 100)} />{"% at "}<AnimatedNumber value={Math.round(falsePerHour(own))} />{" false an hour"}</> : ""}
                   </li>
                 );
               })}

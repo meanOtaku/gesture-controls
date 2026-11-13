@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
@@ -44,7 +45,7 @@ export function ModelWorkflowCard() {
         <SectionHeader
           title="Making a model"
           description="Record, label, clean, train, then test on a day the model has never seen."
-          status={<Badge variant="secondary">{steps.filter((step) => step.complete).length} / {steps.length}</Badge>}
+          status={<Badge variant="secondary">{<AnimatedNumber value={steps.filter((step) => step.complete).length} />} / {<AnimatedNumber value={steps.length} />}</Badge>}
         />
       </CardHeader>
       <CardContent>

@@ -28,7 +28,7 @@ afterEach(() => cleanup());
 describe("CameraArmSwitch", () => {
   it("cannot be armed with the camera off, and offers to turn the camera on", () => {
     render(<CameraArmSwitch armed={false} />);
-    expect(screen.getByRole("switch", { name: "Arm camera gestures" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("switch", { name: "Arm camera gestures" })).toBeDisabled();
     expect(screen.getByText(/Recipes with a camera gesture will not act until then/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Turn camera on" })).toBeInTheDocument();
   });
@@ -38,7 +38,7 @@ describe("CameraArmSwitch", () => {
     fireEvent.click(screen.getByRole("button", { name: "Turn camera on" }));
     await waitFor(() => expect(next).not.toBeNull());
     await act(async () => { next?.(); });
-    await waitFor(() => expect(screen.getByRole("switch", { name: "Arm camera gestures" })).not.toHaveAttribute("aria-disabled", "true"));
+    await waitFor(() => expect(screen.getByRole("switch", { name: "Arm camera gestures" })).not.toBeDisabled());
     fireEvent.click(screen.getByRole("switch", { name: "Arm camera gestures" }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_camera_armed", { armed: true }));
 
@@ -50,6 +50,6 @@ describe("CameraArmSwitch", () => {
   it("says when it is armed and can be switched off even if the camera has stopped", () => {
     render(<CameraArmSwitch armed />);
     expect(screen.getByText("Camera gestures armed")).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: "Arm camera gestures" })).not.toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("switch", { name: "Arm camera gestures" })).not.toBeDisabled();
   });
 });

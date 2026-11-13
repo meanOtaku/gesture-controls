@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../components/app/AnimatedNumber";
 import { LabelTimingEditor } from "./LabelTimingEditor";
 import { EditableLabelRail } from "./EditableLabelRail";
 import { invoke } from "@tauri-apps/api/core";
@@ -702,12 +703,8 @@ export function LabellingPage() {
             <Label htmlFor="labelling-dataset">Dataset</Label>
             <Select value={currentSource} onValueChange={(id) => id && request({ kind: "dataset", id })}>
               <SelectTrigger id="labelling-dataset" aria-label="Dataset">
-                <SelectValue placeholder="Choose a recording">
-                  {(id: string | null) => {
-                    if (!id) return datasets.length > 0 ? "Choose a recording" : "Nothing in Datasets yet";
-                    const dataset = datasets.find((entry) => entry.id === id);
-                    return dataset ? recordingLine(dataset) : id;
-                  }}
+                <SelectValue placeholder={datasets.length > 0 ? "Choose a recording" : "Nothing in Datasets yet"}>
+                  {((dataset) => (dataset ? recordingLine(dataset) : currentSource))(datasets.find((entry) => entry.id === currentSource))}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -796,11 +793,11 @@ export function LabellingPage() {
             </div>
             <p className="hint" aria-live="polite">
               {camera && "track" in camera
-                ? `Camera: ${camera.track.frames} frames, lined up with the watch to about ${Math.round(camera.track.jitterMs)} ms; click a yellow mark to start the selection where the fingers touched. `
+                ? <>{"Camera: "}<AnimatedNumber value={camera.track.frames} />{" frames, lined up with the watch to about "}<AnimatedNumber value={Math.round(camera.track.jitterMs)} />{" ms; click a yellow mark to start the selection where the fingers touched. "}</>
                 : camera && "problem" in camera
                   ? `No camera contact: ${camera.problem}. `
                   : ""}
-              {selection ? `Selected ${formatSeconds(selection.startMs)} to ${formatSeconds(selection.endMs)} (${Math.round(selection.endMs - selection.startMs)} ms). ` : "Nothing selected. "}
+              {selection ? <>{"Selected "}{formatSeconds(selection.startMs)}{" to "}{formatSeconds(selection.endMs)}{" ("}<AnimatedNumber value={Math.round(selection.endMs - selection.startMs)} />{" ms). "}</> : "Nothing selected. "}
               Showing {formatSeconds(view.startMs)} to {formatSeconds(view.endMs)}.
             </p>
             <p className="hint labelling-cursor" aria-label="Graph cursor">
@@ -809,7 +806,7 @@ export function LabellingPage() {
 
             <div className="labelling-suggestions" role="region" aria-label="Problems">
               <span>
-                <strong>{problems.length} place{problems.length === 1 ? "" : "s"} to check</strong>{" "}
+                <strong>{<AnimatedNumber value={problems.length} />} place{problems.length === 1 ? "" : "s"} to check</strong>{" "}
                 <span className="hint">
                   {problemShown ? `At ${formatSeconds(problemShown.atMs)}: ${problemShown.text}.` : "Where the data is suspect, where the labels, the camera and the models disagree, or where a hold is too short to train on (orange on the overview)."}
                 </span>
@@ -823,7 +820,7 @@ export function LabellingPage() {
               {reviewing === null || !current ? (
                 <>
                   <span>
-                    <strong>{suggestions.length} suggestion{suggestions.length === 1 ? "" : "s"}</strong>{" "}
+                    <strong>{<AnimatedNumber value={suggestions.length} />} suggestion{suggestions.length === 1 ? "" : "s"}</strong>{" "}
                     <span className="hint">
                       {suggestions.length === 0 && reviewing !== null ? "Reviewed them all. " : ""}
                       Unlabelled stretches worth a look: where the camera saw the fingers close, where a model fired (run it below), and where the wrist turned sharply.
@@ -834,7 +831,7 @@ export function LabellingPage() {
               ) : (
                 <>
                   <span>
-                    <strong>{Math.min(reviewing, suggestions.length - 1) + 1} of {suggestions.length}:</strong> {current.reason}
+                    <strong>{<AnimatedNumber value={Math.min(reviewing, suggestions.length - 1) + 1} />} of {<AnimatedNumber value={suggestions.length} />}:</strong> {current.reason}
                     {current.label ? `, likely ${nameOf(current.label)}.` : "; choose what it is."}
                   </span>
                   <span className="flex flex-wrap gap-2">
@@ -1043,7 +1040,7 @@ export function LabellingPage() {
               return (
                 <div key={replay.label} className="flex flex-col gap-1">
                   <p className="hint">
-                    <strong>{nameOf(replay.label)}</strong> ({replay.version}, threshold {replay.threshold.toFixed(2)}{replay.threshold !== own ? `, trying it instead of its own ${own.toFixed(2)}` : ""}): {replay.detections.length} detections, {hits} catching one of the {starts} labelled starts and {replay.detections.length - hits} elsewhere.
+                    <strong>{nameOf(replay.label)}</strong> ({replay.version}, threshold {<AnimatedNumber value={replay.threshold} digits={2} />}{replay.threshold !== own ? <>{", trying it instead of its own "}<AnimatedNumber value={own} digits={2} /></> : ""}): {<AnimatedNumber value={replay.detections.length} />} detections, {<AnimatedNumber value={hits} />} catching one of the {<AnimatedNumber value={starts} />} labelled starts and {<AnimatedNumber value={replay.detections.length - hits} />} elsewhere.
                     {replay.rejections.length > 0 ? ` Some stretches were not scored: ${replay.rejections.join("; ")}.` : ""}
                   </p>
                   {sweep.length > 0 && (
@@ -1086,7 +1083,7 @@ export function LabellingPage() {
             {lag.camera ? (
               <div className="flex flex-wrap items-center gap-3">
                 <span>
-                  <strong>Camera:</strong> the labels start {Math.abs(Math.round(lag.camera.lagMs))} ms {lag.camera.lagMs >= 0 ? "after" : "before"} the fingers touch (median of {lag.camera.pairs} starts; the clocks line up to about {camera && "track" in camera ? Math.round(camera.track.jitterMs) : "?"} ms).
+                  <strong>Camera:</strong> the labels start {<AnimatedNumber value={Math.abs(Math.round(lag.camera.lagMs))} />} ms {lag.camera.lagMs >= 0 ? "after" : "before"} the fingers touch (median of {<AnimatedNumber value={lag.camera.pairs} />} starts; the clocks line up to about {camera && "track" in camera ? <AnimatedNumber value={Math.round(camera.track.jitterMs)} /> : "?"} ms).
                 </span>
                 <Button size="sm" variant="outline" onClick={() => moveLabels(lag.camera!.lagMs)}>Move the labels to the camera</Button>
               </div>
@@ -1096,7 +1093,7 @@ export function LabellingPage() {
             {lag.model ? (
               <div className="flex flex-wrap items-center gap-3">
                 <span>
-                  <strong>Model:</strong> its detections catch the most starts ({lag.model.caught}, against {lag.model.caughtAsIs} as labelled) with the labels {Math.abs(Math.round(lag.model.lagMs))} ms {lag.model.lagMs >= 0 ? "earlier" : "later"}. A model trained on late labels learns their lateness, so the camera is the better guide where there is one.
+                  <strong>Model:</strong> its detections catch the most starts ({<AnimatedNumber value={lag.model.caught} />}, against {<AnimatedNumber value={lag.model.caughtAsIs} />} as labelled) with the labels {<AnimatedNumber value={Math.abs(Math.round(lag.model.lagMs))} />} ms {lag.model.lagMs >= 0 ? "earlier" : "later"}. A model trained on late labels learns their lateness, so the camera is the better guide where there is one.
                 </span>
                 <Button size="sm" variant="outline" onClick={() => moveLabels(lag.model!.lagMs)}>Move the labels to the model</Button>
               </div>

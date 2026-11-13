@@ -52,7 +52,7 @@ describe("NervBars' drone", () => {
 describe("NervBars", () => {
   it("names a page by its place in the navigation and its name", () => {
     expect(sectionIdentifier("main")).toBe("01 // OVERVIEW");
-    expect(sectionIdentifier("gestureLibrary")).toBe("10 // GESTURE LIBRARY");
+    expect(sectionIdentifier("gestureLibrary")).toBe("14 // GESTURE LIBRARY");
     expect(sectionIdentifier("settings")).toMatch(/^\d\d \/\/ SETTINGS$/);
   });
 
@@ -67,7 +67,7 @@ describe("NervBars", () => {
     const { rerender } = render(<NervBars {...base} activeTab="recorder" />);
     const header = within(screen.getByRole("banner"));
     expect(header.getByText("SPATIAL GESTURE CONTROL")).toBeInTheDocument();
-    expect(header.getByText("05 // RECORDER")).toBeInTheDocument();
+    expect(header.getByText("09 // RECORDER")).toBeInTheDocument();
     rerender(<NervBars {...base} activeTab="settings" />);
     expect(header.getByText(/\/\/ SETTINGS$/)).toBeInTheDocument();
   });

@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { lineOf } from "../recordingNames";
 import type { DatasetSummary } from "../types";
 import { invoke } from "@tauri-apps/api/core";
@@ -107,7 +108,7 @@ export function MistakesCard({ desktopAvailable, models, datasets }: { desktopAv
   const judged = (totals: Judged, where: string) => (
     <>
       {where}, {describeTotals(totals)}
-      {withinBudget(totals, report!.budgetPerHour) ? ` (within the ${report!.budgetPerHour} an hour budget)` : ` (over the ${report!.budgetPerHour} an hour budget)`}.
+      {withinBudget(totals, report!.budgetPerHour) ? <>{" (within the "}<AnimatedNumber value={report!.budgetPerHour} />{" an hour budget)"}</> : <>{" (over the "}<AnimatedNumber value={report!.budgetPerHour} />{" an hour budget)"}</>}.
     </>
   );
 
@@ -141,9 +142,9 @@ export function MistakesCard({ desktopAvailable, models, datasets }: { desktopAv
         {report && (
           <section aria-label="Mistakes found" className="flex flex-col gap-3 text-sm">
             <p>
-              <strong>{report.label}</strong> ({report.version}, threshold {report.threshold.toFixed(2)}): {judged(report.tested, "on the recordings it was tested on")}
+              <strong>{report.label}</strong> ({report.version}, threshold {<AnimatedNumber value={report.threshold} digits={2} />}): {judged(report.tested, "on the recordings it was tested on")}
               {report.trained ? <> {judged(report.trained, "On those it trained on")}</> : null}
-              {report.missing.length > 0 ? ` ${report.missing.length} of its recordings are no longer in Model Lab.` : ""}
+              {report.missing.length > 0 ? <>{" "}<AnimatedNumber value={report.missing.length} />{" of its recordings are no longer in Model Lab."}</> : ""}
             </p>
             {cohortNote(report.tested) && <p className="hint" aria-label="Label timing">{cohortNote(report.tested)}</p>}
             {falseCount > 0 && (
@@ -163,7 +164,7 @@ export function MistakesCard({ desktopAvailable, models, datasets }: { desktopAv
               return (
                 <details key={recording.id} open={report.recordings.length <= 3}>
                   <summary>
-                    {lineOf(datasets, recording.id, recording.name)} <small className="text-muted-foreground">({recording.role === "test" ? "tested on" : "trained on"}, {TIMING_NAME[recording.labelTiming]}; caught {recording.caught} of {recording.starts}, {recording.falseActivations} false, {recording.repeats} repeat{recording.repeats === 1 ? "" : "s"}, {recording.late} late)</small>
+                    {lineOf(datasets, recording.id, recording.name)} <small className="text-muted-foreground">({recording.role === "test" ? "tested on" : "trained on"}, {TIMING_NAME[recording.labelTiming]}; caught {<AnimatedNumber value={recording.caught} />} of {<AnimatedNumber value={recording.starts} />}, {<AnimatedNumber value={recording.falseActivations} />} false, {<AnimatedNumber value={recording.repeats} />} repeat{recording.repeats === 1 ? "" : "s"}, {<AnimatedNumber value={recording.late} />} late)</small>
                   </summary>
                   {listed.length === 0 ? (
                     <p className="hint">Nothing to show.</p>

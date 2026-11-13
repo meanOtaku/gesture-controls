@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../components/app/AnimatedNumber";
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
@@ -243,7 +244,7 @@ export function GestureEditor({ initial, labels, onSave, onCancel, others = NO_O
               </Button>
               {running && <Button type="button" variant="outline" onClick={() => { session.current.reset(); setSnapshot(session.current.snapshot(0)); }}>Cancel</Button>}
               <span className="hint" role="status">
-                {running ? `${STEP_TEXT[snapshot.step]} ${counting ? `${seconds}` : `${seconds}s left · ${framesNow} frames kept${snapshot.missedFrames > 0 ? `, ${snapshot.missedFrames} skipped` : ""}`}` : cam.frame?.hands.length === 0 ? "Put your hand in view to begin." : `About ${Math.round((3 + 3) + (lengths.positiveMs + lengths.negativeMs) / 1000)} seconds: a three-second countdown each time, ${lengths.positiveMs / 1000} holding the gesture, then ${lengths.negativeMs / 1000} of everything else.`}
+                {running ? `${STEP_TEXT[snapshot.step]} ${counting ? `${seconds}` : `${seconds}s left · ${framesNow} frames kept${snapshot.missedFrames > 0 ? `, ${snapshot.missedFrames} skipped` : ""}`}` : cam.frame?.hands.length === 0 ? "Put your hand in view to begin." : <>{"About "}<AnimatedNumber value={Math.round((3 + 3) + (lengths.positiveMs + lengths.negativeMs) / 1000)} />{" seconds: a three-second countdown each time, "}<AnimatedNumber value={lengths.positiveMs / 1000} />{" holding the gesture, then "}<AnimatedNumber value={lengths.negativeMs / 1000} />{" of everything else."}</>}
               </span>
             </div>
             {running && snapshot.missedFrames > 5 && <p className="field-error" role="alert">Your hand keeps leaving view; those frames are not counted.</p>}
@@ -252,8 +253,8 @@ export function GestureEditor({ initial, labels, onSave, onCancel, others = NO_O
         {analysis && (
           <Alert variant={analysis.verdict === "good" || analysis.verdict === "okay" ? "default" : "destructive"} role="status">
             <AlertDescription>
-              <strong>{analysis.verdict === "needsMoreFrames" ? `Not enough frames (need ${MIN_FRAMES} of each)` : `${percent(analysis.balancedAccuracy)} of recorded frames told apart correctly (${analysis.verdict})`}.</strong>{" "}
-              {analysis.positiveFrames} gesture frames and {analysis.negativeFrames} other frames. {analysis.advice ?? ""}
+              <strong>{analysis.verdict === "needsMoreFrames" ? <>{"Not enough frames (need "}<AnimatedNumber value={MIN_FRAMES} />{" of each)"}</> : `${percent(analysis.balancedAccuracy)} of recorded frames told apart correctly (${analysis.verdict})`}.</strong>{" "}
+              {<AnimatedNumber value={analysis.positiveFrames} />} gesture frames and {<AnimatedNumber value={analysis.negativeFrames} />} other frames. {analysis.advice ?? ""}
               {recorded && analysis.verdict === "needsMoreFrames" && skippedWhy(recorded.skipped, draft.hand)}
               {analysis.conditions.length > 0 && <> Proposed rule: {describeRule({ conditions: analysis.conditions, hand: draft.hand })}.</>}
               {analysis.openHandFiresOn !== null && <> Fires on {percent(analysis.openHandFiresOn)} of the frames of a relaxed open hand{analysis.openHandFiresOn < 0.1 ? " (fine)" : ""}.</>}

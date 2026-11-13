@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
 import { useLabelModels } from "../hooks/useLabelModels";
@@ -54,8 +55,8 @@ export function ModelLab({ onOpenLabels, onInspectModel, onOpenNetworkLab }: { o
 
       <section className="overview-grid" aria-label="Model Lab overview">
         <Card><CardContent><span className="label">Runtime</span><strong className="text-numeric">{desktopAvailable ? mode : "Preview"}</strong><small>{mode === "live" ? "Detections can start recipes" : mode === "monitor" ? "Watching only; nothing acts" : "No model runs"}</small></CardContent></Card>
-        <Card><CardContent><span className="label">Active models</span><strong className="text-numeric">{desktopAvailable ? activeCount : "—"}</strong><small>{desktopAvailable ? `${models.length} registered` : "Available in the desktop app"}</small></CardContent></Card>
-        <Card><CardContent><span className="label">Recordings</span><strong className="text-numeric">{desktopAvailable ? datasets.length : "—"}</strong><small>{desktopAvailable ? `${coverageByLabel.size} label${coverageByLabel.size === 1 ? "" : "s"} covered` : "Available in the desktop app"}</small></CardContent></Card>
+        <Card><CardContent><span className="label">Active models</span><strong className="text-numeric">{desktopAvailable ? <AnimatedNumber value={activeCount} /> : "—"}</strong><small>{desktopAvailable ? <><AnimatedNumber value={models.length} />{" registered"}</> : "Available in the desktop app"}</small></CardContent></Card>
+        <Card><CardContent><span className="label">Recordings</span><strong className="text-numeric">{desktopAvailable ? <AnimatedNumber value={datasets.length} /> : "—"}</strong><small>{desktopAvailable ? <><AnimatedNumber value={coverageByLabel.size} />{" label"}{coverageByLabel.size === 1 ? "" : "s"}{" covered"}</> : "Available in the desktop app"}</small></CardContent></Card>
       </section>
 
       <nav className="lab-workflow" aria-label="Model Lab sections">
@@ -65,7 +66,7 @@ export function ModelLab({ onOpenLabels, onInspectModel, onOpenNetworkLab }: { o
       <fieldset className="lab-workspace card-stack" disabled={!desktopAvailable} aria-label="Desktop model tools">
         <Card id="lab-dataset" role="region" aria-label="Recordings">
           <CardContent className="flex flex-wrap items-center justify-between gap-3">
-            <span className="text-sm">{datasets.length} recording{datasets.length === 1 ? "" : "s"} to train and test on, kept on the Datasets tab: name, group and seal them there, and add ones recorded elsewhere.</span>
+            <span className="text-sm">{<AnimatedNumber value={datasets.length} />} recording{datasets.length === 1 ? "" : "s"} to train and test on, kept on the Datasets tab: name, group and seal them there, and add ones recorded elsewhere.</span>
             <Button type="button" variant="outline" onClick={() => appNavigation.open("datasets")}>Open Datasets</Button>
           </CardContent>
         </Card>
@@ -80,7 +81,7 @@ export function ModelLab({ onOpenLabels, onInspectModel, onOpenNetworkLab }: { o
           <SealedTestCard desktopAvailable={desktopAvailable} models={models} datasets={datasets} />
           <Card id="lab-coverage" role="region" aria-label="Labels">
             <CardContent className="flex flex-wrap items-center justify-between gap-3">
-              <span><strong>Labels</strong> <small className="text-muted-foreground">Add, rename and archive labels on the Labels tab. {labels.filter((label) => label.archivedAt === null).length} in use here.</small></span>
+              <span><strong>Labels</strong> <small className="text-muted-foreground">Add, rename and archive labels on the Labels tab. {<AnimatedNumber value={labels.filter((label) => label.archivedAt === null).length} />} in use here.</small></span>
               {onOpenLabels && <Button type="button" variant="outline" onClick={onOpenLabels}>Open Labels</Button>}
             </CardContent>
           </Card>

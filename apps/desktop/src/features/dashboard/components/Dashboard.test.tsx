@@ -288,7 +288,7 @@ describe("Dashboard", () => {
     const dashboard = within(container);
     expect(dashboard.getByText("Updating…")).toBeInTheDocument();
     const orientationSwitch = dashboard.getByRole("switch", { name: /Orientation \(rotation vector\)/ });
-    expect(orientationSwitch).toHaveAttribute("aria-disabled", "true");
+    expect(orientationSwitch).toBeDisabled();
     fireEvent.click(orientationSwitch);
     expect(toggles).toEqual([]);
   });

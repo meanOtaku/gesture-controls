@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { LineChart } from "../../../components/charts/LineChart";
 import type { Inspection } from "../inspection";
 import { percent } from "../inspection";
@@ -31,7 +32,7 @@ export function InspectResearch({ inspection }: { inspection: Inspection }) {
             summary={`From ${first.windows} windows to ${last.windows}, the held-out AUC went from ${first.aucMean.toFixed(2)} to ${last.aucMean.toFixed(2)}.`}
           />
           <p className="field-hint" role="status">
-            With {first.windows} windows it scored {first.aucMean.toFixed(2)}; with all {last.windows}, {last.aucMean.toFixed(2)}.{" "}
+            With {<AnimatedNumber value={first.windows} />} windows it scored {<AnimatedNumber value={first.aucMean} digits={2} />}; with all {<AnimatedNumber value={last.windows} />}, {<AnimatedNumber value={last.aucMean} digits={2} />}.{" "}
             {rising > 0.02 ? "It was still climbing at the end, so more recordings would probably help." : last.aucMean - first.aucMean > 0.02 ? "It levelled off before the end, so more of the same recordings would add little; different ones (other positions, other people) might." : "More data made no difference here, so the limit is in what the model reads, not in how much of it there is."}
           </p>
         </>
@@ -42,7 +43,7 @@ export function InspectResearch({ inspection }: { inspection: Inspection }) {
         <p className="field-hint" role="status">
           {leaveOneOut.pooledAuc === null
             ? "There were not enough recordings of both kinds to pool the folds into one score."
-            : `Every recording scored by a model trained on all the others: pooled ROC AUC ${leaveOneOut.pooledAuc.toFixed(2)} over ${leaveOneOut.pooledWindows} windows. This is the fairest single number when there are few recordings, because each recording was unseen exactly once.`}
+            : <>{"Every recording scored by a model trained on all the others: pooled ROC AUC "}<AnimatedNumber value={leaveOneOut.pooledAuc} digits={2} />{" over "}<AnimatedNumber value={leaveOneOut.pooledWindows} />{" windows. This is the fairest single number when there are few recordings, because each recording was unseen exactly once."}</>}
         </p>
         <div className="max-w-full overflow-auto">
           <table className="w-full text-sm" aria-label="Leave one recording out">
@@ -51,11 +52,11 @@ export function InspectResearch({ inspection }: { inspection: Inspection }) {
               {leaveOneOut.folds.map((fold) => (
                 <tr key={fold.recording} className="border-t border-input/40">
                   <th scope="row" className="pr-3 text-left font-medium">{fold.recording.slice(0, 8)}</th>
-                  <td className="pr-3">{fold.windows} ({fold.gestureWindows} / {fold.otherWindows})</td>
+                  <td className="pr-3">{<AnimatedNumber value={fold.windows} />} ({<AnimatedNumber value={fold.gestureWindows} />} / {<AnimatedNumber value={fold.otherWindows} />})</td>
                   {fold.skipped ? <td className="pr-3 text-muted-foreground" colSpan={2}>Skipped: {fold.skipped}</td> : (
                     <>
                       <td className="pr-3">{fold.meanScore === undefined ? "–" : percent(fold.meanScore)}</td>
-                      <td className="pr-3">{fold.auc === null || fold.auc === undefined ? "– (one kind of window only)" : fold.auc.toFixed(2)}</td>
+                      <td className="pr-3">{fold.auc === null || fold.auc === undefined ? "– (one kind of window only)" : <AnimatedNumber value={fold.auc} digits={2} />}</td>
                     </>
                   )}
                 </tr>

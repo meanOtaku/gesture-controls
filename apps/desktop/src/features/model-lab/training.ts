@@ -51,7 +51,7 @@ export const CNN_MODEL = {
     "Reads the last second of the watch's accelerometer, gyroscope and pulse sensor, each scaled by the median and spread of its last 11 seconds so that a burst of motion does not hide the next pinch, and fires about 0.5 s after a gesture starts, about 0.4 s sooner than the trees. Three small convolutional networks look at the shape of that second and their votes are averaged.",
   /** What to know before training one. */
   trainingNote:
-    "Use it with Settings → Gestures → Still hand on: it learned the jolt of a gesture from a still hand, and fires on jolts in other movement. Training it needs PyTorch, which the trainer installs the first time (a large download).",
+    "Train it on your gesture sessions together with everyday-noise recordings, and leave Settings → Gestures → Still hand off: with that on it never sees the hand moving, so it cannot learn that movement is not the gesture. Training it needs PyTorch, which the trainer installs the first time (a large download).",
   stages: [
     { title: "Motion and pulse", detail: "Accelerometer and gyroscope, and green, red and infrared light, on one 50 Hz grid" },
     { title: "Scaled to its recent level", detail: "Each channel against the median and spread of its last 11 s, then squashed to 0-1" },

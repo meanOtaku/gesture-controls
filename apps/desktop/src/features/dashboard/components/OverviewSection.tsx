@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
@@ -72,7 +73,7 @@ export function OverviewSection({ connected, calibrated, watchConnected, gesture
           <SectionHeader
             title={gestureReady ? "You’re ready to take control" : watchConnected ? "The watch is ready" : "Get your devices ready"}
             description="Your next steps"
-            status={<Badge variant={gestureReady ? "default" : "secondary"}>{completedCount} / {steps.length} complete</Badge>}
+            status={<Badge variant={gestureReady ? "default" : "secondary"}><AnimatedNumber value={completedCount} /> / {<AnimatedNumber value={steps.length} />} complete</Badge>}
           />
         </CardHeader>
         <CardContent>

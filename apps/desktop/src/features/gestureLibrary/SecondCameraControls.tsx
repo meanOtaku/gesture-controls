@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../components/app/AnimatedNumber";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -48,7 +49,7 @@ export function SecondCameraControls({ primary, primaryState, secondary, seconda
       {on && (
         <>
           <ul className="flex flex-wrap items-center gap-2" aria-label="Second camera status">
-            <li><Badge variant={hands > 0 ? "default" : "secondary"}>{hands === 0 ? "No hand in view" : hands === 1 ? "1 hand" : `${hands} hands`}</Badge></li>
+            <li><Badge variant={hands > 0 ? "default" : "secondary"}>{hands === 0 ? "No hand in view" : hands === 1 ? "1 hand" : <><AnimatedNumber value={hands} />{" hands"}</>}</Badge></li>
             <li><Badge variant="outline">{speedLabel(secondaryState)}</Badge></li>
             <li><Badge variant="outline">First camera: {speedLabel(primaryState, "waiting")}</Badge></li>
           </ul>

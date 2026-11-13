@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useId, useState } from "react";
@@ -336,7 +337,7 @@ export function LabelModelsPanel({
                     {detected && <Badge>Detected</Badge>}
                     {score !== undefined && (
                       <span className="ml-auto flex items-center gap-2">
-                        <small className="text-muted-foreground">score {(score * 100).toFixed(0)}%</small>
+                        <small className="text-muted-foreground">score {<AnimatedNumber value={(score * 100)} digits={0} />}%</small>
                         <span className="block h-1.5 w-20 overflow-hidden rounded-full bg-muted" aria-hidden="true">
                           <span className="block h-full bg-primary" style={{ width: `${Math.round(Math.min(Math.max(score, 0), 1) * 100)}%` }} />
                         </span>
@@ -389,7 +390,7 @@ export function LabelModelsPanel({
                         aria-expanded={showArchived}
                         onClick={() => setArchivedOpen((open) => { const next = new Set(open); if (next.has(group.label)) next.delete(group.label); else next.add(group.label); return next; })}
                       >
-                        {showArchived ? "Hide" : "Show"} {archived.length} archived
+                        {showArchived ? "Hide" : "Show"} {<AnimatedNumber value={archived.length} />} archived
                       </Button>
                       {showArchived && (
                         <ul className="flex flex-col gap-2" aria-label={`${group.label} archived models`}>

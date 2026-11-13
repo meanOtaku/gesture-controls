@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import type { SwipeDirection } from "../../../shared/protocol/events";
@@ -28,7 +29,7 @@ export function SwipeSettings({ lastSwipe = null }: SwipeSettingsProps) {
         </div>
         <p className="field-hint" role="status" aria-live="polite">
           {lastSwipe
-            ? <>Last swipe recognised: <strong>{lastSwipe.direction}</strong> ({lastSwipe.count} so far)</>
+            ? <>Last swipe recognised: <strong>{lastSwipe.direction}</strong> ({<AnimatedNumber value={lastSwipe.count} />} so far)</>
             : "No swipe recognised yet (needs the watch connected with its acceleration and orientation sensors on)"}
         </p>
       </CardContent>

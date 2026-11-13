@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { PlusIcon } from "lucide-react";
 import { useId, useState, type FormEvent } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
@@ -209,10 +210,10 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
                       {row.standard && <Badge variant="outline" title="The app's own label, the same for every model: always “not the gesture” when training">Standard</Badge>}
                     </span>
                     <small className="text-xs text-muted-foreground">
-                      {recorderCountByLabel ? `${recorderRecordings} in Recorder recordings · ` : ""}
-                      {sessions} in the training data
-                      {gestureCountByLabel ? ` · ${gestures} gesture${gestures === 1 ? "" : "s"}` : ""}
-                      {labelModels.length > 0 ? ` · ${labelModels.length} model${labelModels.length === 1 ? "" : "s"}` : ""}
+                      {recorderCountByLabel ? <><AnimatedNumber value={recorderRecordings} />{" in Recorder recordings · "}</> : ""}
+                      {<AnimatedNumber value={sessions} />} in the training data
+                      {gestureCountByLabel ? <>{" · "}<AnimatedNumber value={gestures} />{" gesture"}{gestures === 1 ? "" : "s"}</> : ""}
+                      {labelModels.length > 0 ? <>{" · "}<AnimatedNumber value={labelModels.length} />{" model"}{labelModels.length === 1 ? "" : "s"}</> : ""}
                       {row.description ? ` · ${row.description}` : ""}
                     </small>
                     {usageFor && usageCount(usageFor(row.id)) > 0 && <UsageList usage={usageFor(row.id)} onOpenTab={onOpenTab} label={row.id} />}
@@ -256,7 +257,7 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
         )}
         {archived.length > 0 && (
           <Button type="button" variant="ghost" className="self-start" onClick={() => setShowArchived((value) => !value)}>
-            {showArchived ? "Hide archived labels" : `Show ${archived.length} archived label${archived.length === 1 ? "" : "s"}`}
+            {showArchived ? "Hide archived labels" : <>{"Show "}<AnimatedNumber value={archived.length} />{" archived label"}{archived.length === 1 ? "" : "s"}</>}
           </Button>
         )}
       </CardContent>

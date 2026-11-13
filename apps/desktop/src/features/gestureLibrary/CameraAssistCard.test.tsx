@@ -51,7 +51,7 @@ describe("CameraAssistCard", () => {
 
   it("cannot be switched while recording", () => {
     render(<CameraAssistCard selectedLabel="pinch" recording desktopAvailable />);
-    expect(screen.getByRole("checkbox", { name: "Let the camera mark the gesture" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("checkbox", { name: "Let the camera mark the gesture" })).toBeDisabled();
   });
 });
 

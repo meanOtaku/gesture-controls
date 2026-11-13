@@ -1,0 +1,122 @@
+[
+  {
+    "startMs": 22452.148437,
+    "endMs": 22916.017499,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 22916.0175,
+    "endMs": 23583.099365,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 23593.048096,
+    "endMs": 23993.438721,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 24694.030762,
+    "endMs": 25074.218749,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 25074.21875,
+    "endMs": 26246.0175,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 26246.017501,
+    "endMs": 26586.242676,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 27938.140869,
+    "endMs": 28328.643798,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 28328.643799,
+    "endMs": 29159.515381,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 29159.515382,
+    "endMs": 29600.067139,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 30621.398926,
+    "endMs": 31031.982421,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 31031.982422,
+    "endMs": 31793.365478,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 31793.365479,
+    "endMs": 32163.848877,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 33335.449219,
+    "endMs": 33735.992431,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 33735.992432,
+    "endMs": 34447.174072,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 34447.174073,
+    "endMs": 34827.728271,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 35874.705222,
+    "endMs": 36261.705221,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 36261.705222,
+    "endMs": 37934.173584,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 37934.173585,
+    "endMs": 38394.958496,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 39286.590576,
+    "endMs": 39667.205809,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 39667.20581,
+    "endMs": 40448.577881,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 40448.577882,
+    "endMs": 40838.95874,
+    "label": "pinch_out"
+  },
+  {
+    "startMs": 41860.473633,
+    "endMs": 42291.015624,
+    "label": "pinch_in"
+  },
+  {
+    "startMs": 42291.015625,
+    "endMs": 44036.705222,
+    "label": "pinch_hold"
+  },
+  {
+    "startMs": 44042.999267,
+    "endMs": 44474.705222,
+    "label": "pinch_out"
+  }
+]

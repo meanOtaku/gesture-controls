@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { AnimatedText } from "../../../components/app/AnimatedNumber";
 import { CheckCircle2, Circle } from "lucide-react";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
@@ -216,7 +217,7 @@ export function PinchSessionCard({ recording, watchConnected, desktopAvailable, 
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" disabled={recording || !ready || problem !== null} onClick={start}>Start pinch session</Button>
           <span className="hint">
-            {problem ?? (ready ? `About ${minutes(length)}.` : "Finish the checks above first.")}
+            {problem ?? (ready ? <AnimatedText>{`About ${minutes(length)}.`}</AnimatedText> : "Finish the checks above first.")}
             {recording && !problem ? " A recording is under way." : ""}
           </span>
         </div>

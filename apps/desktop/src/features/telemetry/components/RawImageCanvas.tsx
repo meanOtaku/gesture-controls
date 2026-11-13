@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Checkbox } from "../../../components/ui/checkbox";
 import type { RawImageNormalizationMode } from "../store/rawImageViewerStore";
@@ -740,7 +741,7 @@ export function RawImageCanvas({
           className="flex min-w-0 items-center gap-2 text-xs font-normal text-muted-foreground"
           title={`Show label ranges for ${title}`}
         >
-          <Checkbox checked={labelsVisible} onCheckedChange={setLabelsVisible} />
+          <Checkbox checked={labelsVisible} onCheckedChange={(checked) => setLabelsVisible(checked === true)} />
           <span className="truncate">{`Show label ranges for ${title}`}</span>
         </label>
       )}
@@ -870,7 +871,7 @@ function RawImageLegend({
             {isConstant
               ? "No change: every derivative value in this frame is zero (or unavailable), shown as neutral white."
               : extent
-                ? `Palette: diverging, zero-centred, ${scaleLabel}. Blue = decreasing, white ≈ no change, red = increasing. Scale: ±${extent.max} ${unitsLabel}.`
+                ? <>{"Palette: diverging, zero-centred, "}{scaleLabel}{". Blue = decreasing, white ≈ no change, red = increasing. Scale: ±"}<AnimatedNumber value={extent.max} />{" "}{unitsLabel}{"."}</>
                 : "No available derivative values in this frame to scale against."}
           </span>
         </div>
@@ -923,7 +924,7 @@ function RawImageLegend({
           {isConstant
             ? `Constant value: every recorded pixel renders at a fixed neutral gray, not scaled by magnitude (${normalizationMode}-scale normalization has no range to map).`
             : extent
-              ? `Palette: ${paletteName}. Data range (${normalizationMode}-scale): ${lowLabel} ≈ ${extent.min}, ${highLabel} ≈ ${extent.max}.`
+              ? <>{"Palette: "}{paletteName}{". Data range ("}{normalizationMode}{"-scale): "}{lowLabel}{" ≈ "}<AnimatedNumber value={extent.min} />{", "}{highLabel}{" ≈ "}<AnimatedNumber value={extent.max} />{"."}</>
               : "No valid numeric values to normalize against."}
         </span>
       </div>

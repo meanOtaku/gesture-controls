@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../components/app/AnimatedNumber";
 import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { SectionHeader } from "../../components/app/SectionHeader";
 import { Alert, AlertDescription } from "../../components/ui/alert";
@@ -134,7 +135,7 @@ export function GestureLibraryPage() {
                   </div>
                   <p className="field-hint">{describeRule(definition)}</p>
                   <small className="text-xs text-muted-foreground">
-                    Label: {labelName(definition.labelId)}. {on ? `Recognised ${state?.count ?? 0} time${state?.count === 1 ? "" : "s"} since the camera was turned on.` : ""}
+                    Label: {labelName(definition.labelId)}. {on ? <>{"Recognised "}<AnimatedNumber value={state?.count ?? 0} />{" time"}{state?.count === 1 ? "" : "s"}{" since the camera was turned on."}</> : ""}
                     {!definition.calibration ? " Not calibrated; thresholds were set by hand." : ""}
                   </small>
                   <div className="flex gap-2">

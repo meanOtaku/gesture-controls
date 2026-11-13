@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
@@ -108,9 +109,9 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
           <>
             <div className="flex flex-wrap items-center gap-2" role="status" aria-label="Model summary">
               <Badge variant="outline">{description?.name}</Badge>
-              <Badge variant="outline">{inspection.inputCount.toLocaleString("en-US")} {readsMotion ? "pulse and motion" : "pulse"} inputs · {isCnn ? `${CNN_MODEL.networks} networks` : `${inspection.trees} trees`}{readsMotion ? " · fires on the peak" : ""}</Badge>
-              <Badge variant="outline">Trained on {inspection.examples.trainStarts} starts among {inspection.examples.train.toLocaleString("en-US")} moments</Badge>
-              {typeof auc === "number" && <Badge variant="outline">Held-out ROC AUC {auc.toFixed(2)}</Badge>}
+              <Badge variant="outline">{inspection.inputCount.toLocaleString("en-US")} {readsMotion ? "pulse and motion" : "pulse"} inputs · {isCnn ? <><AnimatedNumber value={CNN_MODEL.networks} />{" networks"}</> : <><AnimatedNumber value={inspection.trees} />{" trees"}</>}{readsMotion ? " · fires on the peak" : ""}</Badge>
+              <Badge variant="outline">Trained on {<AnimatedNumber value={inspection.examples.trainStarts} />} starts among {inspection.examples.train.toLocaleString("en-US")} moments</Badge>
+              {typeof auc === "number" && <Badge variant="outline">Held-out ROC AUC {<AnimatedNumber value={auc} digits={2} />}</Badge>}
               {monitorOnly && <Badge variant="secondary">Monitor only</Badge>}
             </div>
             {sameLabel.length > 0 && (

@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { describeInput, percent, type Inspection } from "../inspection";
 
 /**
@@ -11,7 +12,7 @@ export function InspectInputs({ inspection }: { inspection: Inspection }) {
     <section aria-label="Inputs" className="flex flex-col gap-2">
       <h3 className="text-base font-semibold">What it leans on</h3>
       <p className="field-hint">
-        The model reads {inspection.inputCount.toLocaleString("en-US")} inputs, {inspection.sources?.includes("watchOrientation") ? "from the pulse sensor and the motion sensors" : "all from the pulse sensor"}, and {inspection.trees} trees vote on each moment. These are the {inspection.importance.length} inputs whose splits do the most to tell a gesture&apos;s start from the rest, as a share of everything the trees learn.
+        The model reads {inspection.inputCount.toLocaleString("en-US")} inputs, {inspection.sources?.includes("watchOrientation") ? "from the pulse sensor and the motion sensors" : "all from the pulse sensor"}, and {<AnimatedNumber value={inspection.trees} />} trees vote on each moment. These are the {<AnimatedNumber value={inspection.importance.length} />} inputs whose splits do the most to tell a gesture&apos;s start from the rest, as a share of everything the trees learn.
       </p>
       <div className="max-w-full overflow-auto">
         <table className="w-full text-sm" aria-label="Most important inputs">
@@ -24,7 +25,7 @@ export function InspectInputs({ inspection }: { inspection: Inspection }) {
                 <td className="pr-3">
                   <span className="inline-flex items-center gap-2">
                     <span aria-hidden="true" className="inline-block h-2 rounded-sm" style={{ width: `${Math.max(2, (entry.importance / biggest) * 80)}px`, background: "#ff6f91" }} />
-                    {(entry.importance * 100).toFixed(1)}%
+                    {<AnimatedNumber value={(entry.importance * 100)} digits={1} />}%
                   </span>
                 </td>
               </tr>
@@ -94,7 +95,7 @@ export function DeclaredInputs({ names }: { names: string[] }) {
   if (names.length === 0) return null;
   return (
     <section aria-label="Declared inputs" className="flex flex-col gap-2">
-      <h3 className="text-base font-semibold">Inputs ({names.length})</h3>
+      <h3 className="text-base font-semibold">Inputs ({<AnimatedNumber value={names.length} />})</h3>
       <p className="field-hint">What its manifest says it reads, for example {describeInput(names[0])}.</p>
     </section>
   );

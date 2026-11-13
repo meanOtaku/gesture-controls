@@ -58,7 +58,7 @@ describe("TrainPanel", () => {
     expect(screen.getByLabelText("Role of walking")).toBeInTheDocument();
     expect(await screen.findByText(/train on 2 recordings \(s1.csv, i1.csv\) and test on 2/)).toBeInTheDocument();
     expect(calls("plan_label_training").at(-1)?.[1]).toEqual({
-      request: { label: "snap", datasetIds: ["s1", "s2", "i1", "i2"], negatives: ["idle", "walking"], excludes: [] },
+      request: { label: "snap", datasetIds: ["s1", "s2", "i1", "i2"], negatives: ["idle", "walking"], excludes: [], method: "ppg-imu-cnn" },
     });
   });
 
@@ -93,10 +93,11 @@ describe("TrainPanel", () => {
     expect(calls("plan_label_training")[0][1]).toEqual(expect.objectContaining({ request: expect.objectContaining({ datasetIds: ["s1", "i1"] }) }));
   });
 
-  it("sends the roles and the recordings, and nothing about the model when it is the default trees", async () => {
+  it("sends the roles and the recordings, and nothing about the model when it is the trees", async () => {
     setup();
     choose("snap");
     await screen.findByText(/It will train on/);
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-onset-trees" } });
     expect(screen.getByRole("region", { name: "The model" })).toHaveTextContent("PPG + IMU pinch-start model");
     fireEvent.change(screen.getByLabelText("Role of walking"), { target: { value: "exclude" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "Use i2.csv" }));
@@ -144,13 +145,13 @@ describe("TrainPanel", () => {
     expect(screen.getByRole("button", { name: "Train model" })).toBeInTheDocument();
   });
 
-  it("trains the CNN when it is chosen, and describes it", async () => {
+  it("trains the CNN by default, and describes it", async () => {
     setup();
     choose("snap");
     await screen.findByText(/It will train on/);
-    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn" } });
+    expect(screen.getByLabelText("Model")).toHaveValue("ppg-imu-cnn");
     expect(screen.getByRole("region", { name: "The model" })).toHaveTextContent("CNN pinch-start model");
-    expect(screen.getByRole("region", { name: "The model" })).toHaveTextContent(/Still hand on/);
+    expect(screen.getByRole("region", { name: "The model" })).toHaveTextContent(/leave Settings → Gestures → Still hand off/);
     await waitFor(() => expect(calls("plan_label_training").at(-1)?.[1].request.method).toBe("ppg-imu-cnn"));
     await waitFor(() => expect(screen.getByRole("button", { name: "Train model" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Train model" }));
@@ -234,6 +235,7 @@ describe("TrainPanel training plan", () => {
   it("offers stages only for the CNN, starts from the label's recordings then the rest, and sends the plan", async () => {
     setup({ plan: stagedPlan });
     choose("snap");
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-onset-trees" } });
     expect(screen.queryByRole("checkbox", { name: "Train in stages" })).toBeNull();
     fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn" } });
     fireEvent.click(await screen.findByRole("checkbox", { name: "Train in stages" }));

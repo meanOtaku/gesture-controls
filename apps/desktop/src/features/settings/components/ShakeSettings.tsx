@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { SettingsNumberField } from "../settingsForm";
@@ -22,7 +23,7 @@ export function ShakeSettings({ detections = 0 }: { detections?: number }) {
           <SettingsNumberField name="shakeStrokes" />
         </div>
         <p className="field-hint" role="status" aria-live="polite">
-          Shakes recognised since you opened the app: <strong>{detections}</strong>
+          Shakes recognised since you opened the app: <strong>{<AnimatedNumber value={detections} />}</strong>
           {detections === 0 && " (needs the watch connected with its acceleration sensor on)"}
         </p>
       </CardContent>

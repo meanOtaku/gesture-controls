@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { SectionHeader } from "../../components/app/SectionHeader";
@@ -305,7 +306,7 @@ export function DronePage() {
     <div className="flex items-center gap-2" role="group" aria-label={`${label} trim`}>
       <span style={{ minWidth: "5.5rem" }}>{label}</span>
       <Button variant="outline" aria-label={`Trim ${label.toLowerCase()} ${lower}`} onClick={() => nudgeTrim(axis, -1)}>−</Button>
-      <span aria-live="polite" style={{ minWidth: "2.5rem", textAlign: "center" }}>{trim[axis] > 0 ? `+${trim[axis]}` : trim[axis]}</span>
+      <span aria-live="polite" style={{ minWidth: "2.5rem", textAlign: "center" }}>{trim[axis] > 0 ? <>{"+"}<AnimatedNumber value={trim[axis]} /></> : <AnimatedNumber value={trim[axis]} />}</span>
       <Button variant="outline" aria-label={`Trim ${label.toLowerCase()} ${higher}`} onClick={() => nudgeTrim(axis, 1)}>+</Button>
     </div>
   );
@@ -360,17 +361,17 @@ export function DronePage() {
             : <Button disabled={!state} onClick={() => run("drone_connect")}>Connect</Button>}
           {state && (
             <p className="subtitle">
-              {state.firmware && <>Firmware {state.firmware}. </>}Video {frameRate ?? "–"} frames a second, total {state.videoFrames}, skipped {state.videoSkipped}, damaged {state.videoDamaged}, restarts {state.videoRestarts}, repeats {state.videoRepeats}, unknown packets {state.unknownPackets}, commands sent {state.framesSent}, send errors {state.sendErrors}, watch {state.watchStreaming ? "streaming" : "not streaming"}
+              {state.firmware && <>Firmware {state.firmware}. </>}Video {frameRate ?? "–"} frames a second, total {<AnimatedNumber value={state.videoFrames} />}, skipped {<AnimatedNumber value={state.videoSkipped} />}, damaged {<AnimatedNumber value={state.videoDamaged} />}, restarts {<AnimatedNumber value={state.videoRestarts} />}, repeats {<AnimatedNumber value={state.videoRepeats} />}, unknown packets {<AnimatedNumber value={state.unknownPackets} />}, commands sent {<AnimatedNumber value={state.framesSent} />}, send errors {<AnimatedNumber value={state.sendErrors} />}, watch {state.watchStreaming ? "streaming" : "not streaming"}
             </p>
           )}
           {state?.report && (
             <p className="subtitle" role="status" aria-label="Drone report">
-              The drone reports fly state {state.report.flyState}, battery {state.report.battery} (raw, scale not yet known), speed {state.report.speed}{state.report.headless ? ", headless on" : ""}{state.report.light ? ", light on" : ""}. {state.statusMessages} {state.statusMessages === 1 ? "report" : "reports"} so far.
+              The drone reports fly state {<AnimatedNumber value={state.report.flyState} />}, battery {<AnimatedNumber value={state.report.battery} />} (raw, scale not yet known), speed {<AnimatedNumber value={state.report.speed} />}{state.report.headless ? ", headless on" : ""}{state.report.light ? ", light on" : ""}. {<AnimatedNumber value={state.statusMessages} />} {state.statusMessages === 1 ? "report" : "reports"} so far.
             </p>
           )}
           {state && state.unknownPackets > 0 && (
             <p className="subtitle" role="status">
-              The drone sent {state.unknownPackets} {state.unknownPackets === 1 ? "packet" : "packets"} the app does not understand, possibly status or sensor data.
+              The drone sent {<AnimatedNumber value={state.unknownPackets} />} {state.unknownPackets === 1 ? "packet" : "packets"} the app does not understand, possibly status or sensor data.
               {state.unknownPacketsFile ? <> The first 200 are saved in {state.unknownPacketsFile}.</> : null}
             </p>
           )}
@@ -394,8 +395,8 @@ export function DronePage() {
             <Button variant="outline" disabled={!connected} onClick={() => run("drone_reset_drift")}>Set centre</Button>
             {state && (
               <p className="subtitle">
-                Drift {state.driftX.toFixed(1)}, {state.driftY.toFixed(1)} px
-                {flow && `, zoom ${(flow.zoom * 100).toFixed(1)}%`}
+                Drift {<AnimatedNumber value={state.driftX} digits={1} />}, {<AnimatedNumber value={state.driftY} digits={1} />} px
+                {flow && <>{", zoom "}<AnimatedNumber value={(flow.zoom * 100)} digits={1} />{"%"}</>}
               </p>
             )}
           </div>

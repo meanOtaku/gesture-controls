@@ -59,9 +59,9 @@ export function ApplySettingsFooter({
             Discard changes
           </Button>
           <AlertDialog>
-            <AlertDialogTrigger
-              render={<Button type="button" variant="ghost" disabled={busy}>{resetPending ? "Resetting…" : "Reset to defaults"}</Button>}
-            />
+            <AlertDialogTrigger asChild>
+              <Button type="button" variant="ghost" disabled={busy}>{resetPending ? "Resetting…" : "Reset to defaults"}</Button>
+            </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Reset all settings to defaults?</AlertDialogTitle>

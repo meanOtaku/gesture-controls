@@ -54,11 +54,11 @@ export function WellnessCapturePanel({
       <Collapsible>
         <CardHeader>
           <div className="flex w-full items-center justify-between gap-2">
-            <CollapsibleTrigger
-              render={<Button type="button" variant="ghost" className="justify-between px-0 hover:bg-transparent" />}
-            >
-              <span>Wellness signals &amp; on-demand captures</span>
-              <ChevronDownIcon aria-hidden="true" />
+            <CollapsibleTrigger asChild>
+              <Button type="button" variant="ghost" className="justify-between px-0 hover:bg-transparent">
+                <span>Wellness signals &amp; on-demand captures</span>
+                <ChevronDownIcon aria-hidden="true" />
+              </Button>
             </CollapsibleTrigger>
             <HelpTooltip label="About wellness and on-demand measurements">
               Additional Watch sensors depend on device support and permissions. On-demand measurements

@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import type { TapKind } from "../../../shared/protocol/events";
@@ -28,7 +29,7 @@ export function TapSettings({ lastTap = null }: TapSettingsProps) {
         </div>
         <p className="field-hint" role="status" aria-live="polite">
           {lastTap
-            ? <>Last tap recognised: <strong>{lastTap.kind === "double" ? "double tap" : "tap"}</strong> ({lastTap.count} so far)</>
+            ? <>Last tap recognised: <strong>{lastTap.kind === "double" ? "double tap" : "tap"}</strong> ({<AnimatedNumber value={lastTap.count} />} so far)</>
             : "No tap recognised yet (needs the watch connected with its acceleration and orientation sensors on)"}
         </p>
       </CardContent>

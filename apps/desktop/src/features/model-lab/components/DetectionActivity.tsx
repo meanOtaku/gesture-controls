@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { ChevronDownIcon, ChevronRightIcon, Trash2Icon } from "lucide-react";
@@ -6,6 +7,7 @@ import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
+import { LiveBeam } from "../../../components/app/LiveBeam";
 import { CameraQuickControl } from "../../camera/components/CameraQuickControl";
 import { useLabelDetections } from "../../gestures/useLabelDetections";
 import { MissButtons } from "../../misses/MissMarker";
@@ -131,7 +133,8 @@ export function DetectionActivity({ desktopAvailable }: { desktopAvailable: bool
         />
       </CardHeader>
       <CardContent id={bodyId} hidden={!open} className="lab-monitor">
-        <div className="lab-monitor-camera" role="group" aria-label="Camera check">
+        <div className="lab-monitor-camera relative overflow-hidden rounded-md p-2" role="group" aria-label="Camera check">
+          <LiveBeam active={detections.detected.size > 0} />
           <CameraQuickControl compact initiallyShown />
           <p className="hint">
             Turn the camera on to watch your hand beside what the models say. When they disagree with what you see, mark it:
@@ -154,7 +157,7 @@ export function DetectionActivity({ desktopAvailable }: { desktopAvailable: bool
               <li key={entry.id} className="flex items-center gap-2 text-sm">
                 <Badge variant={TONE[entry.tone].variant}>{TONE[entry.tone].label}</Badge>
                 <span>{entry.text}</span>
-                {entry.count > 1 && <small className="text-muted-foreground">×{entry.count}</small>}
+                {entry.count > 1 && <small className="text-muted-foreground">×{<AnimatedNumber value={entry.count} />}</small>}
               </li>
             ))}
           </ul>

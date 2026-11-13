@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import type { CSSProperties } from "react";
 
 interface VolumeKnobProps {
@@ -32,7 +33,7 @@ export function VolumeKnob({
         <circle className="volume-knob__progress" cx="60" cy="60" r="52" pathLength="100" style={style} />
       </svg>
       <div className="volume-knob__value">
-        <strong>{Math.round(boundedVolume)}%</strong>
+        <strong>{<AnimatedNumber value={Math.round(boundedVolume)} />}%</strong>
         <span>Volume</span>
         <small>{grabbed ? "Grabbed · Turn wrist" : "Ready"}</small>
       </div>

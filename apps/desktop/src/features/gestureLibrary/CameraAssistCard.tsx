@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../components/app/AnimatedNumber";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { SectionHeader } from "../../components/app/SectionHeader";
 import { Badge } from "../../components/ui/badge";
@@ -125,7 +126,7 @@ export function CameraAssistCard({
         )}
         {enabled && blocker && <p className="hint" role="status">{blocker} Until then, recordings are made as usual with no camera marks.</p>}
         {enabled && !blocker && recording && slow && slowest && (
-          <p className="hint" role="status">The camera is running slowly ({slowest.fps.toFixed(0)} frames a second{slowest.detectMs > 0 ? `, ${slowest.detectMs.toFixed(0)} ms for each hand-tracking pass` : ""}), so the start and end of marks may be a little off. Close other apps using the camera or the processor, or turn the second camera off.</p>
+          <p className="hint" role="status">The camera is running slowly ({<AnimatedNumber value={slowest.fps} digits={0} />} frames a second{slowest.detectMs > 0 ? <>{", "}<AnimatedNumber value={slowest.detectMs} digits={0} />{" ms for each hand-tracking pass"}</> : ""}), so the start and end of marks may be a little off. Close other apps using the camera or the processor, or turn the second camera off.</p>
         )}
         {enabled && !blocker && edges && (
           <div className="flex flex-wrap items-center gap-3" role="status">

@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { useEffect, useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Badge } from "../../../components/ui/badge";
@@ -96,7 +97,7 @@ export function LinkHealthPanel({ diagnostics, nowUnixMs, onCopy }: LinkHealthPa
         )}
         {events.length > VISIBLE_EVENTS && (
           <Button type="button" variant="ghost" size="sm" onClick={() => setShowAll((value) => !value)}>
-            {showAll ? "Show fewer" : `Show all ${events.length}`}
+            {showAll ? "Show fewer" : <>{"Show all "}<AnimatedNumber value={events.length} /></>}
           </Button>
         )}
       </CardContent>

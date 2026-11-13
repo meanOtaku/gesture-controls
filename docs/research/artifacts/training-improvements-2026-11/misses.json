@@ -1,0 +1,962 @@
+[
+ {
+  "recording": "pinch_hold-2026-11-03T01-08-34.844Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 514.522483,
+  "peak": 0.9999994782983498,
+  "turningBefore": 0.016538832369740863
+ },
+ {
+  "recording": "pinch_hold-2026-11-03T01-08-34.844Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 348.606839,
+  "peak": 0.9997981749390431,
+  "turningBefore": 0.017394479494651557
+ },
+ {
+  "recording": "pinch_hold-2026-11-03T01-08-34.844Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 433.684656,
+  "peak": 0.9999994007769764,
+  "turningBefore": 0.016834824210977328
+ },
+ {
+  "recording": "pinch_hold-2026-11-03T01-08-34.844Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 390.009242,
+  "peak": 0.9999993085736234,
+  "turningBefore": 0.010798022716543879
+ },
+ {
+  "recording": "pinch_hold-2026-11-03T01-08-34.844Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 321.57553,
+  "peak": 0.9999589250235701,
+  "turningBefore": 0.01750302076745127
+ },
+ {
+  "recording": "pinch_hold-2026-11-03T01-08-34.844Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 455.515524,
+  "peak": 0.9999985922871636,
+  "turningBefore": 0.0123771106679897
+ },
+ {
+  "recording": "pinch_hold-2026-11-03T01-08-34.844Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 520.974752,
+  "peak": 0.9999945001179752,
+  "turningBefore": 0.01868446757282355
+ },
+ {
+  "recording": "pinch_hold-2026-11-03T01-08-34.844Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 383.000064,
+  "peak": 0.9999869853558329,
+  "turningBefore": 0.01684726029959789
+ },
+ {
+  "recording": "pinch_hold-2026-11-03T01-08-34.844Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 393.199361,
+  "peak": 0.9999755192947726,
+  "turningBefore": 0.013518056483022513
+ },
+ {
+  "recording": "pinch_hold-2026-11-03T01-08-34.844Z",
+  "unseen": false,
+  "kind": "early",
+  "delayMs": 270.206985,
+  "peak": 0.9999963087257858,
+  "turningBefore": 0.011593588347991748
+ },
+ {
+  "recording": "pinch_hold-2026-11-03T01-08-34.844Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 351.000064,
+  "peak": 0.9999985442229837,
+  "turningBefore": 0.013554351104739326
+ },
+ {
+  "recording": "pinch_hold-2026-11-03T01-08-34.844Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 347.598688,
+  "peak": 0.9999956639967363,
+  "turningBefore": 0.017335087129360514
+ },
+ {
+  "recording": "pinch_hold-2026-11-03T01-08-34.844Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 454.125916,
+  "peak": 0.999996878573556,
+  "turningBefore": 0.012526199761669753
+ },
+ {
+  "recording": "pinch_hold-2026-11-03T01-08-34.844Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 425.8266,
+  "peak": 0.9999610192701648,
+  "turningBefore": 0.02188430329672696
+ },
+ {
+  "recording": "pinch_hold-2026-11-03T01-08-34.844Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 471.457215,
+  "peak": 0.999987321030131,
+  "turningBefore": 0.01242127054121185
+ },
+ {
+  "recording": "pinch_hold-2026-11-03T01-08-34.844Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 351.985047,
+  "peak": 0.9999964669981027,
+  "turningBefore": 0.015235550493794874
+ },
+ {
+  "recording": "pinch_hold-2026-11-03T01-08-34.844Z",
+  "unseen": false,
+  "kind": "silent",
+  "delayMs": null,
+  "peak": 0.9999921005134125,
+  "turningBefore": 0.013594687387238964
+ },
+ {
+  "recording": "pinch_hold-2026-11-03T01-08-34.844Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 424.206841,
+  "peak": 0.9999987028358049,
+  "turningBefore": 0.013660460287002407
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 341.385895,
+  "peak": 0.9988320399427199,
+  "turningBefore": 0.02465417936215673
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 518.07883,
+  "peak": 0.9999872137025722,
+  "turningBefore": 0.025366445421921797
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 345.893039,
+  "peak": 0.9999221181495018,
+  "turningBefore": 0.01325697046843732
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 373.091717,
+  "peak": 0.9999214897295917,
+  "turningBefore": 0.010749637562466257
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 319.407095,
+  "peak": 0.999995983399845,
+  "turningBefore": 0.01698784097231282
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 425.170245,
+  "peak": 0.9999967880289621,
+  "turningBefore": 0.014665881169125422
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 355.021308,
+  "peak": 0.9999770689431987,
+  "turningBefore": 0.01697326437705603
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 344.722022,
+  "peak": 0.9999996762976137,
+  "turningBefore": 0.011104519736070803
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "early",
+  "delayMs": 286.525372,
+  "peak": 0.9999904276536821,
+  "turningBefore": 0.013937407072059696
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "late",
+  "delayMs": 4403.661335,
+  "peak": 0.00016608906969020146,
+  "turningBefore": 0.04842989266326132
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 399.022664,
+  "peak": 0.9999968408585459,
+  "turningBefore": 0.013772560954537544
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "early",
+  "delayMs": 241.710217,
+  "peak": 0.9997598601623561,
+  "turningBefore": 0.014789383821813672
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 344.0,
+  "peak": 0.9999974046152221,
+  "turningBefore": 0.02192402517573352
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 571.000064,
+  "peak": 0.9999938463765065,
+  "turningBefore": 0.0103064390552883
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 540.680661,
+  "peak": 0.9998324026966935,
+  "turningBefore": 0.029408122101857333
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 451.934907,
+  "peak": 0.9999844590235782,
+  "turningBefore": 0.012783729056782493
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 377.693031,
+  "peak": 0.9999994821751242,
+  "turningBefore": 0.012023295841961467
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 591.261116,
+  "peak": 0.9999972910155867,
+  "turningBefore": 0.014185711271870528
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 503.105856,
+  "peak": 0.9999704833278665,
+  "turningBefore": 0.010223564999272194
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 556.0,
+  "peak": 0.9999905757029343,
+  "turningBefore": 0.009404547702963806
+ },
+ {
+  "recording": "pinch_hold-2026-11-04T04-50-33.518Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 308.0,
+  "peak": 0.9999950935972685,
+  "turningBefore": 0.010587547717131609
+ },
+ {
+  "recording": "pinch_hold-2026-11-06T08-10-50.079Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 374.47797,
+  "peak": 0.9998418412017762,
+  "turningBefore": 0.023456048658417737
+ },
+ {
+  "recording": "pinch_hold-2026-11-06T08-10-50.079Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 520.588822,
+  "peak": 0.99881687778477,
+  "turningBefore": 0.013145608276546457
+ },
+ {
+  "recording": "pinch_hold-2026-11-06T08-10-50.079Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 513.030408,
+  "peak": 0.9996716687410713,
+  "turningBefore": 0.010989433358763033
+ },
+ {
+  "recording": "pinch_hold-2026-11-06T08-10-50.079Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 326.420872,
+  "peak": 0.9998685893999045,
+  "turningBefore": 0.008965308251892585
+ },
+ {
+  "recording": "pinch_hold-2026-11-06T08-10-50.079Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 380.0,
+  "peak": 0.999889415664838,
+  "turningBefore": 0.013736999867993082
+ },
+ {
+  "recording": "pinch_hold-2026-11-06T08-10-50.079Z",
+  "unseen": false,
+  "kind": "silent",
+  "delayMs": null,
+  "peak": 0.800862750699978,
+  "turningBefore": 0.009152433424838657
+ },
+ {
+  "recording": "pinch_hold-2026-11-06T08-10-50.079Z",
+  "unseen": false,
+  "kind": "silent",
+  "delayMs": null,
+  "peak": 0.8630669786555595,
+  "turningBefore": 0.009112188305707926
+ },
+ {
+  "recording": "pinch_hold-2026-11-06T08-10-50.079Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 597.647756,
+  "peak": 0.9992944627921378,
+  "turningBefore": 0.01079072663456554
+ },
+ {
+  "recording": "pinch_hold-2026-11-06T08-10-50.079Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 506.963234,
+  "peak": 0.9999872046676609,
+  "turningBefore": 0.00966774803600835
+ },
+ {
+  "recording": "pinch_hold-2026-11-06T08-10-50.079Z",
+  "unseen": false,
+  "kind": "silent",
+  "delayMs": null,
+  "peak": 0.7675586207450088,
+  "turningBefore": 0.023651891998300374
+ },
+ {
+  "recording": "pinch_hold-2026-11-06T08-10-50.079Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 462.675817,
+  "peak": 0.999806953036734,
+  "turningBefore": 0.009828179613865515
+ },
+ {
+  "recording": "pinch_hold-2026-11-06T08-10-50.079Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 302.409178,
+  "peak": 0.9999749234567723,
+  "turningBefore": 0.012164083586035357
+ },
+ {
+  "recording": "pinch_hold-2026-11-06T08-10-50.079Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 451.546693,
+  "peak": 0.999870224970507,
+  "turningBefore": 0.01271017584088469
+ },
+ {
+  "recording": "pinch_hold-2026-11-06T08-10-50.079Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 755.127443,
+  "peak": 0.9977254764917541,
+  "turningBefore": 0.010082090046429201
+ },
+ {
+  "recording": "pinch_hold-2026-11-06T08-10-50.079Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 342.759703,
+  "peak": 0.9997623914540767,
+  "turningBefore": 0.010482925753146377
+ },
+ {
+  "recording": "pinch_hold-2026-11-06T08-10-50.079Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 507.594683,
+  "peak": 0.9992269822507551,
+  "turningBefore": 0.010512577454396049
+ },
+ {
+  "recording": "pinch_hold-2026-11-06T08-10-50.079Z",
+  "unseen": false,
+  "kind": "silent",
+  "delayMs": null,
+  "peak": 0.9857670150391011,
+  "turningBefore": 0.009247415016663494
+ },
+ {
+  "recording": "pinch_hold-2026-11-06T08-10-50.079Z",
+  "unseen": false,
+  "kind": "caught",
+  "delayMs": 729.000192,
+  "peak": 0.9999384959746388,
+  "turningBefore": 0.008939754690602332
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 423.622294,
+  "peak": 0.9999841336703522,
+  "turningBefore": 0.021942320821558375
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 334.553138,
+  "peak": 0.999995672638392,
+  "turningBefore": 0.027688660231903375
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "late",
+  "delayMs": 5867.233892,
+  "peak": 0.02131204305556714,
+  "turningBefore": 2.4330471926138415
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 328.720708,
+  "peak": 0.9994003133816435,
+  "turningBefore": 0.03080356644123169
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 545.662706,
+  "peak": 0.999724137198521,
+  "turningBefore": 0.03372473951102188
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 778.161324,
+  "peak": 0.9929646217190872,
+  "turningBefore": 0.022610682167101565
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 448.999936,
+  "peak": 0.9997310858092648,
+  "turningBefore": 0.0240543884991076
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "silent",
+  "delayMs": null,
+  "peak": 0.00013465581952001773,
+  "turningBefore": 3.000462845055838
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "silent",
+  "delayMs": null,
+  "peak": 0.3880366585011312,
+  "turningBefore": 2.2989803238293534
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "silent",
+  "delayMs": null,
+  "peak": 0.7271941410767672,
+  "turningBefore": 1.579556809531807
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 520.399835,
+  "peak": 0.9941052261615585,
+  "turningBefore": 0.03028666462512287
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 668.330979,
+  "peak": 0.9999518411281576,
+  "turningBefore": 0.033998523450247085
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "silent",
+  "delayMs": null,
+  "peak": 0.9821319117373012,
+  "turningBefore": 0.028344046710416352
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 399.58363,
+  "peak": 0.9983834072854455,
+  "turningBefore": 0.020164180016616746
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "late",
+  "delayMs": 2849.999872,
+  "peak": 6.92648773034388e-05,
+  "turningBefore": 1.526564131651607
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 580.722745,
+  "peak": 0.9999696720622057,
+  "turningBefore": 0.8260725776854816
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 507.053489,
+  "peak": 0.999999765845549,
+  "turningBefore": 0.01715567607960654
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 448.144437,
+  "peak": 0.999998771558551,
+  "turningBefore": 0.020565092434343908
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 317.706937,
+  "peak": 0.9998574195410955,
+  "turningBefore": 0.0188190660935864
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 397.072138,
+  "peak": 0.9999999225018018,
+  "turningBefore": 0.016938538974188812
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-48-35.709Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 484.846994,
+  "peak": 0.9999945745061591,
+  "turningBefore": 0.016896641123285105
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 552.0,
+  "peak": 0.9999973750351551,
+  "turningBefore": 0.01383174822770807
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 441.537539,
+  "peak": 0.9999992352240331,
+  "turningBefore": 0.053853098001800735
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "early",
+  "delayMs": 250.25484,
+  "peak": 0.9999963001548587,
+  "turningBefore": 0.0538196602182832
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 413.621027,
+  "peak": 0.9999918080425717,
+  "turningBefore": 0.048925746005046795
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 699.367108,
+  "peak": 0.9999940446378849,
+  "turningBefore": 0.02319623230324787
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "early",
+  "delayMs": 291.566049,
+  "peak": 0.9999783390852599,
+  "turningBefore": 0.46728225895757985
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 337.752603,
+  "peak": 0.9999561698282021,
+  "turningBefore": 0.015108000370347294
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 460.912983,
+  "peak": 0.9999979866270633,
+  "turningBefore": 0.01126812613842228
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 451.468647,
+  "peak": 0.9999998952098115,
+  "turningBefore": 0.011778121798778334
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 471.613243,
+  "peak": 0.9999960393790892,
+  "turningBefore": 0.013216170838554062
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 551.176121,
+  "peak": 0.9999964969906188,
+  "turningBefore": 0.010735673391510242
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 551.409961,
+  "peak": 0.9999998055432017,
+  "turningBefore": 0.012210549738283165
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "silent",
+  "delayMs": null,
+  "peak": 0.9696600019098742,
+  "turningBefore": 2.205637099070043
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "late",
+  "delayMs": 3316.769827,
+  "peak": 1.476640478076002e-07,
+  "turningBefore": 1.1696675185300884
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 412.873216,
+  "peak": 0.9999617267152966,
+  "turningBefore": 0.1799223693741387
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "late",
+  "delayMs": 3737.017521,
+  "peak": 0.6418449470495338,
+  "turningBefore": 0.5674752305596557
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "early",
+  "delayMs": 261.675724,
+  "peak": 0.9998873497248111,
+  "turningBefore": 0.036739806512739975
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 439.482301,
+  "peak": 0.9995634543325895,
+  "turningBefore": 0.01575232820482623
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 490.389366,
+  "peak": 0.9999961681319952,
+  "turningBefore": 0.24559470469810757
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 501.542814,
+  "peak": 0.9985863449869091,
+  "turningBefore": 0.02003487507149461
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-51-14.408Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 498.659074,
+  "peak": 0.9994174287382819,
+  "turningBefore": 0.6711160359121287
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "early",
+  "delayMs": 152.999936,
+  "peak": 0.9999935373114804,
+  "turningBefore": 0.03264250312322103
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 309.287078,
+  "peak": 0.9999753217941825,
+  "turningBefore": 0.037502374900477635
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "early",
+  "delayMs": 262.596486,
+  "peak": 0.9969323404535769,
+  "turningBefore": 0.058589703939311774
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "silent",
+  "delayMs": null,
+  "peak": 0.09233526769937839,
+  "turningBefore": 2.039463185303339
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 439.22759,
+  "peak": 0.9999741293555027,
+  "turningBefore": 0.025772723834128566
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 324.939678,
+  "peak": 0.9999730596527615,
+  "turningBefore": 0.19536735821658902
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 400.999936,
+  "peak": 0.9996821268971438,
+  "turningBefore": 0.4765126258968399
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 358.702973,
+  "peak": 0.9999274595136723,
+  "turningBefore": 0.47820011285865704
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 608.999936,
+  "peak": 0.9998992994249329,
+  "turningBefore": 0.4071484996420801
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 581.106876,
+  "peak": 0.9999835469722728,
+  "turningBefore": 0.027065504545631267
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 548.0,
+  "peak": 0.9999921453816857,
+  "turningBefore": 0.2092392360254378
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 514.097948,
+  "peak": 0.9999570176020559,
+  "turningBefore": 0.04817522661970842
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 645.160205,
+  "peak": 0.9999961778024961,
+  "turningBefore": 0.06600044252990847
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "late",
+  "delayMs": 2816.374474,
+  "peak": 0.04068919173721277,
+  "turningBefore": 1.829339055975947
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 517.000192,
+  "peak": 0.9995442577621559,
+  "turningBefore": 0.6589875067201676
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 439.543228,
+  "peak": 0.9999982275831565,
+  "turningBefore": 0.017030395305084454
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 497.803674,
+  "peak": 0.9999980595347658,
+  "turningBefore": 0.01901493809982998
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 595.000064,
+  "peak": 0.9999224926911158,
+  "turningBefore": 0.07519062397311171
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 548.999936,
+  "peak": 0.9999721869720868,
+  "turningBefore": 0.3530290612906413
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 643.737852,
+  "peak": 0.999792890395466,
+  "turningBefore": 0.2646334794663051
+ },
+ {
+  "recording": "pinch_hold-2026-11-09T13-54-14.793Z",
+  "unseen": true,
+  "kind": "caught",
+  "delayMs": 432.391853,
+  "peak": 0.9999629569038845,
+  "turningBefore": 0.022640517990083934
+ }
+]

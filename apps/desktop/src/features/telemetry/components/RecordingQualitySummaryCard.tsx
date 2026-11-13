@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { Badge } from "../../../components/ui/badge";
 import { HelpTooltip } from "../../../components/app/HelpTooltip";
 import type { RecordingQualitySummary } from "../../../shared/tauri/recordingBundle";
@@ -32,9 +33,9 @@ export function RecordingQualitySummaryCard({ summary }: { summary: RecordingQua
           computed from this recording would be unavailable, not fabricated.
         </HelpTooltip>
         <span className="text-muted-foreground">
-          {summary.rowCount.toLocaleString()} rows · {(summary.timeSpanMs / 1000).toFixed(1)}s span
+          {summary.rowCount.toLocaleString()} rows · {<AnimatedNumber value={(summary.timeSpanMs / 1000)} digits={1} />}s span
           {summary.effectiveSampleRateHz !== null && (
-            <> · {summary.effectiveSampleRateHz.toFixed(1)} Hz effective rate</>
+            <> · {<AnimatedNumber value={summary.effectiveSampleRateHz} digits={1} />} Hz effective rate</>
           )}
         </span>
       </div>
@@ -42,10 +43,10 @@ export function RecordingQualitySummaryCard({ summary }: { summary: RecordingQua
       <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
         <span>
           {summary.labeledRowCount.toLocaleString()} labeled / {summary.unlabeledRowCount.toLocaleString()} unlabeled rows
-          {summary.intervalCount > 0 && <> across {summary.intervalCount} interval(s)</>}
+          {summary.intervalCount > 0 && <> across {<AnimatedNumber value={summary.intervalCount} />} interval(s)</>}
         </span>
         {summary.missingChannels.length > 0 && (
-          <Badge variant="destructive">{summary.missingChannels.length} missing channel(s)</Badge>
+          <Badge variant="destructive">{<AnimatedNumber value={summary.missingChannels.length} />} missing channel(s)</Badge>
         )}
       </div>
 

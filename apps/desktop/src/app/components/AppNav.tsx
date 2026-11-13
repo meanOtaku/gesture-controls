@@ -1,5 +1,5 @@
-import { Activity, Brain, CircleDot, Database, Highlighter, Network, FolderOpen, Hand, Headphones, Shapes, Tags, Radar, LayoutDashboard, Plane, Settings as SettingsIcon, SlidersHorizontal, Watch, Workflow } from "lucide-react";
-import { useEffect } from "react";
+import { Activity, Brain, ChevronDown, ChevronRight, CircleDot, Database, Highlighter, Network, FolderOpen, Hand, Headphones, Shapes, Tags, Radar, LayoutDashboard, Plane, Settings as SettingsIcon, SlidersHorizontal, Watch, Workflow } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -21,11 +21,26 @@ type NavItem = { id: AppTab; label: string; icon: typeof LayoutDashboard };
 
 const MAIN: NavItem = { id: "main", label: "Overview", icon: LayoutDashboard };
 
-/** The groups, in the order the app is used: connect the devices, record, label, train, then automate. */
-const GROUPS: { title: string; items: NavItem[] }[] = [
-  { title: "Devices", items: [{ id: "watch", label: "Watch", icon: Watch }, { id: "headphone", label: "Headphones", icon: Headphones }] },
+/**
+ * The groups. What is used every day comes first: the gestures and recipes, then the devices. The pages for making a model
+ * (record, label, train) come after, under one heading that folds away, since they are only needed while a model is made.
+ */
+const GROUPS: { title: string; items: NavItem[]; lab?: boolean }[] = [
+  {
+    title: "Use",
+    items: [
+      { id: "gestures", label: "Gestures", icon: Radar },
+      { id: "recipes", label: "Recipes", icon: Workflow },
+      { id: "devices", label: "Virtual devices", icon: SlidersHorizontal },
+    ],
+  },
+  {
+    title: "Devices",
+    items: [{ id: "watch", label: "Watch", icon: Watch }, { id: "headphone", label: "Headphones", icon: Headphones }, { id: "drone", label: "Drone", icon: Plane }],
+  },
   {
     title: "Record",
+    lab: true,
     items: [
       { id: "signals", label: "Live signals", icon: Activity },
       { id: "recorder", label: "Recorder", icon: CircleDot },
@@ -35,23 +50,28 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
   },
   {
     title: "Label",
+    lab: true,
     items: [
       { id: "labelling", label: "Labelling", icon: Highlighter },
       { id: "labels", label: "Labels", icon: Tags },
       { id: "gestureLibrary", label: "Gesture library", icon: Shapes },
     ],
   },
-  { title: "Train", items: [{ id: "modelLab", label: "Model Lab", icon: Brain }, { id: "networkLab", label: "Network lab", icon: Network }] },
-  {
-    title: "Automate",
-    items: [
-      { id: "gestures", label: "Gestures", icon: Radar },
-      { id: "recipes", label: "Recipes", icon: Workflow },
-      { id: "devices", label: "Virtual devices", icon: SlidersHorizontal },
-      { id: "drone", label: "Drone", icon: Plane },
-    ],
-  },
+  { title: "Train", lab: true, items: [{ id: "modelLab", label: "Model Lab", icon: Brain }, { id: "networkLab", label: "Network lab", icon: Network }] },
 ];
+/** The pages for making a model, which fold away together. */
+const LAB_TABS = new Set<AppTab>(GROUPS.filter((group) => group.lab).flatMap((group) => group.items.map((item) => item.id)));
+const LAB_OPEN_KEY = "navLabOpen";
+
+/** Whether the model-making pages were left unfolded, remembered between visits. A browser that will not say means unfolded. */
+function readLabOpen(): boolean {
+  try {
+    return window.localStorage.getItem(LAB_OPEN_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
 const SETTINGS: NavItem = { id: "settings", label: "Settings", icon: SettingsIcon };
 const ALL: NavItem[] = [MAIN, ...GROUPS.flatMap((group) => group.items), SETTINGS];
 
@@ -109,8 +129,24 @@ type AppNavProps = {
   statuses?: Partial<Record<AppTab, NavStatus>>;
 };
 
-/** Primary navigation in the order the app is used: connect the devices, record, label, train, then automate, with Settings pinned at the bottom. */
+/**
+ * Primary navigation: what is used every day first, then the devices, then the pages for making a model (which fold away
+ * under one heading), with Settings pinned at the bottom.
+ */
 export function AppNav({ activeTab, onSelect, statuses = {} }: AppNavProps) {
+  const [labOpen, setLabOpen] = useState(readLabOpen);
+  // The page you are on is never folded away.
+  const labShown = labOpen || LAB_TABS.has(activeTab);
+  const toggleLab = () =>
+    setLabOpen((open) => {
+      try {
+        window.localStorage.setItem(LAB_OPEN_KEY, String(!open));
+      } catch {
+        // Remembering is a convenience; the menu still folds without it.
+      }
+      return !open;
+    });
+
   // Cmd/Ctrl + 1..9 jumps to a tab, and Cmd/Ctrl + , to Settings. A modified key is never text, so it is safe inside a field too.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -170,7 +206,7 @@ export function AppNav({ activeTab, onSelect, statuses = {} }: AppNavProps) {
             <SidebarMenu>{entry(MAIN)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-        {GROUPS.map((group) => (
+        {GROUPS.filter((group) => !group.lab).map((group) => (
           <SidebarGroup key={group.title}>
             <SidebarGroupLabel>{group.title}</SidebarGroupLabel>
             <SidebarGroupContent>
@@ -178,6 +214,22 @@ export function AppNav({ activeTab, onSelect, statuses = {} }: AppNavProps) {
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
+        <SidebarGroup className="group-data-[collapsible=icon]:hidden">
+          <button type="button" className="nav-lab-toggle" aria-expanded={labShown} aria-controls="nav-lab" disabled={LAB_TABS.has(activeTab)} onClick={toggleLab}>
+            {labShown ? <ChevronDown className="size-4" aria-hidden="true" /> : <ChevronRight className="size-4" aria-hidden="true" />}
+            Make a model
+          </button>
+        </SidebarGroup>
+        <div id="nav-lab" hidden={!labShown}>
+          {GROUPS.filter((group) => group.lab).map((group) => (
+            <SidebarGroup key={group.title}>
+              <SidebarGroupLabel>{group.title}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>{group.items.map(entry)}</SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
+        </div>
       </SidebarContent>
       <SidebarFooter>
         <MissMarker />

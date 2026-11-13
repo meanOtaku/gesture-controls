@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { lineOf } from "../recordingNames";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
@@ -104,16 +105,13 @@ export function SealedTestCard({ desktopAvailable, models, datasets }: { desktop
         ) : (
           <>
             <p className="hint">
-              {sealed.length} sealed recording{sealed.length === 1 ? "" : "s"}. {usedBefore === 0 ? "Not tested yet." : `Tested ${usedBefore} time${usedBefore === 1 ? "" : "s"} before.`}
+              {<AnimatedNumber value={sealed.length} />} sealed recording{sealed.length === 1 ? "" : "s"}. {usedBefore === 0 ? "Not tested yet." : <>{"Tested "}<AnimatedNumber value={usedBefore} />{" time"}{usedBefore === 1 ? "" : "s"}{" before."}</>}
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <Select value={version} onValueChange={(value) => setVersion(value ?? "")}>
                 <SelectTrigger aria-label="Model to test" className="min-w-64">
                   <SelectValue placeholder="Choose a model">
-                    {(id: string) => {
-                      const model = testable.find((entry) => entry.id === id);
-                      return model ? `${model.label}: ${model.id} (${model.state})` : id;
-                    }}
+                    {((model) => (model ? `${model.label}: ${model.id} (${model.state})` : version))(testable.find((entry) => entry.id === version))}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -138,9 +136,9 @@ export function SealedTestCard({ desktopAvailable, models, datasets }: { desktop
         {report && (
           <section aria-label="Final test result" className="flex flex-col gap-2 text-sm">
             <p>
-              <strong>{report.label}</strong> ({report.version}, threshold {report.threshold}): {describeTotals(report.events)}
-              {withinBudget(report.events) ? ` (within the ${FALSE_ACTIVATIONS_BUDGET_PER_HOUR} an hour budget)` : ` (over the ${FALSE_ACTIVATIONS_BUDGET_PER_HOUR} an hour budget)`}, over {report.minutes.toFixed(1)} minutes.
-              {report.earlierTests > 0 ? ` These recordings were tested ${report.earlierTests} time${report.earlierTests === 1 ? "" : "s"} before this.` : " The first test on these recordings."}
+              <strong>{report.label}</strong> ({report.version}, threshold {<AnimatedNumber value={report.threshold} />}): {describeTotals(report.events)}
+              {withinBudget(report.events) ? <>{" (within the "}<AnimatedNumber value={FALSE_ACTIVATIONS_BUDGET_PER_HOUR} />{" an hour budget)"}</> : <>{" (over the "}<AnimatedNumber value={FALSE_ACTIVATIONS_BUDGET_PER_HOUR} />{" an hour budget)"}</>}, over {<AnimatedNumber value={report.minutes} digits={1} />} minutes.
+              {report.earlierTests > 0 ? <>{" These recordings were tested "}<AnimatedNumber value={report.earlierTests} />{" time"}{report.earlierTests === 1 ? "" : "s"}{" before this."}</> : " The first test on these recordings."}
             </p>
             {cohortNote(report.events) && <p className="hint" aria-label="Label timing">{cohortNote(report.events)}</p>}
             <table className="text-xs">
@@ -152,12 +150,12 @@ export function SealedTestCard({ desktopAvailable, models, datasets }: { desktop
                   <tr key={row.id}>
                     <td>{lineOf(datasets, row.id, row.name)}</td>
                     <td className="text-center">{TIMING_NAME[row.labelTiming]}</td>
-                    <td className="text-center">{row.starts}</td>
-                    <td className="text-center">{row.caught} ({share(row.caught, row.starts)})</td>
-                    <td className="text-center">{row.repeats}</td>
-                    <td className="text-center">{row.late}</td>
+                    <td className="text-center">{<AnimatedNumber value={row.starts} />}</td>
+                    <td className="text-center">{<AnimatedNumber value={row.caught} />} ({share(row.caught, row.starts)})</td>
+                    <td className="text-center">{<AnimatedNumber value={row.repeats} />}</td>
+                    <td className="text-center">{<AnimatedNumber value={row.late} />}</td>
                     <td className="text-center">{perHour(row)}</td>
-                    <td className="text-center">{row.medianLatencyMs === null ? "–" : `${Math.round(row.medianLatencyMs)} ms`}</td>
+                    <td className="text-center">{row.medianLatencyMs === null ? "–" : <><AnimatedNumber value={Math.round(row.medianLatencyMs)} />{" ms"}</>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -166,11 +164,11 @@ export function SealedTestCard({ desktopAvailable, models, datasets }: { desktop
         )}
         {log.length > 0 && (
           <details className="text-xs">
-            <summary>All final tests ({log.length})</summary>
+            <summary>All final tests ({<AnimatedNumber value={log.length} />})</summary>
             <ul>
               {[...log].reverse().map((entry) => (
                 <li key={`${entry.testedAt}-${entry.version}`}>
-                  {entry.testedAt.replace("T", " ").slice(0, 16)}: {entry.label} {entry.version}, caught {entry.caught} of {entry.starts}, {loggedFalseRate(entry)}{entry.cohort === "camera" ? " (camera-timed)" : ""}, on {entry.recordings.length} recordings
+                  {entry.testedAt.replace("T", " ").slice(0, 16)}: {entry.label} {entry.version}, caught {<AnimatedNumber value={entry.caught} />} of {<AnimatedNumber value={entry.starts} />}, {loggedFalseRate(entry)}{entry.cohort === "camera" ? " (camera-timed)" : ""}, on {<AnimatedNumber value={entry.recordings.length} />} recordings
                 </li>
               ))}
             </ul>

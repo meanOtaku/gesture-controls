@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
@@ -144,7 +145,7 @@ export function GestureRecordingCard({ desktopAvailable, onStop }: {
           <div className="field">
             <Label htmlFor="gesture-recording-seconds">Recording duration (s)</Label>
             <Input id="gesture-recording-seconds" aria-label="Recording duration" type="number" min={MIN_SECONDS} max={MAX_SECONDS} value={secondsText} disabled={recording} onChange={(event) => setSecondsText(event.target.value)} />
-            {!secondsOk && <p className="field-error" role="alert">{MIN_SECONDS} to {MAX_SECONDS} seconds.</p>}
+            {!secondsOk && <p className="field-error" role="alert">{<AnimatedNumber value={MIN_SECONDS} />} to {<AnimatedNumber value={MAX_SECONDS} />} seconds.</p>}
           </div>
         </div>
         <CameraAssistCard

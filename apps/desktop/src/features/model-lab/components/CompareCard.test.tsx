@@ -29,7 +29,7 @@ describe("comparing models", () => {
     render(<CompareCard desktopAvailable models={[model("v1"), model("v2"), model("f1", "fist")]} />);
     fireEvent.click(screen.getByRole("checkbox", { name: "Compare v1" }));
     // Only models of the same label can join.
-    expect(screen.getByRole("checkbox", { name: "Compare f1" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("checkbox", { name: "Compare f1" })).toBeDisabled();
     fireEvent.click(screen.getByRole("checkbox", { name: "Compare v2" }));
     fireEvent.click(screen.getByRole("button", { name: "Compare 2 models" }));
     const result = await screen.findByRole("region", { name: "Comparison" });

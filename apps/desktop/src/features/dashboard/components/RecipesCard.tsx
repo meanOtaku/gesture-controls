@@ -1,3 +1,7 @@
+import { AnimatePresence } from "motion/react";
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { LiveBeam } from "../../../components/app/LiveBeam";
+import { AnimatedListItem } from "../../../components/ui/animated-list";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Badge } from "../../../components/ui/badge";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
@@ -44,7 +48,8 @@ export function RecipesCard({ automation, calibration, isPending, onSetRecipeEna
             const pending = isPending(`recipe:${recipe.id}`);
             const use = activity.byRecipe.get(recipe.id);
             return (
-              <li key={recipe.id} className="flex items-start justify-between gap-3">
+              <li key={recipe.id} className="relative flex items-start justify-between gap-3 overflow-hidden rounded-md p-1">
+                <LiveBeam active={use?.inUse === true} />
                 <div className="flex min-w-0 flex-col gap-1">
                   <span className="text-sm">
                     {recipe.name} {blocked && <Badge variant="destructive">Paused: conflict</Badge>}
@@ -52,7 +57,7 @@ export function RecipesCard({ automation, calibration, isPending, onSetRecipeEna
                   </span>
                   <small className="text-xs text-muted-foreground">{describeRecipe(recipe, locationName)}</small>
                   {use && use.uses > 0 && use.lastAt && (
-                    <small className="text-xs text-muted-foreground">Used {use.uses} time{use.uses === 1 ? "" : "s"} this session, last at {clock(use.lastAt)}.</small>
+                    <small className="text-xs text-muted-foreground">Used <AnimatedNumber value={use.uses} /> time{use.uses === 1 ? "" : "s"} this session, last at {clock(use.lastAt)}.</small>
                   )}
                 </div>
                 <Switch
@@ -71,9 +76,14 @@ export function RecipesCard({ automation, calibration, isPending, onSetRecipeEna
             <p className="field-hint">Nothing yet this session. When a recipe starts, lets go or fires, it shows here, so you can see whether a gesture did what you meant.</p>
           ) : (
             <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto pr-1 text-sm" aria-label="Recent recipe activity" tabIndex={0}>
-              {activity.recent.map((entry) => (
-                <li key={entry.id}><span className="text-muted-foreground">{clock(entry.at)}</span> {recipeName(entry.recipe)} {MOMENT[entry.moment]}</li>
-              ))}
+              {/* Each new moment springs in at the top (Magic UI's animated list item). */}
+              <AnimatePresence initial={false}>
+                {activity.recent.map((entry) => (
+                  <li key={entry.id}>
+                    <AnimatedListItem><span className="text-muted-foreground">{clock(entry.at)}</span> {recipeName(entry.recipe)} {MOMENT[entry.moment]}</AnimatedListItem>
+                  </li>
+                ))}
+              </AnimatePresence>
             </ul>
           )}
           <MissButtons className="flex flex-wrap gap-2" />

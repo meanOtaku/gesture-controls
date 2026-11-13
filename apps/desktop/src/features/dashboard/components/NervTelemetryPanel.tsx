@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { AnimatedText } from "../../../components/app/AnimatedNumber";
 import type { HeadTrackerStatus, PpgState, WatchStatus } from "../../../shared/protocol/events";
 import { useThemeIs } from "../../../shared/theme/useThemeIs";
 import { droneDevice, firmwareVersion, getDroneSnapshot, subscribeDrone, type DroneStatus } from "../../drone/droneStatus";
@@ -19,7 +20,7 @@ function Row({ label, value, unit }: { label: string; value: string; unit?: stri
   return (
     <div className="nerv-row">
       <span className="nerv-row-label">{label}</span>
-      <span className="nerv-row-value">{value}{unit ? <small>{unit}</small> : null}</span>
+      <span className="nerv-row-value"><AnimatedText>{value}</AnimatedText>{unit ? <small>{unit}</small> : null}</span>
     </div>
   );
 }

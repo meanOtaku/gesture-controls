@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { useWristExtras } from "../../gestures/useWristExtras";
@@ -24,7 +25,7 @@ export function WiggleHammerSettings() {
           <SettingsNumberField name="hammerPeakThreshold" />
         </div>
         <p className="field-hint" role="status" aria-live="polite">
-          Recognised since you opened this page: {extras.wiggles} wiggle{extras.wiggles === 1 ? "" : "s"}, {extras.hammers} hammer blow{extras.hammers === 1 ? "" : "s"} (needs the watch connected with its acceleration and orientation sensors on)
+          Recognised since you opened this page: <AnimatedNumber value={extras.wiggles} /> wiggle{extras.wiggles === 1 ? "" : "s"}, <AnimatedNumber value={extras.hammers} /> hammer blow{extras.hammers === 1 ? "" : "s"} (needs the watch connected with its acceleration and orientation sensors on)
         </p>
       </CardContent>
     </Card>

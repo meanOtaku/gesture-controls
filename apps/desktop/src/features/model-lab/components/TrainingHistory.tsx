@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { recordingLine } from "../recordingNames";
 import { useCallback, useEffect, useState } from "react";
@@ -148,10 +149,10 @@ export function TrainingHistory({ desktopAvailable, labels, refreshKey, datasets
                   <div className="flex min-w-0 flex-col gap-1">
                     <span className="text-sm">
                       {nameOf(project.label)} <code>{project.label}</code>{" "}
-                      <Badge variant={project.models > 0 ? "default" : "secondary"}>{project.models} model{project.models === 1 ? "" : "s"}</Badge>
+                      <Badge variant={project.models > 0 ? "default" : "secondary"}>{<AnimatedNumber value={project.models} />} model{project.models === 1 ? "" : "s"}</Badge>
                     </span>
                     <small className="text-xs text-muted-foreground">
-                      {project.runs.length} run{project.runs.length === 1 ? "" : "s"} · {project.snapshots} sealed snapshot{project.snapshots === 1 ? "" : "s"}
+                      {<AnimatedNumber value={project.runs.length} />} run{project.runs.length === 1 ? "" : "s"} · {<AnimatedNumber value={project.snapshots} />} sealed snapshot{project.snapshots === 1 ? "" : "s"}
                       {latest ? ` · latest ${day(latest.queuedAt)}: ${latest.outcome ? OUTCOMES[latest.outcome] ?? latest.outcome : latest.status}` : ""}
                     </small>
                     {(project.mentions.length > 0 || project.mentionedBy.length > 0) && (
@@ -171,8 +172,8 @@ export function TrainingHistory({ desktopAvailable, labels, refreshKey, datasets
                               <li key={run.id}>
                                 {day(run.queuedAt)} · {run.outcome ? OUTCOMES[run.outcome] ?? run.outcome : run.status}{run.failure ? `: ${run.failure}` : ""}
                                 {run.model ? <> · model <code>{run.model}</code></> : null}
-                                {run.train ? ` · trained on ${run.train.length}, tested on ${run.test?.length ?? 0}` : ""}
-                                {run.labelOffsetMs ? ` · labels moved ${run.labelOffsetMs} ms` : ""}
+                                {run.train ? <>{" · trained on "}<AnimatedNumber value={run.train.length} />{", tested on "}<AnimatedNumber value={run.test?.length ?? 0} /></> : ""}
+                                {run.labelOffsetMs ? <>{" · labels moved "}<AnimatedNumber value={run.labelOffsetMs} />{" ms"}</> : ""}
                                 {changes.length > 0 && <div className="text-muted-foreground">Changed: {changes.join("; ")}.</div>}
                               </li>
                             );

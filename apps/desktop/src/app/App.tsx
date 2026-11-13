@@ -5,6 +5,7 @@ import { NervTelemetryPanel } from "../features/dashboard/components/NervTelemet
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { appNavigation } from "../shared/navigation/appNavigation";
+import { CommandPalette } from "./components/CommandPalette";
 import { ShortcutsSheet } from "./components/ShortcutsSheet";
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { DeviceKind } from "../features/recipes/recipeModel";
@@ -636,6 +637,7 @@ function MainApp() {
     <RecordingTimer />
     <CameraGestureBridge />
     <ShortcutsSheet />
+    <CommandPalette onSelect={setActiveTab} />
     <AppNav
       activeTab={activeTab}
       onSelect={setActiveTab}

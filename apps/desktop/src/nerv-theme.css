@@ -394,13 +394,13 @@ html[data-theme="nerv"] .nav-dot[data-tone="live"] { background: var(--eva-cyan)
 
 /* Switches, checkboxes, segmented controls. */
 html[data-theme="nerv"] [data-slot="switch"] { border-radius: 0; background: #1a1a1a; border: 1px solid var(--eva-border); }
-html[data-theme="nerv"] [data-slot="switch"][data-checked] { background: var(--eva-green); }
+html[data-theme="nerv"] [data-slot="switch"][data-state="checked"] { background: var(--eva-green); }
 html[data-theme="nerv"] [data-slot="switch-thumb"] { border-radius: 0; background: #000; }
 html[data-theme="nerv"] [data-slot="checkbox"] { border-radius: 0; border: 1px solid var(--eva-green); background: #000; }
-html[data-theme="nerv"] [data-slot="checkbox"][data-checked] { background: var(--eva-green); color: #000; }
+html[data-theme="nerv"] [data-slot="checkbox"][data-state="checked"] { background: var(--eva-green); color: #000; }
 html[data-theme="nerv"] .segment { font-family: var(--font-display); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
-html[data-theme="nerv"] .segment:has([data-checked]),
-html[data-theme="nerv"] .segment:has([data-checked]):hover { background: var(--eva-orange); color: #000; }
+html[data-theme="nerv"] .segment:has([data-state="checked"]),
+html[data-theme="nerv"] .segment:has([data-state="checked"]):hover { background: var(--eva-orange); color: #000; }
 
 /* Navigation: a technical terminal list; the open page is orange. */
 html[data-theme="nerv"] [data-slot="sidebar-container"] { border-right: 1px solid var(--eva-frame); }
@@ -715,17 +715,17 @@ html[data-theme="nerv"] [data-slot="sidebar-inset"] > * { animation: nerv-page-i
 html[data-theme="nerv"] .nerv-header-section > span { display: inline-block; animation: nerv-plate-in 200ms var(--eva-ease); }
 html[data-theme="nerv"] [data-sidebar="menu-button"] { transition: background-color var(--eva-motion-fast) linear, color var(--eva-motion-fast) linear; }
 
-html[data-theme="nerv"] [data-slot="select-content"][data-open],
-html[data-theme="nerv"] [data-slot="tooltip-content"][data-open] { animation: nerv-unroll 160ms var(--eva-ease); }
-html[data-theme="nerv"] [data-slot="tooltip-content"][data-open] { animation-duration: 110ms; }
-html[data-theme="nerv"] [data-slot="select-content"][data-closed],
-html[data-theme="nerv"] [data-slot="tooltip-content"][data-closed] { animation: nerv-roll-up 100ms linear forwards; }
-html[data-theme="nerv"] [data-slot="alert-dialog-content"][data-open] { animation: nerv-open-line 240ms var(--eva-ease); }
-html[data-theme="nerv"] [data-slot="alert-dialog-content"][data-closed] { animation: nerv-close-line 140ms linear forwards; }
-html[data-theme="nerv"] [data-slot="alert-dialog-overlay"][data-open] { animation: nerv-fade-in 120ms linear; }
-html[data-theme="nerv"] [data-slot="sheet-content"][data-side="right"]:not([data-starting-style]):not([data-ending-style]) { animation: nerv-wipe-left 220ms var(--eva-ease); }
-html[data-theme="nerv"] [data-slot="sheet-content"][data-side="left"]:not([data-starting-style]):not([data-ending-style]) { animation: nerv-wipe-right 220ms var(--eva-ease); }
-html[data-theme="nerv"] [data-slot="collapsible-content"][data-open],
+html[data-theme="nerv"] [data-slot="select-content"][data-state="open"],
+html[data-theme="nerv"] [data-slot="tooltip-content"][data-state$="open"] { animation: nerv-unroll 160ms var(--eva-ease); }
+html[data-theme="nerv"] [data-slot="tooltip-content"][data-state$="open"] { animation-duration: 110ms; }
+html[data-theme="nerv"] [data-slot="select-content"][data-state="closed"],
+html[data-theme="nerv"] [data-slot="tooltip-content"][data-state="closed"] { animation: nerv-roll-up 100ms linear forwards; }
+html[data-theme="nerv"] [data-slot="alert-dialog-content"][data-state="open"] { animation: nerv-open-line 240ms var(--eva-ease); }
+html[data-theme="nerv"] [data-slot="alert-dialog-content"][data-state="closed"] { animation: nerv-close-line 140ms linear forwards; }
+html[data-theme="nerv"] [data-slot="alert-dialog-overlay"][data-state="open"] { animation: nerv-fade-in 120ms linear; }
+html[data-theme="nerv"] [data-slot="sheet-content"][data-side="right"][data-state="open"] { animation: nerv-wipe-left 220ms var(--eva-ease); }
+html[data-theme="nerv"] [data-slot="sheet-content"][data-side="left"][data-state="open"] { animation: nerv-wipe-right 220ms var(--eva-ease); }
+html[data-theme="nerv"] [data-slot="collapsible-content"][data-state="open"],
 html[data-theme="nerv"] details[open] > :not(summary) { animation: nerv-unroll 180ms var(--eva-ease); }
 html[data-theme="nerv"] details > summary::marker { color: var(--eva-orange); }
 

@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import type { PitchDirection } from "../../../shared/protocol/events";
@@ -28,7 +29,7 @@ export function PitchSettings({ lastPitch = null }: PitchSettingsProps) {
         </div>
         <p className="field-hint" role="status" aria-live="polite">
           {lastPitch
-            ? <>Last pitch recognised: <strong>{lastPitch.direction}</strong> ({lastPitch.count} so far)</>
+            ? <>Last pitch recognised: <strong>{lastPitch.direction}</strong> ({<AnimatedNumber value={lastPitch.count} />} so far)</>
             : "No pitch recognised yet (needs the watch connected with its orientation sensor on)"}
         </p>
       </CardContent>

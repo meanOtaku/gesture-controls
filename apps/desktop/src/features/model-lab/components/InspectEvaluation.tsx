@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { useMemo, useState } from "react";
 import { BarChart } from "../../../components/charts/BarChart";
@@ -91,7 +92,7 @@ export function InspectEvaluation({ inspection, other, otherName, model, desktop
     <section aria-label="How well it works" className="flex flex-col gap-3">
       <h3 className="text-base font-semibold">How well it works</h3>
       <p className="field-hint">
-        On {probabilities.length} moments from {new Set(recordings).size} recording{new Set(recordings).size === 1 ? "" : "s"} the model never trained on: {positives} starts of the gesture and {negatives} other moments (other gestures&apos; starts, the middle of holds, and time with no gesture). {inspection.evaluation.metrics.thresholdChosenOnEvaluationRecordings === false
+        On {<AnimatedNumber value={probabilities.length} />} moments from {<AnimatedNumber value={new Set(recordings).size} />} recording{new Set(recordings).size === 1 ? "" : "s"} the model never trained on: {<AnimatedNumber value={positives} />} starts of the gesture and {<AnimatedNumber value={negatives} />} other moments (other gestures&apos; starts, the middle of holds, and time with no gesture). {inspection.evaluation.metrics.thresholdChosenOnEvaluationRecordings === false
           ? "The model's own cut-off for “detected” was chosen on its training recordings, not on these windows, so the numbers at it are fair: move the cut-off to see what any other would do."
           : "The model's own cut-off for “detected” was chosen on these same windows, so the numbers at it are a little optimistic: move the cut-off to see what any other would do."}
       </p>
@@ -111,8 +112,8 @@ export function InspectEvaluation({ inspection, other, otherName, model, desktop
           <caption className="caption-top text-left text-xs text-muted-foreground">What it called, at a cut-off of {cutOffPercent(threshold)}</caption>
           <thead><tr><th /><th className="px-2 text-left">Called the gesture</th><th className="px-2 text-left">Called something else</th></tr></thead>
           <tbody>
-            <tr><th scope="row" className="pr-2 text-left">Really the gesture</th><td className="px-2" style={{ background: "rgba(42,157,143,0.25)" }}>{at.tp} hits</td><td className="px-2" style={{ background: "rgba(215,48,39,0.18)" }}>{at.fn} misses</td></tr>
-            <tr><th scope="row" className="pr-2 text-left">Really something else</th><td className="px-2" style={{ background: "rgba(215,48,39,0.18)" }}>{at.fp} false alarms</td><td className="px-2" style={{ background: "rgba(42,157,143,0.25)" }}>{at.tn} correct rejections</td></tr>
+            <tr><th scope="row" className="pr-2 text-left">Really the gesture</th><td className="px-2" style={{ background: "rgba(42,157,143,0.25)" }}>{<AnimatedNumber value={at.tp} />} hits</td><td className="px-2" style={{ background: "rgba(215,48,39,0.18)" }}>{<AnimatedNumber value={at.fn} />} misses</td></tr>
+            <tr><th scope="row" className="pr-2 text-left">Really something else</th><td className="px-2" style={{ background: "rgba(215,48,39,0.18)" }}>{<AnimatedNumber value={at.fp} />} false alarms</td><td className="px-2" style={{ background: "rgba(42,157,143,0.25)" }}>{<AnimatedNumber value={at.tn} />} correct rejections</td></tr>
           </tbody>
         </table>
         <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm" aria-label="Rates at the cut-off">
@@ -188,7 +189,7 @@ export function InspectEvaluation({ inspection, other, otherName, model, desktop
             {recordingRows.map((row) => (
               <tr key={row.recording} className="border-t border-input/40">
                 <th scope="row" className="pr-3 text-left font-medium">{row.recording.slice(0, 8)}</th>
-                <td className="pr-3">{row.windows} ({row.gestureWindows} / {row.otherWindows})</td>
+                <td className="pr-3">{<AnimatedNumber value={row.windows} />} ({<AnimatedNumber value={row.gestureWindows} />} / {<AnimatedNumber value={row.otherWindows} />})</td>
                 <td className="pr-3">{percent(row.meanScore)}</td>
                 <td className="pr-3">{row.auc === undefined ? "–" : fixed(row.auc, 2)}</td>
                 <td className="pr-3">{row.recall === undefined ? "–" : percent(row.recall)}</td>

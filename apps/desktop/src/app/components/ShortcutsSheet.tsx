@@ -11,6 +11,7 @@ export function shortcutGroups(mac: boolean): { title: string; keys: [string, st
       title: "Anywhere",
       keys: [
         [`${cmd}1 … ${cmd}9`, "Go to a tab, in the order of the menu"],
+        [`${cmd}K`, "Find a page or an action by typing"],
         [`${cmd},`, "Settings"],
         ["?", "This list"],
         ["Esc", "Land the drone, if one is connected"],

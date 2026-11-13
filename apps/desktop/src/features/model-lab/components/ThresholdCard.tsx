@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
@@ -188,9 +189,9 @@ export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: 
         </div>
         {model && current !== null && (
           <p aria-label="Current threshold">
-            It runs at <strong className="font-mono">{current.toFixed(2)}</strong>
-            {model.release != null ? <> and a detection ends below <span className="font-mono">{model.release.toFixed(2)}</span></> : null}.
-            {last ? ` Changed from ${last.fromActivation.toFixed(2)} to ${last.toActivation.toFixed(2)} on ${formatTime(last.at)}.` : ""}
+            It runs at <strong className="font-mono">{<AnimatedNumber value={current} digits={2} />}</strong>
+            {model.release != null ? <> and a detection ends below <span className="font-mono">{<AnimatedNumber value={model.release} digits={2} />}</span></> : null}.
+            {last ? <>{" Changed from "}<AnimatedNumber value={last.fromActivation} digits={2} />{" to "}<AnimatedNumber value={last.toActivation} digits={2} />{" on "}{formatTime(last.at)}{"."}</> : ""}
           </p>
         )}
         {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
@@ -234,25 +235,25 @@ export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: 
                 onChange={(event) => { setShown(points[Number(event.target.value)].threshold); setConfirmOver(false); }}
               />
               <Button type="button" variant="outline" size="sm" aria-label="Raise the threshold one step" disabled={index >= points.length - 1} onClick={() => { setShown(points[index + 1].threshold); setConfirmOver(false); }}>+</Button>
-              <strong className="font-mono">{point.threshold.toFixed(2)}</strong>
+              <strong className="font-mono">{<AnimatedNumber value={point.threshold} digits={2} />}</strong>
             </label>
             <p role="status">
-              At {point.threshold.toFixed(2)}: caught {point.caught} of {point.starts} starts ({Math.round(caughtShare(point) * 100)}%), with {perHour(point)} false activations an hour with no gesture under way
-              {withinBudget(point, sweep.budgetPerHour) ? ` (within the ${sweep.budgetPerHour} an hour budget)` : ` (over the ${sweep.budgetPerHour} an hour budget)`}
+              At {<AnimatedNumber value={point.threshold} digits={2} />}: caught {<AnimatedNumber value={point.caught} />} of {<AnimatedNumber value={point.starts} />} starts ({<AnimatedNumber value={Math.round(caughtShare(point) * 100)} />}%), with {perHour(point)} false activations an hour with no gesture under way
+              {withinBudget(point, sweep.budgetPerHour) ? <>{" (within the "}<AnimatedNumber value={sweep.budgetPerHour} />{" an hour budget)"}</> : <>{" (over the "}<AnimatedNumber value={sweep.budgetPerHour} />{" an hour budget)"}</>}
               {duringGestures(point) ? `; ${duringGestures(point)}` : ""}
               {point.threshold === own.threshold
                 ? ". This is the model's own threshold."
-                : `, against ${Math.round(caughtShare(own) * 100)}% and ${perHour(own)} at its own ${sweep.threshold.toFixed(2)}.`}
+                : <>{", against "}<AnimatedNumber value={Math.round(caughtShare(own) * 100)} />{"% and "}{perHour(own)}{" at its own "}<AnimatedNumber value={sweep.threshold} digits={2} />{"."}</>}
             </p>
             {point.threshold !== own.threshold && (
               <div className="flex flex-wrap items-center gap-2">
                 {over && !confirmOver ? (
                   <Button type="button" variant="outline" disabled={!desktopAvailable || applying} onClick={() => setConfirmOver(true)}>
-                    Use {point.threshold.toFixed(2)}
+                    Use {<AnimatedNumber value={point.threshold} digits={2} />}
                   </Button>
                 ) : (
                   <Button type="button" variant={over ? "destructive" : "default"} disabled={!desktopAvailable || applying} onClick={() => void apply(point.threshold)}>
-                    {over ? `Use ${point.threshold.toFixed(2)} anyway` : `Use ${point.threshold.toFixed(2)}`}
+                    {over ? <>{"Use "}<AnimatedNumber value={point.threshold} digits={2} />{" anyway"}</> : <>{"Use "}<AnimatedNumber value={point.threshold} digits={2} /></>}
                   </Button>
                 )}
                 {over && confirmOver && <small className="text-destructive">It fires more often than the budget allows with no gesture under way.</small>}
@@ -261,7 +262,7 @@ export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: 
             )}
             {cohortNote(point) && <p className="hint" aria-label="Label timing">{cohortNote(point)}</p>}
             <p className="hint">
-              Over {sweep.recordings} test recording{sweep.recordings === 1 ? "" : "s"} ({Math.round(point.negativeSeconds / 60)} minutes with no gesture under way), from one run of the model's scores through its detection rule at each threshold. A repeat fired again during a pinch it had caught; a late one fired during a pinch it missed. Neither is a false activation. A detection ends when the score falls as far below the threshold as it does now.
+              Over {<AnimatedNumber value={sweep.recordings} />} test recording{sweep.recordings === 1 ? "" : "s"} ({<AnimatedNumber value={Math.round(point.negativeSeconds / 60)} />} minutes with no gesture under way), from one run of the model's scores through its detection rule at each threshold. A repeat fired again during a pinch it had caught; a late one fired during a pinch it missed. Neither is a false activation. A detection ends when the score falls as far below the threshold as it does now.
             </p>
           </>
         )}

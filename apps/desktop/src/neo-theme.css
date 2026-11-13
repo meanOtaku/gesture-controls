@@ -193,10 +193,10 @@ html[data-theme="neo"] [data-slot="tooltip-content"] { background: var(--surface
 
 /* Switches, checkboxes, badges. */
 html[data-theme="neo"] [data-slot="switch"] { background: #ffffff; border: 2.5px solid var(--ink); }
-html[data-theme="neo"] [data-slot="switch"][data-checked] { background: var(--green); }
+html[data-theme="neo"] [data-slot="switch"][data-state="checked"] { background: var(--green); }
 html[data-theme="neo"] [data-slot="switch-thumb"] { background: var(--ink); }
 html[data-theme="neo"] [data-slot="checkbox"] { background: #ffffff; border: 2.5px solid var(--ink); border-radius: 6px; }
-html[data-theme="neo"] [data-slot="checkbox"][data-checked] { background: var(--yellow); color: var(--ink); }
+html[data-theme="neo"] [data-slot="checkbox"][data-state="checked"] { background: var(--yellow); color: var(--ink); }
 html[data-theme="neo"] [data-slot="badge"] { border: 2px solid var(--ink); border-radius: 999px; font-weight: 700; color: var(--ink); height: 1.4rem; }
 html[data-theme="neo"] [data-slot="badge"][data-variant="default"] { background: var(--yellow); }
 html[data-theme="neo"] [data-slot="badge"][data-variant="secondary"] { background: var(--lavender); }
@@ -218,8 +218,8 @@ html[data-theme="neo"] .segment { min-height: calc(var(--control-h) - 5px); min-
 html[data-theme="neo"] .segment { font-weight: 700; text-transform: none; letter-spacing: 0; color: var(--ink); }
 html[data-theme="neo"] .segment + .segment { border-left: 2.5px solid var(--ink); }
 html[data-theme="neo"] .segment:hover { background: #fff0b8; }
-html[data-theme="neo"] .segment:has([data-checked]),
-html[data-theme="neo"] .segment:has([data-checked]):hover { background: var(--yellow); color: var(--ink); }
+html[data-theme="neo"] .segment:has([data-state="checked"]),
+html[data-theme="neo"] .segment:has([data-state="checked"]):hover { background: var(--yellow); color: var(--ink); }
 
 /* Sidebar: yellow, with a thick edge, and the current page a pink block. */
 html[data-theme="neo"] [data-slot="sidebar-inner"],
@@ -237,7 +237,7 @@ html[data-theme="neo"] .nav-dot { border: 2px solid var(--ink); border-radius: 5
 html[data-theme="neo"] .nav-dot[data-tone="ok"] { background: var(--green); border-color: var(--ink); }
 html[data-theme="neo"] .nav-dot[data-tone="warn"] { background: var(--yellow); border-color: var(--ink); }
 html[data-theme="neo"] .nav-dot[data-tone="live"] { background: var(--pink); border-color: var(--ink); }
-html[data-theme="neo"] [data-slot="sidebar-menu-button"][data-active] .nav-dot[data-tone="idle"] { border-color: var(--ink); }
+html[data-theme="neo"] [data-slot="sidebar-menu-button"][data-active="true"] .nav-dot[data-tone="idle"] { border-color: var(--ink); }
 
 /* Status pill, steps, chips. */
 html[data-theme="neo"] .connection { background: var(--surface); border: var(--neo-border); border-radius: 999px; box-shadow: var(--neo-shadow-sm); text-transform: none; font-weight: 700; letter-spacing: 0; }
@@ -297,8 +297,8 @@ html[data-theme="neo"] [data-slot="sheet-title"] { font-family: var(--font-displ
 html[data-theme="neo"] [data-sonner-toast] { border: var(--neo-border); border-radius: 12px; box-shadow: var(--neo-shadow-sm); background: var(--surface); color: var(--ink); font-weight: 600; }
 html[data-theme="neo"] [data-slot="tabs-list"] { background: var(--surface); border: 2.5px solid var(--ink); border-radius: 12px; box-shadow: var(--neo-shadow-sm); padding: 3px; }
 html[data-theme="neo"] [data-slot="tabs-trigger"] { font-weight: 700; color: var(--ink); border: 2px solid transparent; border-radius: 9px; }
-html[data-theme="neo"] [data-slot="tabs-trigger"][data-active],
-html[data-theme="neo"] [data-slot="tabs-trigger"][data-selected],
+html[data-theme="neo"] [data-slot="tabs-trigger"][data-state="active"],
+html[data-theme="neo"] [data-slot="tabs-trigger"][data-state="active"],
 html[data-theme="neo"] [data-slot="tabs-trigger"][aria-selected="true"] { background: var(--lavender); border-color: var(--ink); color: var(--ink); box-shadow: 2px 2px 0 var(--ink); }
 html[data-theme="neo"] [data-slot="progress-track"] { background: #ffffff; border: 2px solid var(--ink); border-radius: 999px; height: 12px; }
 html[data-theme="neo"] [data-slot="progress-indicator"] { background: var(--pink); }

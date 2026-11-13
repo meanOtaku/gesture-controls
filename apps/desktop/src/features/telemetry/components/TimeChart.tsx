@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import type { SeriesPoint } from "../store/telemetryStore";
 
 /** All channels in a chart share units and a scale, so their amplitudes are comparable. */
@@ -42,7 +43,7 @@ export function TimeChart({ title, points, labels, colors, unit = "", emptyHint 
   const chart = chartGeometry(points, labels.length);
   return <section className="telemetry-chart" aria-label={title}>
     <div className="telemetry-chart-heading">
-      <h2>{title}</h2><span className="telemetry-count">{points.length} samples</span>
+      <h2>{title}</h2><span className="telemetry-count">{<AnimatedNumber value={points.length} />} samples</span>
     </div>
     <div className="telemetry-legend">
       {labels.map((label, index) => <span key={label}><i style={{ background: colors[index] }} />{label}</span>)}
@@ -56,6 +57,6 @@ export function TimeChart({ title, points, labels, colors, unit = "", emptyHint 
       </svg>
       {!chart.hasData && <div className="chart-empty"><span aria-hidden="true">∿</span><strong>Waiting for samples</strong><p>{emptyHint}</p></div>}
     </div>
-    <div className="chart-time"><span>{chart.hasData ? `${(chart.duration / 1000).toFixed(1)}s ago` : "No samples received"}</span><span>{chart.hasData ? "Latest sample" : ""}</span></div>
+    <div className="chart-time"><span>{chart.hasData ? <><AnimatedNumber value={(chart.duration / 1000)} digits={1} />{"s ago"}</> : "No samples received"}</span><span>{chart.hasData ? "Latest sample" : ""}</span></div>
   </section>;
 }

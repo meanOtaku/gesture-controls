@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { recordingTitle } from "../recordingNames";
 import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
@@ -54,7 +55,7 @@ export function TrainingPlanEditor({ stages, onChange, chosen, datasets, target,
           return (
           <li key={stage.key} className="flex flex-col gap-2 rounded-md border p-3 text-sm" aria-label={`Stage ${index + 1}`}>
             <div className="flex flex-wrap items-center gap-2">
-              <strong className="tabular-nums">{index + 1}.</strong>
+              <strong className="tabular-nums">{<AnimatedNumber value={index + 1} />}.</strong>
               <Input
                 aria-label={`Name of stage ${index + 1}`}
                 className="max-w-xs"
@@ -116,7 +117,7 @@ export function TrainingPlanEditor({ stages, onChange, chosen, datasets, target,
                     </ul>
                     <p className="field-hint">
                       {stage.rehearse
-                        ? `This stage rehearses them: their starts and half their other moments train again alongside its own ${stage.datasetIds.length} recording${stage.datasetIds.length === 1 ? "" : "s"}.`
+                        ? <>{"This stage rehearses them: their starts and half their other moments train again alongside its own "}<AnimatedNumber value={stage.datasetIds.length} />{" recording"}{stage.datasetIds.length === 1 ? "" : "s"}{"."}</>
                         : "Not rehearsed: this stage trains only on its own recordings, so it can wear away what the stages before taught."}
                     </p>
                   </>
@@ -144,7 +145,7 @@ export function TrainingPlanEditor({ stages, onChange, chosen, datasets, target,
         <Button type="button" variant="outline" disabled={disabled || stages.length >= MAX_STAGES} onClick={() => onChange([...stages, newStage(`Stage ${stages.length + 1}`)])}>
           Add a stage
         </Button>
-        {stages.length >= MAX_STAGES && <small className="text-muted-foreground">At most {MAX_STAGES} stages.</small>}
+        {stages.length >= MAX_STAGES && <small className="text-muted-foreground">At most {<AnimatedNumber value={MAX_STAGES} />} stages.</small>}
       </div>
       {left.length > 0 && (
         <p className="field-hint text-destructive" role="note">

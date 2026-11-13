@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
@@ -52,7 +53,7 @@ function WristGestureCard({ gesture, last, on, usedBy }: { gesture: WristGesture
         {gesture.options.map((option) => <Chip key={option.id} lit={lit && last?.id === option.id}>{option.label}</Chip>)}
       </div>
       <small className="text-xs text-muted-foreground">
-        {last ? `Recognised ${last.count} time${last.count === 1 ? "" : "s"} this session.` : "Not recognised yet this session."}
+        {last ? <>Recognised <AnimatedNumber value={last.count} /> time{last.count === 1 ? "" : "s"} this session.</> : "Not recognised yet this session."}
         {on ? "" : " Switch it on under Settings → Built-in gestures."}
         {usedBy.length > 0 ? ` Used by: ${usedBy.join(", ")}.` : ""}
       </small>
@@ -86,7 +87,7 @@ function ModelCard({ label, score, detected, count, usedBy }: { label: string; s
         <div className="gesture-meter-fill" style={{ width: `${Math.round((score ?? 0) * 100)}%` }} />
       </div>
       <small className="text-xs text-muted-foreground">
-        {score === undefined ? "No score yet." : `Score ${Math.round(score * 100)}%.`} Detected {count} time{count === 1 ? "" : "s"} this session.
+        {score === undefined ? "No score yet." : <>{"Score "}<AnimatedNumber value={Math.round(score * 100)} />{"%."}</>} Detected {<AnimatedNumber value={count} />} time{count === 1 ? "" : "s"} this session.
         {usedBy.length > 0 ? ` Used by: ${usedBy.join(", ")}.` : ""}
       </small>
     </li>

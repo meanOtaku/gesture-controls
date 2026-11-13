@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { recordingTitle } from "../recordingNames";
 import { memo, useCallback, useEffect, useId, useMemo, useState } from "react";
@@ -43,7 +44,7 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
   const [research, setResearch] = useSessionState("train.research", false);
   const [hardNegatives, setHardNegatives] = useSessionState("train.hardNegatives", false);
   const [labelOffset, setLabelOffset] = useSessionState("train.labelOffset", 0);
-  const [method, setMethod] = useSessionState<TrainMethod>("train.method", TREES_METHOD);
+  const [method, setMethod] = useSessionState<TrainMethod>("train.method", CNN_METHOD);
   const [staged, setStaged] = useSessionState("train.staged", false);
   const [stages, setStages] = useSessionState<StageDraft[]>("train.stages", []);
   const [plan, setPlan] = useState<TrainPlan | null>(null);
@@ -149,8 +150,8 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
           <div className="field">
             <div className="field-head"><Label htmlFor={`${uid}-method`}>Model</Label></div>
             <select id={`${uid}-method`} className={NATIVE_SELECT} value={method} disabled={running !== null} onChange={(event) => setMethod(event.target.value as TrainMethod)}>
-              <option value={TREES_METHOD}>{PULSE_MODEL.name} (trees)</option>
               <option value={CNN_METHOD}>{CNN_MODEL.name}</option>
+              <option value={TREES_METHOD}>{PULSE_MODEL.name} (trees)</option>
             </select>
           </div>
           {method === CNN_METHOD ? (
@@ -158,7 +159,9 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
               <p><strong>{CNN_MODEL.name}</strong> <Badge variant="secondary">pulse sensor and motion</Badge></p>
               <p className="field-hint">{CNN_MODEL.summary} {CNN_MODEL.trainingNote}</p>
               <p className="field-hint">
-                Compared with the trees on the same pinch recordings, with the hand still before each pinch, it caught about {Math.round(CNN_MODEL.research.recall * 100)}% of pinch starts at {CNN_MODEL.research.falsePerMinute.toFixed(0)} false alarm a minute or fewer (the trees: 64%), about {CNN_MODEL.research.delayMs} ms after the pinch began.
+                Compared with the trees on the same pinch recordings, with the hand still before each pinch, it caught about {<AnimatedNumber value={Math.round(CNN_MODEL.research.recall * 100)} />}% of pinch starts at {<AnimatedNumber value={CNN_MODEL.research.falsePerMinute} digits={0} />} false alarm a minute or fewer (the trees: 64%), about {<AnimatedNumber value={CNN_MODEL.research.delayMs} />} ms after the pinch began.
+              {" "}
+                {onOpenNetworkLab ? <Button type="button" variant="link" className="h-auto p-0" onClick={onOpenNetworkLab}>See its pipeline in the Network lab</Button> : null}
               </p>
             </>
           ) : (
@@ -166,7 +169,7 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
               <p><strong>{PULSE_MODEL.name}</strong> <Badge variant="secondary">pulse sensor and motion</Badge></p>
               <p className="field-hint">{PULSE_MODEL.summary}</p>
               <p className="field-hint">
-                In the research (37 recordings, 20 tests on recordings it never saw) it scored a worst-case AUC of {PULSE_MODEL.research.worstAuc} and caught about {Math.round(PULSE_MODEL.research.recall * 100)}% of gesture starts, with about {PULSE_MODEL.research.falsePerMinute.toFixed(1)} false alarms a minute.{" "}
+                In the research (37 recordings, 20 tests on recordings it never saw) it scored a worst-case AUC of {<AnimatedNumber value={PULSE_MODEL.research.worstAuc} />} and caught about {<AnimatedNumber value={Math.round(PULSE_MODEL.research.recall * 100)} />}% of gesture starts, with about {<AnimatedNumber value={PULSE_MODEL.research.falsePerMinute} digits={1} />} false alarms a minute.{" "}
                 {onOpenNetworkLab ? <Button type="button" variant="link" className="h-auto p-0" onClick={onOpenNetworkLab}>See its pipeline in the Network lab</Button> : null}
               </p>
             </>
@@ -225,7 +228,7 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
                 ) : (
                   <>
                     <p className="field-hint">
-                      It will train on {plan.train.length} recording{plan.train.length === 1 ? "" : "s"} ({plan.train.map(name).join(", ")}) and test on {plan.evaluation.length} it never trains on ({plan.evaluation.map(name).join(", ")}).
+                      It will train on {<AnimatedNumber value={plan.train.length} />} recording{plan.train.length === 1 ? "" : "s"} ({plan.train.map(name).join(", ")}) and test on {<AnimatedNumber value={plan.evaluation.length} />} it never trains on ({plan.evaluation.map(name).join(", ")}).
                     </p>
                     {plan.stages && plan.stages.length > 0 && (
                       <ol className="field-hint flex list-decimal flex-col gap-1 pl-5" aria-label="Stages as they will run">
@@ -247,7 +250,7 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
                     {recordingsWithLabel(datasets, plan.train, target) < 2 && (
                       <Alert role="note">
                         <AlertDescription>
-                          Only {recordingsWithLabel(datasets, plan.train, target)} recording with {target} to train on. A model trained on a single session usually memorises it and fails on the next. Three or more recordings, in different positions, work much better.
+                          Only {<AnimatedNumber value={recordingsWithLabel(datasets, plan.train, target)} />} recording with {target} to train on. A model trained on a single session usually memorises it and fails on the next. Three or more recordings, in different positions, work much better.
                         </AlertDescription>
                       </Alert>
                     )}
@@ -299,8 +302,8 @@ function SplitCoverageTable({ rows, label }: { rows: SplitCondition[]; label: st
           {rows.map((row) => (
             <tr key={`${row.arm}-${row.wrist}`}>
               <th>{name(row)}</th>
-              <td className={row.train === 0 ? "coverage-none" : undefined}>{row.train}</td>
-              <td className={row.test === 0 ? "coverage-thin" : undefined}>{row.test}</td>
+              <td className={row.train === 0 ? "coverage-none" : undefined}>{<AnimatedNumber value={row.train} />}</td>
+              <td className={row.test === 0 ? "coverage-thin" : undefined}>{<AnimatedNumber value={row.test} />}</td>
             </tr>
           ))}
         </tbody>
@@ -334,7 +337,7 @@ const TrainingRecordings = memo(function TrainingRecordings({ candidates, select
                   ))}
                 </ul>
               )}
-              {sealedCount > 0 && <p className="field-hint">{sealedCount} sealed recording{sealedCount === 1 ? " is" : "s are"} kept out for the final test.</p>}
+              {sealedCount > 0 && <p className="field-hint">{<AnimatedNumber value={sealedCount} />} sealed recording{sealedCount === 1 ? " is" : "s are"} kept out for the final test.</p>}
             </fieldset>
   );
 });

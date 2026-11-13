@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { describeContext } from "../../telemetry/sessionContext";
 import { invoke } from "@tauri-apps/api/core";
 import { ChevronRightIcon } from "lucide-react";
@@ -70,7 +71,7 @@ function SessionCopiesCard({ copies, number, disabled, onDelete }: { copies: Ses
   const sealedOthers = others.filter((dataset) => dataset.sealed);
   return (
     <fieldset className="flex flex-col gap-2 rounded-md border p-3 text-sm">
-      <legend className="px-1 font-medium">Session {number}</legend>
+      <legend className="px-1 font-medium">Session {<AnimatedNumber value={number} />}</legend>
       <p className="m-0">
         {sameLabels ? "The same data and labels, more than once." : "The same watch data with different labels: check which labels you want, as the others are lost."}
       </p>
@@ -135,7 +136,7 @@ function SessionCopiesFinder({ datasets, disabled, onDelete }: { datasets: Datas
           <span role="status">
             {found.length === 0
               ? "No duplicates: every recording is its own session."
-              : `${found.length} session${found.length === 1 ? " is" : "s are"} held more than once. Training refuses copies chosen together, because one could be trained on and the other tested on.`}
+              : <><AnimatedNumber value={found.length} />{" session"}{found.length === 1 ? " is" : "s are"}{" held more than once. Training refuses copies chosen together, because one could be trained on and the other tested on."}</>}
           </span>
         )}
       </div>
@@ -239,7 +240,7 @@ export function DatasetManager({ desktopAvailable, datasets, loading, importing,
         </span>
         <span className="break-all text-xs text-muted-foreground">{dataset.name ? `${defaultTitle(dataset)} · ` : ""}{dataset.originalFilename}</span>
         {labelsFromText(dataset) && <small className={dataset.labelsFrom === "motion" ? "text-xs text-amber-600 dark:text-amber-400" : "text-xs text-muted-foreground"}>{labelsFromText(dataset)}</small>}
-        <small className="text-xs text-muted-foreground">{datasetLabels(dataset).map((label) => <LabelSwatch key={label} label={label} catalogue={labels} />)}{dataset.label.replaceAll("_", " ")} · {dataset.rowCount} rows{dataset.twoFiles ? " · two files" : ""}{dataset.importedAt ? ` · imported ${formatTime(dataset.importedAt)}` : ""}</small>
+        <small className="text-xs text-muted-foreground">{datasetLabels(dataset).map((label) => <LabelSwatch key={label} label={label} catalogue={labels} />)}{dataset.label.replaceAll("_", " ")} · {<AnimatedNumber value={dataset.rowCount} />} rows{dataset.twoFiles ? " · two files" : ""}{dataset.importedAt ? ` · imported ${formatTime(dataset.importedAt)}` : ""}</small>
         {(() => {
           const quality = describeQuality(dataset.quality);
           return quality && <small className={quality.warn ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>{quality.text}</small>;
@@ -279,12 +280,12 @@ export function DatasetManager({ desktopAvailable, datasets, loading, importing,
         </Button>
       )}
       <AlertDialog>
-        <AlertDialogTrigger render={<Button type="button" variant="outline" disabled={pendingDeleteIds.has(dataset.id)}>Delete</Button>} />
+        <AlertDialogTrigger asChild><Button type="button" variant="outline" disabled={pendingDeleteIds.has(dataset.id)}>Delete</Button></AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this recording?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently deletes {recordingName(dataset)} ({dataset.rowCount} rows) from the desktop app. This cannot be undone.
+              This permanently deletes {recordingName(dataset)} ({<AnimatedNumber value={dataset.rowCount} />} rows) from the desktop app. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -324,7 +325,7 @@ export function DatasetManager({ desktopAvailable, datasets, loading, importing,
         {onSeal && datasets.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 text-sm" role="group" aria-label="Seal for the final test">
             <span>
-              <strong>Final test:</strong> {sealedCount} sealed. Seal a whole day you have not trained on; it is then never trained on, and Final test below runs a model over it.
+              <strong>Final test:</strong> {<AnimatedNumber value={sealedCount} />} sealed. Seal a whole day you have not trained on; it is then never trained on, and Final test below runs a model over it.
             </span>
             <Select value="" onValueChange={(day) => void onSeal(datasets.filter((dataset) => recordingDay(dataset) === day).map((dataset) => dataset.id), true)}>
               <SelectTrigger aria-label="Seal a day" className="min-w-44">
@@ -348,7 +349,7 @@ export function DatasetManager({ desktopAvailable, datasets, loading, importing,
         {copies.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 text-sm" role="group" aria-label="Copies">
             <span className="text-destructive">
-              <strong>{copies.length} cop{copies.length === 1 ? "y" : "ies"}</strong> of other recordings: they count twice in training and in every test.
+              <strong>{<AnimatedNumber value={copies.length} />} cop{copies.length === 1 ? "y" : "ies"}</strong> of other recordings: they count twice in training and in every test.
             </span>
             <ConfirmButton
               label={`Keep one of each (delete ${copies.length})`}
@@ -389,12 +390,12 @@ export function DatasetManager({ desktopAvailable, datasets, loading, importing,
               <option value="contact">Worst contact first</option>
               <option value="holds">Most holds first</option>
             </select>
-            <span className="hint">{shown.length} of {datasets.length}</span>
+            <span className="hint">{<AnimatedNumber value={shown.length} />} of {<AnimatedNumber value={datasets.length} />}</span>
           </div>
         )}
         {chosen.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 text-sm" role="group" aria-label="With the chosen recordings">
-            <strong>{chosen.length} chosen</strong>
+            <strong>{<AnimatedNumber value={chosen.length} />} chosen</strong>
             {onSeal && <Button type="button" size="sm" variant="outline" disabled={working} onClick={() => void onSeal(chosen.map((d) => d.id), true)}>Seal</Button>}
             {onSeal && <Button type="button" size="sm" variant="outline" disabled={working} onClick={() => void onSeal(chosen.map((d) => d.id), false)}>Unseal</Button>}
             {onGroup && (
@@ -456,7 +457,7 @@ export function DatasetManager({ desktopAvailable, datasets, loading, importing,
               );
               return group.name === null ? (
                 <section key="" className="flex flex-col gap-2" aria-label="In no group">
-                  <h3 className="text-sm font-semibold">In no group <span className="font-normal text-muted-foreground">({inGroup.length})</span></h3>
+                  <h3 className="text-sm font-semibold">In no group <span className="font-normal text-muted-foreground">({<AnimatedNumber value={inGroup.length} />})</span></h3>
                   {list}
                 </section>
               ) : (
@@ -530,7 +531,7 @@ function RecordingGroupSection({ name, count, total, allPicked, onPickAll, onRen
       <summary>
         <ChevronRightIcon className="advanced-chevron size-4" aria-hidden="true" />
         <span className="advanced-title">{name}</span>
-        <span className="advanced-summary">{count === total ? `${total} recording${total === 1 ? "" : "s"}` : `${count} of ${total} match`}</span>
+        <span className="advanced-summary">{count === total ? <><AnimatedNumber value={total} />{" recording"}{total === 1 ? "" : "s"}</> : <><AnimatedNumber value={count} />{" of "}<AnimatedNumber value={total} />{" match"}</>}</span>
       </summary>
       {open && (
         <div className="flex flex-col gap-2 pt-2">
@@ -571,7 +572,7 @@ function RecordingGroupSection({ name, count, total, allPicked, onPickAll, onRen
 function ConfirmButton({ label, title, description, disabled, onConfirm, size }: { label: string; title: string; description: string; disabled?: boolean; onConfirm: () => void; size?: "sm" }) {
   return (
     <AlertDialog>
-      <AlertDialogTrigger render={<Button type="button" size={size} variant="outline" disabled={disabled}>{label}</Button>} />
+      <AlertDialogTrigger asChild><Button type="button" size={size} variant="outline" disabled={disabled}>{label}</Button></AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
@@ -624,7 +625,7 @@ function ConvertOlderRecordings({ datasets, onConverted }: { datasets: DatasetSu
       {older.length > 0 && (
         <>
           <p className="text-sm">
-            <strong>{older.length} recording{older.length === 1 ? " is" : "s are"} in the older single-file format</strong>, with blank cells wherever the other sensor had no sample.
+            <strong>{<AnimatedNumber value={older.length} />} recording{older.length === 1 ? " is" : "s are"} in the older single-file format</strong>, with blank cells wherever the other sensor had no sample.
             Converting writes each as two dense files (pulse and motion) holding the same samples; models trained on them stay tied to the same data.
           </p>
           <div><Button type="button" variant="outline" disabled={working} onClick={() => void convert()}>{working ? "Converting…" : "Convert to two files"}</Button></div>

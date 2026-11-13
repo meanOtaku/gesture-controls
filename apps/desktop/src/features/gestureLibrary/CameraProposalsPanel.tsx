@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../components/app/AnimatedNumber";
 import { useCallback, useEffect, useId, useState } from "react";
 import { SectionHeader } from "../../components/app/SectionHeader";
 import { OperationFeedback } from "../../components/app/OperationFeedback";
@@ -104,7 +105,7 @@ export function CameraProposalsPanel() {
         {found && (
           <>
             <p className="hint" role="status">
-              Checked {found.frames} camera frames{found.cameras > 1 ? ` from ${found.cameras} cameras` : ""}. Camera and watch lined up to within about {Math.max(1, Math.round(found.alignment.jitterMs))} ms ({found.alignment.samples} clock samples).
+              Checked {<AnimatedNumber value={found.frames} />} camera frames{found.cameras > 1 ? <>{" from "}<AnimatedNumber value={found.cameras} />{" cameras"}</> : ""}. Camera and watch lined up to within about {<AnimatedNumber value={Math.max(1, Math.round(found.alignment.jitterMs))} />} ms ({<AnimatedNumber value={found.alignment.samples} />} clock samples).
               {found.skipped.length > 0 ? ` Skipped, with no label: ${found.skipped.join(", ")}.` : ""}
             </p>
             {found.proposals.length === 0 ? (
@@ -120,7 +121,7 @@ export function CameraProposalsPanel() {
                       onCheckedChange={(on) => setChosen((prev) => { const next = new Set(prev); if (on === true) next.add(index); else next.delete(index); return next; })}
                     />
                     <span>
-                      <strong>{p.gestureName}</strong> → {p.labelId}, {seconds(p.startNs, origin)}–{seconds(p.endNs, origin)} s of the recording ({p.endRow - p.startRow + 1} rows)
+                      <strong>{p.gestureName}</strong> → {p.labelId}, {seconds(p.startNs, origin)}–{seconds(p.endNs, origin)} s of the recording ({<AnimatedNumber value={p.endRow - p.startRow + 1} />} rows)
                       {p.overlaps && <small className="text-muted-foreground"> Overlaps an interval already there, so it cannot be added.</small>}
                     </span>
                   </li>
@@ -128,7 +129,7 @@ export function CameraProposalsPanel() {
               </ul>
             )}
             {found.proposals.length > 0 && (
-              <div><Button type="button" disabled={busy || chosen.size === 0} onClick={() => void add()}>Add {chosen.size} as unreviewed</Button></div>
+              <div><Button type="button" disabled={busy || chosen.size === 0} onClick={() => void add()}>Add {<AnimatedNumber value={chosen.size} />} as unreviewed</Button></div>
             )}
           </>
         )}

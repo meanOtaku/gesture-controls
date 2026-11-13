@@ -1,4 +1,5 @@
 import { Button } from "../../../components/ui/button";
+import { AnimatedText } from "../../../components/app/AnimatedNumber";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { guidedRunner, type GuidedSnapshot } from "../recording/guidedRunner";
 import { prompt, totalMs } from "../recording/guidedSession";
@@ -33,7 +34,7 @@ export function GuidedRunningView({ session, nameOf, onStop, title, description 
           <div style={{ width: `${Math.min(100, ((elapsed ?? 0) / total) * 100)}%` }} />
         </div>
         <p className="hint">
-          {elapsed === null ? minutes(total) : `${minutes(Math.max(0, total - elapsed))} left`}
+          <AnimatedText>{elapsed === null ? minutes(total) : `${minutes(Math.max(0, total - elapsed))} left`}</AnimatedText>
           {session.buzzFailed ? ". The watch could not be buzzed: follow the screen." : ""}
         </p>
         <div className="flex gap-2">

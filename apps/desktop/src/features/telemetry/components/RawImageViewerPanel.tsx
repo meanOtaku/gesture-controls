@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent } from "react";
 import { ImageIcon } from "lucide-react";
 import { SegmentedControl } from "../../../components/app/SegmentedControl";
@@ -345,7 +346,7 @@ export function RawImageViewerPanel() {
             </SelectContent>
           </Select>
           <p className="field-hint">
-            {gridSize}×{gridSize} pixels; Next and Previous move {rowHop} rows.
+            {<AnimatedNumber value={gridSize} />}×{<AnimatedNumber value={gridSize} />} pixels; Next and Previous move {<AnimatedNumber value={rowHop} />} rows.
           </p>
         </div>
 
@@ -434,7 +435,7 @@ export function RawImageViewerPanel() {
       </strong>
       <p>
         Select a recording and a channel to inspect its raw image: the channel's samples laid out in order as a
-        {" "}{gridSize}×{gridSize} picture.
+        {" "}{<AnimatedNumber value={gridSize} />}×{<AnimatedNumber value={gridSize} />} picture.
       </p>
       {recordingsLoaded && (
         <div className="viewer-steps" aria-hidden="true">
@@ -622,8 +623,8 @@ export function RawImageViewerPanel() {
                             {compactWindow.totalObservedSampleCount.toLocaleString()}
                           </span>
                           <span>
-                            Frame {compactCurrentFrame}
-                            {compactTotalFrames !== null ? ` of ${compactTotalFrames}` : ""}
+                            Frame {<AnimatedNumber value={compactCurrentFrame} />}
+                            {compactTotalFrames !== null ? <>{" of "}<AnimatedNumber value={compactTotalFrames} /></> : ""}
                           </span>
                         </div>
                         <div className="flex items-center gap-3">
@@ -634,7 +635,7 @@ export function RawImageViewerPanel() {
                             disabled={compactBounds === null || requestedStartSampleIndex <= compactBounds.minStartSampleIndex}
                             onClick={() => rawImageViewerStore.goToPreviousCompactFrame()}
                           >
-                            Previous {rowHop} samples
+                            Previous {<AnimatedNumber value={rowHop} />} samples
                           </Button>
                           <Slider
                             aria-label="Observed-sample frame position"
@@ -655,7 +656,7 @@ export function RawImageViewerPanel() {
                             disabled={compactBounds === null || requestedStartSampleIndex >= compactBounds.maxStartSampleIndex}
                             onClick={() => rawImageViewerStore.goToNextCompactFrame()}
                           >
-                            Next {rowHop} samples
+                            Next {<AnimatedNumber value={rowHop} />} samples
                           </Button>
                         </div>
                       </div>
@@ -821,8 +822,8 @@ export function RawImageViewerPanel() {
                           {rawWindow.totalRawRowCount.toLocaleString()}
                         </span>
                         <span>
-                          Frame {currentFrame}
-                          {totalFrames !== null ? ` of ${totalFrames}` : ""}
+                          Frame {<AnimatedNumber value={currentFrame} />}
+                          {totalFrames !== null ? <>{" of "}<AnimatedNumber value={totalFrames} /></> : ""}
                         </span>
                       </div>
                       <div className="flex items-center gap-3">
@@ -833,7 +834,7 @@ export function RawImageViewerPanel() {
                           disabled={bounds === null || requestedStartRawRow <= bounds.minStartRawRow}
                           onClick={() => rawImageViewerStore.goToPreviousFrame()}
                         >
-                          Previous {rowHop} rows
+                          Previous {<AnimatedNumber value={rowHop} />} rows
                         </Button>
                         <Slider
                           aria-label="Raw row frame position"
@@ -854,7 +855,7 @@ export function RawImageViewerPanel() {
                           disabled={bounds === null || requestedStartRawRow >= bounds.maxStartRawRow}
                           onClick={() => rawImageViewerStore.goToNextFrame()}
                         >
-                          Next {rowHop} rows
+                          Next {<AnimatedNumber value={rowHop} />} rows
                         </Button>
                       </div>
                     </div>

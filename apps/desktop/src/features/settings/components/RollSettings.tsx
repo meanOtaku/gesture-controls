@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import type { RollDirection } from "../../../shared/protocol/events";
@@ -28,7 +29,7 @@ export function RollSettings({ lastRoll = null }: RollSettingsProps) {
         </div>
         <p className="field-hint" role="status" aria-live="polite">
           {lastRoll
-            ? <>Last roll recognised: <strong>{lastRoll.direction === "clockwise" ? "clockwise" : "counter-clockwise"}</strong> ({lastRoll.count} so far)</>
+            ? <>Last roll recognised: <strong>{lastRoll.direction === "clockwise" ? "clockwise" : "counter-clockwise"}</strong> ({<AnimatedNumber value={lastRoll.count} />} so far)</>
             : "No roll recognised yet (needs the watch connected with its orientation sensor on)"}
         </p>
       </CardContent>

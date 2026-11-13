@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { AnimatedText } from "../../components/app/AnimatedNumber";
 import { Badge } from "../../components/ui/badge";
 import { getCameraController } from "../camera/cameraService";
 import { pretrainedLabel, type PretrainedReading } from "../camera/pretrained";
@@ -26,7 +27,7 @@ export function PretrainedLive() {
 
   return (
     <div className="flex flex-wrap items-center gap-2" role="status" aria-label="Pretrained model reading">
-      <Badge variant={reading ? "default" : "secondary"}>{reading ? `${pretrainedLabel(reading.gesture)} · ${percent(reading.score)}` : "No known gesture"}</Badge>
+      <Badge variant={reading ? "default" : "secondary"}>{reading ? <>{pretrainedLabel(reading.gesture)} · <AnimatedText>{percent(reading.score)}</AnimatedText></> : "No known gesture"}</Badge>
       <span className="hint">What the pretrained model (closed fist, open palm, pointing up, thumb up, thumb down, victory, I love you) sees right now.</span>
     </div>
   );

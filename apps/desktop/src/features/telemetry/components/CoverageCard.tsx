@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
@@ -39,7 +40,7 @@ export function CoverageCard() {
   const coverage = useMemo(() => coverageOf(datasets, shown), [datasets, shown]);
 
   if (labels.length === 0) return null;
-  const cell = (key: string, count: number) => <td key={key} className={count === 0 ? "coverage-none" : count < THIN ? "coverage-thin" : "coverage-ok"}>{count === 0 ? "none" : count}</td>;
+  const cell = (key: string, count: number) => <td key={key} className={count === 0 ? "coverage-none" : count < THIN ? "coverage-thin" : "coverage-ok"}>{count === 0 ? "none" : <AnimatedNumber value={count} />}</td>;
   return (
     <Card role="region" aria-label="Coverage" className="min-w-0">
       <CardHeader>
@@ -54,7 +55,7 @@ export function CoverageCard() {
           <select aria-label="Label to show" className="recipe-select" value={shown} onChange={(event) => setLabel(event.target.value)}>
             {labels.map((name) => <option key={name} value={name}>{name.replaceAll("_", " ")}</option>)}
           </select>
-          <span className="hint">{coverage.total} holds in {coverage.recordings} recording{coverage.recordings === 1 ? "" : "s"}.</span>
+          <span className="hint">{<AnimatedNumber value={coverage.total} />} holds in {<AnimatedNumber value={coverage.recordings} />} recording{coverage.recordings === 1 ? "" : "s"}.</span>
         </div>
         <table className="coverage-grid" aria-label={`Holds of ${shown} by arm and wrist`}>
           <thead>
