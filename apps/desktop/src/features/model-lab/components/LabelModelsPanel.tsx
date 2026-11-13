@@ -164,10 +164,10 @@ export function LabelModelsPanel({
           <Button type="button" variant="ghost" onClick={() => setRenaming(null)}>Cancel</Button>
         </form>
       ) : (
-        model.name && <strong className="text-sm">{modelName(model)}</strong>
+        <strong className="text-sm">{modelName(model)}</strong>
       )}
       <span className="flex flex-wrap items-center gap-2 text-sm">
-        {model.name ? <small className="text-muted-foreground">{model.id}</small> : <span>{model.id}</span>}
+        {model.name && <small className="text-muted-foreground">{model.id}</small>}
         {!model.active && <Badge variant="secondary">{STATE_LABEL[model.state]}</Badge>}
         {model.imported && <Badge variant="outline">Imported</Badge>}
         {model.monitorOnly && <Badge variant="outline">Monitor only</Badge>}
@@ -183,8 +183,8 @@ export function LabelModelsPanel({
   /** Threshold and held-out results, as a small fact list. */
   const stats = (model: LabelModel) => {
     const facts = modelStats(model);
-    return facts.length === 0 ? null : (
-      <dl className="grid grid-flow-col gap-x-4 text-xs" aria-label={`${model.id} figures`}>
+    return facts.length === 0 ? <div aria-hidden="true" /> : (
+      <dl className="model-row-stats" aria-label={`${model.id} figures`}>
         {facts.map(({ term, value }) => (
           <div key={term} className="flex flex-col">
             <dt className="text-muted-foreground">{term}</dt>
@@ -195,11 +195,10 @@ export function LabelModelsPanel({
     );
   };
 
-  /** Everything but the model's next step: rename, inspect, and the lifecycle moves after the first. */
-  const more = (model: LabelModel, secondary: ModelAction[]) => {
+  /** The More toggle, which sits with the row's actions. */
+  const moreButton = (model: LabelModel) => {
     const opened = moreOpen === model.id;
     return (
-      <>
         <Button
           type="button"
           variant="ghost"
@@ -209,8 +208,14 @@ export function LabelModelsPanel({
         >
           More
         </Button>
-        {opened && (
-          <div className="flex w-full flex-wrap justify-end gap-2" role="group" aria-label={`More for ${model.id}`}>
+    );
+  };
+
+  /** Everything but the model's next step (rename, inspect, and the lifecycle moves after the first), on its own line under the row. */
+  const morePanel = (model: LabelModel, secondary: ModelAction[]) => {
+    if (moreOpen !== model.id) return null;
+    return (
+          <div className="model-row-more" role="group" aria-label={`More for ${model.id}`}>
             {onInspect && (
               <Button type="button" variant="ghost" aria-label={`Inspect ${model.id}`} onClick={() => { setMoreOpen(null); onInspect(model.id); }}>
                 Inspect
@@ -227,8 +232,6 @@ export function LabelModelsPanel({
             </Button>
             {secondary.map((action) => actionButton(model, action, "ghost"))}
           </div>
-        )}
-      </>
     );
   };
 
@@ -350,9 +353,9 @@ export function LabelModelsPanel({
                       Nothing detects {group.label}, so no recipe that uses it can start or end. {others.some((m) => m.state === "approved") ? "Activate an approved version below." : "Approve a version below, then activate it."}
                     </p>
                   )}
-                  <ul className="flex flex-col gap-2" aria-label={`${group.label} models`}>
+                  <ul className="model-rows" aria-label={`${group.label} models`}>
                     {active && (
-                      <li className="recipe-item rounded-md bg-muted/40 p-2" aria-label={`Active ${group.label} model`}>
+                      <li className="model-row rounded-md bg-muted/40 p-2" aria-label={`Active ${group.label} model`}>
                         {identity(active)}
                         {stats(active)}
                         <div className="recipe-item-actions">
@@ -361,22 +364,24 @@ export function LabelModelsPanel({
                             onClick={() => void attempt(`${active.label}:rollback`, "Roll back", () => invoke("rollback_label_model", { label: active.label }))}>
                             Roll back
                           </Button>
-                          {more(active, [])}
+                          {moreButton(active)}
                         </div>
+                        {morePanel(active, [])}
                       </li>
                     )}
-                    {others.length > 0 && active && <li className="text-xs text-muted-foreground" aria-hidden="true">Other versions</li>}
+                    {others.length > 0 && active && <li className="model-rows-heading text-xs text-muted-foreground" aria-hidden="true">Other versions</li>}
                     {others.map((model) => {
                       const [next, ...secondary] = actionsFor(model);
                       const swap = next?.kind === "activate" && active != null;
                       return (
-                        <li key={model.id} className={`recipe-item${justImported === model.id ? " rounded-md ring-1 ring-primary p-2" : ""}`}>
+                        <li key={model.id} className={`model-row${justImported === model.id ? " rounded-md ring-1 ring-primary p-2" : ""}`}>
                           {identity(model)}
                           {stats(model)}
                           <div className="recipe-item-actions">
                             {next && actionButton(model, next, "outline", swap ? "Swap in" : next.label)}
-                            {more(model, secondary)}
+                            {moreButton(model)}
                           </div>
+                          {morePanel(model, secondary)}
                         </li>
                       );
                     })}
@@ -393,15 +398,17 @@ export function LabelModelsPanel({
                         {showArchived ? "Hide" : "Show"} {<AnimatedNumber value={archived.length} />} archived
                       </Button>
                       {showArchived && (
-                        <ul className="flex flex-col gap-2" aria-label={`${group.label} archived models`}>
+                        <ul className="model-rows" aria-label={`${group.label} archived models`}>
                           {archived.map((model) => (
-                            <li key={model.id} className="recipe-item">
+                            <li key={model.id} className="model-row">
                               {identity(model)}
+                              {stats(model)}
                               <div className="recipe-item-actions">
                                 {actionsFor(model).map((action) => actionButton(model, action))}
                                 {deleteControls(model)}
-                                {more(model, [])}
+                                {moreButton(model)}
                               </div>
+                              {morePanel(model, [])}
                             </li>
                           ))}
                         </ul>

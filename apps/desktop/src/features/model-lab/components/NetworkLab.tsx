@@ -38,8 +38,8 @@ function PipelineCard({ model, description, help, results, hint }: { model: Mode
       <CardContent className="flex flex-col gap-4">
         <p className="text-sm">{model.summary}</p>
         <ModelStages stages={model.stages} />
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-4" aria-label="Research results">
-          {results.map(([name, value]) => <div key={name}><dt className="text-muted-foreground">{name}</dt><dd className="text-numeric"><AnimatedText>{value}</AnimatedText></dd></div>)}
+        <dl className="grid grid-cols-[repeat(auto-fit,minmax(12rem,1fr))] gap-x-6 gap-y-3 text-sm" aria-label="Research results">
+          {results.map(([name, value]) => <div key={name}><dt className="text-muted-foreground">{name}</dt><dd className="text-numeric whitespace-nowrap"><AnimatedText>{value}</AnimatedText></dd></div>)}
         </dl>
         <p className="field-hint">{hint}</p>
       </CardContent>

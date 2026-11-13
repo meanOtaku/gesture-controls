@@ -205,7 +205,12 @@ function MainApp() {
   const [activeTab, setActiveTabUnchecked] = useState<AppTab>("main");
   const setActiveTab = useStableCallback((tab: AppTab) => {
     if (tab === activeTab) return;
-    appNavigation.requestLeave(() => setActiveTabUnchecked(tab));
+    appNavigation.requestLeave(() => {
+      setActiveTabUnchecked(tab);
+      // A new page opens at its top, not at however far down the last one was scrolled. This runs before the page
+      // renders, so a page that scrolls to something when it opens (Labelling's focus) still gets the last word.
+      window.scrollTo({ top: 0 });
+    });
   });
   const [startWithDevice, setStartWithDevice] = useState<DeviceKind | null>(null);
   const { isPending, run } = usePendingActions();

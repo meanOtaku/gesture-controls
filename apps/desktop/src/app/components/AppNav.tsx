@@ -161,6 +161,12 @@ function AppNavView({ activeTab, onSelect, statuses = {} }: AppNavProps) {
       return !open;
     });
 
+  // The open page's entry is always in view: on a short window the list scrolls under the footer, and the page you
+  // are on must never be the one hidden there.
+  useEffect(() => {
+    document.querySelector('[data-sidebar="menu-button"][data-active="true"]')?.scrollIntoView({ block: "nearest" });
+  }, [activeTab, labShown]);
+
   // Cmd/Ctrl + 1..9 jumps to a tab, and Cmd/Ctrl + , to Settings. A modified key is never text, so it is safe inside a field too.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

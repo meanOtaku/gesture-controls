@@ -137,9 +137,10 @@ function LiveView({ url, state }: { url: string | null; state: DroneState | null
         ? <img src={url} alt="Live view from the drone" style={{ width: "100%", height: "100%", filter: "brightness(2.2)" }} />
         : <p className="subtitle" style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", margin: 0, color: "#fff" }}>No video</p>}
       <svg viewBox="0 0 640 360" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
-        <path d="M310 180h20M320 170v20" stroke="#fff" strokeOpacity="0.7" strokeWidth="1.5" />
         {url && (
           <>
+            {/* The centre mark, only over a picture: without one it would sit on the "No video" text. */}
+            <path d="M310 180h20M320 170v20" stroke="#fff" strokeOpacity="0.7" strokeWidth="1.5" />
             <line x1="320" y1="180" x2={x} y2={y} stroke={trusted ? "#4ade80" : "#f87171"} strokeWidth="2" />
             <circle cx={x} cy={y} r="6" fill="none" stroke={trusted ? "#4ade80" : "#f87171"} strokeWidth="2" />
           </>

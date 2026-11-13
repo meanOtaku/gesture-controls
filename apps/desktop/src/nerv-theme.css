@@ -401,6 +401,11 @@ html[data-theme="nerv"] [data-slot="checkbox"][data-state="checked"] { backgroun
 html[data-theme="nerv"] .segment { font-family: var(--font-display); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 html[data-theme="nerv"] .segment:has([data-state="checked"]),
 html[data-theme="nerv"] .segment:has([data-state="checked"]):hover { background: var(--eva-orange); color: #000; }
+/* The Settings index: the same segments, held just under the fixed top bar while the page scrolls. */
+html[data-theme="nerv"] .settings-nav { top: var(--sticky-top); background: var(--eva-bg, #000); border-bottom: 1px solid var(--eva-frame); }
+html[data-theme="nerv"] .settings-nav button { border: 1px solid var(--eva-border); border-radius: 0; color: var(--eva-text-muted); font-family: var(--font-display); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; font-size: .78rem; }
+html[data-theme="nerv"] .settings-nav button:hover { color: var(--eva-orange); border-color: var(--eva-orange); }
+html[data-theme="nerv"] .settings-nav button[aria-current="true"] { background: var(--eva-orange); color: #000; border-color: var(--eva-orange); }
 
 /* Navigation: a technical terminal list; the open page is orange. */
 html[data-theme="nerv"] [data-slot="sidebar-container"] { border-right: 1px solid var(--eva-frame); }

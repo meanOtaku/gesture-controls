@@ -115,10 +115,17 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .recorder-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(300px,420px); gap:24px; align-items:start; }
 /* A theme with a fixed header and footer sets --sticky-top and --sticky-bottom to their heights, so the camera stops below
    the header rather than under it, and scrolls inside itself when it is taller than the space left. */
-.recorder-camera { position:sticky; top:calc(var(--sticky-top, 0px) + 16px); max-height:calc(100svh - var(--sticky-top, 0px) - var(--sticky-bottom, 0px) - 32px); overflow-y:auto; min-width:0; }
-@media (max-width: 1100px) {
+.recorder-sessions { grid-column:1; grid-row:1; }
+.recorder-camera { grid-column:2; grid-row:1; position:sticky; top:calc(var(--sticky-top, 0px) + 16px); max-height:calc(100svh - var(--sticky-top, 0px) - var(--sticky-bottom, 0px) - 32px); overflow-y:auto; min-width:0; }
+/* The page area is a size container, so a layout steps down by the room the page really has: in the NERV theme the side
+   panels take half a wide window, and a breakpoint on the window would keep two columns squeezed into the rest. It is the
+   area around the page, not the page: a container scopes the counters inside it, and the NERV module numbers count from
+   the page. */
+[data-slot="sidebar-inset"] { container: page / inline-size; }
+@container page (max-width: 1000px) {
   .recorder-layout { grid-template-columns:minmax(0,1fr); }
-  .recorder-camera { position:static; order:-1; max-height:none; overflow:visible; }
+  .recorder-sessions, .recorder-camera { grid-column:auto; grid-row:auto; }
+  .recorder-camera { position:static; max-height:none; overflow:visible; }
 }
 .telemetry-shell .subtitle,.model-lab-shell .subtitle { max-width:680px; line-height:1.65; }
 .stream-status { display:flex; align-items:center; gap:24px; flex-wrap:wrap; margin:-6px 0 24px; color:var(--ink); font-size:.8rem; }
@@ -165,7 +172,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .model-lab-backend-select .hint { display:block; font-weight:400; margin:8px 0 0; }
 .model-lab-shell input[type="radio"],.model-lab-shell input[type="checkbox"] { accent-color:var(--cyan); flex-shrink:0; }
 .model-lab-shell code { overflow-wrap:anywhere; white-space:normal; }
-@media(max-width:900px) {
+@container page (max-width: 940px) {
   .model-lab-labels { grid-template-columns:1fr; }
 }
 @media(max-width:620px) {
@@ -393,7 +400,7 @@ html.overlay-document body::before { display:none; }
 .lab-monitor[hidden] { display:none; }
 .lab-monitor-camera { display:flex; flex-direction:column; gap:.6rem; min-width:0; }
 .lab-monitor-log { min-width:0; }
-@media (max-width: 900px) { .lab-monitor { grid-template-columns:minmax(0, 1fr); } }
+@container page (max-width: 800px) { .lab-monitor { grid-template-columns:minmax(0, 1fr); } }
 .miss-summary { margin:.25rem 0 0; padding-left:1rem; list-style:disc; display:flex; flex-direction:column; gap:.2rem; }
 [data-sidebar="group-label"] { font-family:var(--font-display); text-transform:uppercase; letter-spacing:.16em; font-size:.75rem; color:var(--ink-3); }
 .nav-dot { margin-left:auto; flex:0 0 auto; width:.55rem; height:.55rem; border:1px solid var(--ink-3); background:transparent; }
@@ -592,4 +599,31 @@ html.overlay-document body::before { display:none; }
 number-flow-react {
   clip-path: inset(0);
   --number-flow-mask-height: 0.4em;
+}
+
+/*
+ * A label's model versions: one shared grid, so every row puts its name, its figures and its buttons in the same three
+ * columns whatever their lengths, and More opens on a line of its own under the row instead of reflowing it.
+ */
+.model-rows { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; column-gap: 1.5rem; row-gap: .5rem; align-items: center; }
+.model-rows > li { grid-column: 1 / -1; }
+.model-row { display: grid; grid-template-columns: subgrid; align-items: center; row-gap: .5rem; }
+.model-row > .recipe-item-actions { justify-content: flex-end; }
+.model-row-stats { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(5.5rem, auto); column-gap: 1rem; font-size: .75rem; }
+.model-row-stats > div { display: flex; flex-direction: column; }
+.model-row-more { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
+.model-rows { container-type: inline-size; }
+/* Too narrow for three columns (the card, not the window: the NERV panels take room): the name gets a line of its own and the figures and buttons share the next. */
+@container (max-width: 720px) {
+  .model-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .model-row > :first-child { grid-column: 1 / -1; }
+}
+
+/* The menu scrolls under its footer on a short window: its edges fade out instead of being cut through. The top edge
+   fades only once the menu is scrolled, so the first entry is never dimmed at rest. */
+@property --sidebar-fade-top { syntax: "<length>"; inherits: false; initial-value: 0px; }
+[data-slot="sidebar-content"] { mask-image: linear-gradient(to bottom, transparent 0, #000 var(--sidebar-fade-top), #000 calc(100% - 1.75rem), transparent); }
+@keyframes sidebar-fade-top { to { --sidebar-fade-top: 1.5rem; } }
+@supports (animation-timeline: scroll()) {
+  [data-slot="sidebar-content"] { animation: sidebar-fade-top linear both; animation-timeline: scroll(self); animation-range: 0 1.5rem; }
 }

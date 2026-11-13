@@ -36,6 +36,10 @@ export function RecorderPage() {
     <StreamStatus />
     <SignalHealthStrip recording={datasetRecording} />
     <div className="recorder-layout">
+      {/* First in the page, so it is numbered and read first; beside the sessions on a wide page. */}
+      <aside className="recorder-camera" aria-label="Camera">
+        <CameraCapturePanel />
+      </aside>
       <div className="card-stack recorder-sessions">
         <PinchSessionCard recording={datasetRecording} watchConnected={watchConnected} desktopAvailable={desktopAvailable} onStop={stop} />
         <EverydayNoiseCard recording={datasetRecording} watchConnected={watchConnected} onStop={stop} />
@@ -44,9 +48,6 @@ export function RecorderPage() {
         <SessionDetailsCard context={telemetryStore.getSessionContext()} onChange={(context) => telemetryStore.setSessionContext(context)} recording={datasetRecording} />
         <CoverageCard />
       </div>
-      <aside className="recorder-camera" aria-label="Camera">
-        <CameraCapturePanel />
-      </aside>
     </div>
   </main>;
 }
