@@ -13,3 +13,11 @@ Cut-off chosen on the training recordings only; the 11 held-out recordings repla
 | pinch_out | trees+spectral | 0.6 | 114/134 | 18.7 | 911 ms | everyday_noise 6, pinch_in 4, unlabelled 1 |
 | pinch_out | trees@100 | 0.65 | 118/134 | 5.1 | 908 ms | everyday_noise 3 |
 | pinch_out | trees+spectral@100 | 0.65 | 117/134 | 6.8 | 908 ms | everyday_noise 4 |
+| pinch_in | cnn | 0.99 | 95/120 | 3.6 | 451 ms | unlabelled 2 |
+| pinch_in | cnn, seed 18 | 0.99 | 91/120 | 3.6 | 494 ms | unlabelled 2 |
+| pinch_in | cnn@100 | 0.99 | 96/120 | 3.6 | 451 ms | unlabelled 2 |
+| pinch_in | cnn@100, seed 18 | 0.99 | 92/120 | 3.6 | 434 ms | unlabelled 2 |
+| pinch_out | cnn | 0.99 | 96/127 | 3.4 | 434 ms | everyday_noise 2 |
+| pinch_out | cnn, seed 18 | 0.99 | 92/127 | 0.0 | 444 ms | - |
+| pinch_out | cnn@100 | 0.9 | 102/127 | 3.4 | 449 ms | everyday_noise 2 |
+| pinch_out | cnn@100, seed 18 | 0.95 | 100/127 | 3.4 | 468 ms | everyday_noise 2 |

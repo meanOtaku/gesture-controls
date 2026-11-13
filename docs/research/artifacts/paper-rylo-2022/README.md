@@ -47,7 +47,30 @@ Unlike the paper, the trees rely on the pulse sensor: their most useful features
 with the accelerometer's spread second. The paper found PPG too slow to classify with; here, deciding *when* a pinch
 starts, it carries the most.
 
-## What it would take
+## The CNN at 100 Hz (`as_trained.py cnn cnn@100`, 14 Nov)
+
+The CNN on the 100 Hz grid of `../training-improvements-2026-11/experiment.py` (twice the ticks over the same second and
+10 s, a fourth convolution), trained as the app trains it, two seeds:
+
+| gesture | CNN | seed 17 | seed 18 | median delay |
+|---|---|---|---|---:|
+| pinch_in | 50 Hz | 95/120 at 3.6 an hour | 91/120 at 3.6 an hour | 451-494 ms |
+| pinch_in | 100 Hz | 96/120 at 3.6 an hour | 92/120 at 3.6 an hour | 434-451 ms |
+| pinch_out | 50 Hz | 96/127 at 3.4 an hour | 92/127 at 0 an hour | 434-444 ms |
+| pinch_out | 100 Hz | **102/127** at 3.4 an hour | **100/127** at 3.4 an hour | 449-468 ms |
+
+Pinch in: one more pinch a seed, the same false activations: no real change. Pinch out: 6 to 8 more pinches (about 5%),
+with at most 2 false activations more over the 11 recordings. Unlike the earlier comparison (best cut-off chosen on these
+recordings, older training loops), the CNN does gain a little from 100 Hz, on pinch out. It is not made the CNN's input
+here: that is its own change (`cnn_input` in the trainer and the runtime, the network's fourth convolution, the manifest).
+
+## Done (14 Nov)
+
+The trees now read motion at 100 Hz: the trainer's `imu_onset` has both grids and new trees motion models use 100 Hz and
+say so in their manifest (`preprocessing.motionHz`); the runtime reads each model's motion on the grid it names, the
+models from before on 50 Hz; the watch's motion rates default to 100 Hz.
+
+## What it took
 
 The trees still decide about half a second later than the CNN (about 0.9 s against 0.45 s after the pinch starts), which
 the CNN was made the default for. If the trees' extra catch is wanted anyway, 100 Hz motion is the change to make:

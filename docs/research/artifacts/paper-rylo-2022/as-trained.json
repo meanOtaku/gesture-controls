@@ -115,5 +115,115 @@
    "everyday_noise": 4
   },
   "seconds": 270
+ },
+ "pinch_in cnn": {
+  "threshold": 0.99,
+  "thresholdSource": "trainingRecordings",
+  "caught": 95,
+  "gestures": 120,
+  "falseActivations": 2,
+  "perHour": 3.6254977990150734,
+  "medianLatencyMs": 451.468647,
+  "repeats": 0,
+  "falseOn": {
+   "unlabelled": 2
+  },
+  "seconds": 541
+ },
+ "pinch_in cnn seed 18": {
+  "threshold": 0.99,
+  "thresholdSource": "trainingRecordings",
+  "caught": 91,
+  "gestures": 120,
+  "falseActivations": 2,
+  "perHour": 3.6254977990150734,
+  "medianLatencyMs": 494.125916,
+  "repeats": 0,
+  "falseOn": {
+   "unlabelled": 2
+  },
+  "seconds": 638
+ },
+ "pinch_in cnn@100": {
+  "threshold": 0.99,
+  "thresholdSource": "trainingRecordings",
+  "caught": 96,
+  "gestures": 120,
+  "falseActivations": 2,
+  "perHour": 3.6257990459629528,
+  "medianLatencyMs": 450.728727,
+  "repeats": 0,
+  "falseOn": {
+   "unlabelled": 2
+  },
+  "seconds": 1010
+ },
+ "pinch_in cnn@100 seed 18": {
+  "threshold": 0.99,
+  "thresholdSource": "trainingRecordings",
+  "caught": 92,
+  "gestures": 120,
+  "falseActivations": 2,
+  "perHour": 3.6257990459629528,
+  "medianLatencyMs": 434.4305165,
+  "repeats": 0,
+  "falseOn": {
+   "unlabelled": 2
+  },
+  "seconds": 949
+ },
+ "pinch_out cnn": {
+  "threshold": 0.99,
+  "thresholdSource": "trainingRecordings",
+  "caught": 96,
+  "gestures": 127,
+  "falseActivations": 2,
+  "perHour": 3.416997212326928,
+  "medianLatencyMs": 434.047786,
+  "repeats": 0,
+  "falseOn": {
+   "everyday_noise": 2
+  },
+  "seconds": 438
+ },
+ "pinch_out cnn seed 18": {
+  "threshold": 0.99,
+  "thresholdSource": "trainingRecordings",
+  "caught": 92,
+  "gestures": 127,
+  "falseActivations": 0,
+  "perHour": 0.0,
+  "medianLatencyMs": 444.4608565,
+  "repeats": 0,
+  "falseOn": {},
+  "seconds": 410
+ },
+ "pinch_out cnn@100": {
+  "threshold": 0.9,
+  "thresholdSource": "trainingRecordings",
+  "caught": 102,
+  "gestures": 127,
+  "falseActivations": 2,
+  "perHour": 3.4173783419437243,
+  "medianLatencyMs": 449.23765749999995,
+  "repeats": 0,
+  "falseOn": {
+   "everyday_noise": 2
+  },
+  "seconds": 1860
+ },
+ "pinch_out cnn@100 seed 18": {
+  "threshold": 0.95,
+  "thresholdSource": "trainingRecordings",
+  "caught": 100,
+  "gestures": 127,
+  "falseActivations": 2,
+  "perHour": 3.4173783419437243,
+  "medianLatencyMs": 467.61129300000005,
+  "repeats": 0,
+  "falseOn": {
+   "everyday_noise": 2
+  },
+  "seconds": 1386
  }
 }
