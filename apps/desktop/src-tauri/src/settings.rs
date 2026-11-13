@@ -140,9 +140,10 @@ impl Default for AppSettings {
             headphones_rate_hz: 60.0,
             recording_rate_hz: 30.0,
             graph_refresh_rate_hz: 15.0,
-            watch_orientation_rate_hz: 50.0,
-            watch_acceleration_rate_hz: 50.0,
-            watch_gyroscope_rate_hz: 50.0,
+            // The watch's full motion rate (a Galaxy Watch4 sends at most 100 Hz): the pinch models are trained on it.
+            watch_orientation_rate_hz: 100.0,
+            watch_acceleration_rate_hz: 100.0,
+            watch_gyroscope_rate_hz: 100.0,
             // Samsung controls physical sampling/callback cadence. Defaults at
             // the acceptance ceiling preserve every callback sample.
             watch_ppg_flush_rate_hz: default_ppg_flush_rate_hz(),

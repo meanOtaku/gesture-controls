@@ -33,6 +33,7 @@ def write_pulse_recording(
     step: float = 2500.0,
     gestures_until_s: float | None = None,
     motion: bool = False,
+    motion_hz: int = 50,
 ) -> Path:
     """Writes a recording and returns its path. Values are whole numbers, as the watch sends them. Holds start every `every_s` seconds from 3 s, cycling through `gestures`;
     their labels are `lag_ms` later than the signal shows them (a camera that marks late). With `gestures_until_s`, none
@@ -58,9 +59,10 @@ def write_pulse_recording(
     rows = [(int(t[i]), ",".join([str(int(t[i])), str(i), f"{green[i]:.0f}", f"{red[i]:.0f}", f"{ir[i]:.0f}", *([""] * 10), "0", labels[i]]))
             for i in range(n)]
     if motion:
-        m = int(seconds * 50)
-        tm = t[0] + 7_000_000 + np.cumsum(np.full(m, TICK_NS // 2) + rng.integers(-1_000_000, 1_000_001, m))
-        sway = 0.04 * np.sin(2 * np.pi * np.arange(m) / 120.0)
+        m = int(seconds * motion_hz)
+        jitter = 1_000_000 * 50 // motion_hz
+        tm = t[0] + 7_000_000 + np.cumsum(np.full(m, 1_000_000_000 // motion_hz) + rng.integers(-jitter, jitter + 1, m))
+        sway = 0.04 * np.sin(2 * np.pi * np.arange(m) * (50 / motion_hz) / 120.0)
         accel = np.stack([sway + rng.normal(0, 0.02, m), rng.normal(0, 0.02, m), rng.normal(0, 0.02, m)], axis=1)
         gyro = np.stack([rng.normal(0, 0.01, m), sway / 2 + rng.normal(0, 0.01, m), rng.normal(0, 0.01, m)], axis=1)
         for index, start in enumerate(starts):
@@ -79,10 +81,10 @@ def write_pulse_recording(
     return path
 
 
-def spec_for(folder: Path, *, train: int = 4, evaluation: int = 2, research: bool = False, lag_ms: int = 0, seconds: float = 60.0, step: float = 2500.0, every_s: float = 3.0, motion: bool = False) -> dict:
+def spec_for(folder: Path, *, train: int = 4, evaluation: int = 2, research: bool = False, lag_ms: int = 0, seconds: float = 60.0, step: float = 2500.0, every_s: float = 3.0, motion: bool = False, motion_hz: int = 50) -> dict:
     """A spec training a `pinch` model, with `fist` as a negative, on fresh synthetic recordings: the PPG-only model, or with
     `motion` the PPG + IMU one."""
-    recordings = {f"r{i}": str(write_pulse_recording(folder, f"r{i}", seed=i, lag_ms=lag_ms, seconds=seconds, step=step, every_s=every_s, motion=motion)) for i in range(train + evaluation)}
+    recordings = {f"r{i}": str(write_pulse_recording(folder, f"r{i}", seed=i, lag_ms=lag_ms, seconds=seconds, step=step, every_s=every_s, motion=motion, motion_hz=motion_hz)) for i in range(train + evaluation)}
     ids = sorted(recordings)
     return {
         "version": 1,

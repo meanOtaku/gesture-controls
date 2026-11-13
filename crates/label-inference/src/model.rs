@@ -71,6 +71,8 @@ pub struct LoadedModel {
     pub label: LabelId,
     /// Which pinch-start model it is: what its inputs are computed from.
     pub kind: ModelKind,
+    /// For a pulse + motion trees model, the motion grid its features are read from (its manifest's `motionHz`).
+    pub motion_grid: pinch_inference::imu_onset::MotionGrid,
     pub input: InputContract,
     pub thresholds: Thresholds,
     pub quality: QualityRules,
@@ -107,6 +109,7 @@ impl LoadedModel {
             version_id: version.id.clone(),
             label: version.label.clone(),
             kind: bundle.kind,
+            motion_grid: bundle.manifest.preprocessing.motion_grid(),
             // The registry is authoritative for the contract and thresholds the model runs under.
             input: version.input.clone(),
             thresholds: version.thresholds,
@@ -193,7 +196,8 @@ impl LoadedModel {
 pub(crate) mod tests {
     use super::*;
     use crate::bundle::tests::{
-        cnn_fixture_dir, fixture_dir, median_cnn_fixture_dir, motion_fixture_dir,
+        cnn_fixture_dir, fixture_dir, median_cnn_fixture_dir, motion_100hz_fixture_dir,
+        motion_fixture_dir,
     };
     use crate::bundle::validate_bundle;
     use model_lab_core::{ModelOrigin, ProjectId};
@@ -231,6 +235,18 @@ pub(crate) mod tests {
         let bundle = validate_bundle(&motion_fixture_dir(), None).unwrap();
         let version = active_version(&bundle);
         LoadedModel::load(bundle, &version).unwrap()
+    }
+
+    /// The 100 Hz PPG + IMU fixture model, approved and active.
+    pub fn loaded_motion_100hz() -> LoadedModel {
+        let bundle = validate_bundle(&motion_100hz_fixture_dir(), None).unwrap();
+        let version = active_version(&bundle);
+        LoadedModel::load(bundle, &version).unwrap()
+    }
+
+    /// The 100 Hz PPG + IMU fixture's trace, as [`expected_motion`].
+    pub fn expected_motion_100hz() -> (Vec<PpgSample>, Vec<MotionSample>, Vec<Option<f64>>) {
+        expected_in(&motion_100hz_fixture_dir())
     }
 
     /// The CNN fixture model, approved and active.

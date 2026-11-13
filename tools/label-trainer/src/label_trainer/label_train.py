@@ -154,6 +154,9 @@ class Spec:
     # For a recording of a session whose start is also in an earlier one: the watch time (ns) up to which that earlier one
     # has its moments. Its decisions start after it, so no moment counts twice; its earlier samples are still history.
     decide_from_ns: dict[str, int] = field(default_factory=dict)
+    # The rate of the motion grid a trees motion model reads (`imu_onset.GRIDS`); the bundle says it, so the runtime reads
+    # the same. 100 unless the spec asks for 50 (to train again as the first models were).
+    motion_hz: int = imu_onset.MOTION_HZ
 
     def session_of(self, rid: str) -> str:
         """The session a recording belongs to: its own id unless it shares one with others."""
@@ -232,6 +235,9 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         members = [rid for rid, s in sessions.items() if s == session]
         if len({rid in train for rid in members}) > 1:
             raise TrainingRefused(f"the recordings of one session ({', '.join(sorted(members))}) are split between training and evaluation")
+    motion_hz = raw.get("motionHz", imu_onset.MOTION_HZ)
+    if isinstance(motion_hz, bool) or motion_hz not in imu_onset.GRIDS:
+        raise TrainingRefused(f"motionHz must be one of {sorted(imu_onset.GRIDS)}, got {motion_hz!r}")
     decide_from_ns = raw.get("decideFromNs", {}) or {}
     if not isinstance(decide_from_ns, dict) or any(rid not in recordings or isinstance(t, bool) or not isinstance(t, int) for rid, t in decide_from_ns.items()):
         raise TrainingRefused("decideFromNs must give recordings of the spec a whole number of nanoseconds")
@@ -253,6 +259,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         stages=stages,
         sessions={str(rid): str(session) for rid, session in sessions.items()},
         decide_from_ns={str(rid): int(t) for rid, t in decide_from_ns.items()},
+        motion_hz=int(motion_hz),
     )
 
 
@@ -338,7 +345,7 @@ def inputs(spec: Spec, recording: Recording, decisions_ns: np.ndarray) -> np.nda
     if not spec.motion:
         return x
     motion_ts, axes = motion_of(recording)
-    return np.concatenate([x, imu_onset.features(motion_ts, axes, decisions_ns)], axis=1)
+    return np.concatenate([x, imu_onset.features(motion_ts, axes, decisions_ns, hz=spec.motion_hz)], axis=1)
 
 
 def check_labels(spec: Spec, recordings: dict[str, Recording]) -> None:
@@ -908,7 +915,7 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, A
 
         framework = {"name": "scikit-learn", "version": sklearn.__version__}
         pipeline = ("PPG -> causal z-score (1 s, 2 s, 4 s) -> causal cubic slope, curvature, jerk -> 1701 summaries"
-                    + (" + accelerometer and gyroscope -> 1032 summaries (0.3-1.3 s) -> ExtraTrees -> peak trigger" if spec.motion else " -> ExtraTrees"))
+                    + (f" + accelerometer and gyroscope at {spec.motion_hz} Hz -> 1032 summaries (0.3-1.3 s) -> ExtraTrees -> peak trigger" if spec.motion else " -> ExtraTrees"))
         details = {"trees": TREES, "minSamplesLeaf": MIN_SAMPLES_LEAF, "maxFeatures": MAX_FEATURES}
     manifest = {
         "schemaVersion": 1,
@@ -926,7 +933,9 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, A
                        **({"trigger": policy.trigger} if spec.motion else {}),
                        # How long after a gesture starts the model decides: the runtime's still-hand gate looks before that.
                        "decisionDelayMs": spec.decision_delay_ms},
-        "preprocessing": {"kind": CNN_PREPROCESSING if spec.cnn else PREPROCESSING[spec.sources]},
+        "preprocessing": {"kind": CNN_PREPROCESSING if spec.cnn else PREPROCESSING[spec.sources],
+                          # The motion grid the trees read; absent (50 Hz) in the first models and for the CNN and the pulse alone.
+                          **({"motionHz": spec.motion_hz} if spec.motion and not spec.cnn else {})},
         "provenance": {
             "backend": spec.backend,
             "pipeline": pipeline,

@@ -50,27 +50,33 @@ SPECTRAL_STATS = ("log_power", *(f"band_{lo:g}_{hi:g}" for lo, hi in BANDS), "pe
 EPS = 1e-12
 
 
-def spec_for(target: str) -> lt.Spec:
-    """The CNN experiment's recordings and roles, for the trees."""
-    return replace(cnn_spec_for(target), backend=lt.BACKEND)
+def spec_for(target: str, hz: int = 50) -> lt.Spec:
+    """The CNN experiment's recordings and roles, for the trees, with motion on the `hz` grid (the trainer's default is now
+    100 Hz; these experiments' baseline is the 50 Hz the trees had)."""
+    return replace(cnn_spec_for(target), backend=lt.BACKEND, motion_hz=hz)
 
 
-def spectral(ts_ns: np.ndarray, axes: np.ndarray, decisions_ns: np.ndarray, chunk: int = 512) -> np.ndarray:
+# A 25 Hz grid over the same spans, for the experiment only.
+imu_onset.GRIDS.setdefault(25, (40_000_000, (8, 16, 32), 75))
+
+
+def spectral(ts_ns: np.ndarray, axes: np.ndarray, decisions_ns: np.ndarray, chunk: int = 512, hz: int = 50) -> np.ndarray:
     """(decisions, 216): the spectrum of each motion channel over each of the motion features' windows."""
+    tick, grid_windows, _, _ = imu_onset.grid_of(hz)
     ts_ns = np.asarray(ts_ns, dtype=np.int64)
     decisions_ns = np.asarray(decisions_ns, dtype=np.int64)
     channels = 8
-    width = len(imu_onset.WINDOWS) * channels * len(SPECTRAL_STATS)
+    width = len(grid_windows) * channels * len(SPECTRAL_STATS)
     out = np.full((len(decisions_ns), width), np.nan)
     if len(ts_ns) == 0 or len(decisions_ns) == 0:
         return out
     values = imu_onset.with_magnitudes(axes)
-    rate = 1e9 / imu_onset.TICK_NS
+    rate = 1e9 / tick
     for start in range(0, len(decisions_ns), chunk):
         part = slice(start, start + chunk)
-        g = imu_onset.grid(ts_ns, values, decisions_ns[part])
+        g = imu_onset.grid(ts_ns, values, decisions_ns[part], hz)
         blocks = []
-        for window in imu_onset.WINDOWS:
+        for window in grid_windows:
             segment = g[:, -window:, :]
             segment = (segment - segment.mean(axis=1, keepdims=True)) * np.hanning(window)[None, :, None]
             power = np.abs(np.fft.rfft(segment, axis=1)) ** 2          # (n, frequencies, channels)
@@ -90,15 +96,6 @@ def spectral(ts_ns: np.ndarray, axes: np.ndarray, decisions_ns: np.ndarray, chun
     return out
 
 
-def motion_grid(rate_hz: int) -> None:
-    """The motion features on another grid, over the same spans: windows of 320, 640 and 1,280 ms, 3 s of background."""
-    scale = rate_hz / 50
-    imu_onset.TICK_NS = round(20_000_000 / scale)
-    imu_onset.WINDOWS = tuple(round(w * scale) for w in (16, 32, 64))
-    imu_onset.BACKGROUND = round(150 * scale)
-    imu_onset.GRID_TICKS = imu_onset.BACKGROUND + max(imu_onset.WINDOWS)
-
-
 def with_spectral() -> None:
     """The trainer's inputs with the spectral features after them."""
     base = lt.inputs
@@ -106,22 +103,17 @@ def with_spectral() -> None:
     def inputs(spec, recording, decisions_ns):
         x = base(spec, recording, decisions_ns)
         motion_ts, axes = lt.motion_of(recording)
-        return np.concatenate([x, spectral(motion_ts, axes, decisions_ns)], axis=1)
+        return np.concatenate([x, spectral(motion_ts, axes, decisions_ns, hz=spec.motion_hz)], axis=1)
 
     lt.inputs = inputs
 
 
-def setup(variant: str) -> int | None:
-    """Changes the trainer for the variant; returns how many features a `top` variant keeps."""
-    if variant.endswith("@25"):
-        motion_grid(25)
-    if variant.endswith("@100"):
-        motion_grid(100)
+def setup(variant: str) -> tuple[int | None, int]:
+    """Changes the trainer for the variant; returns how many features a `top` variant keeps, and the motion grid's rate."""
+    hz = 25 if variant.endswith("@25") else 100 if variant.endswith("@100") else 50
     if "+spectral" in variant:
         with_spectral()
-    if "-top" in variant:
-        return int(variant.split("-top")[1])
-    return None
+    return (int(variant.split("-top")[1]) if "-top" in variant else None), hz
 
 
 class Selected:
@@ -156,8 +148,8 @@ def judged(spec: lt.Spec, recordings, scored) -> dict:
 
 
 def run(target: str, variant: str, seed: int) -> dict:
-    keep = setup(variant)
-    spec = replace(spec_for(target), seed=seed)
+    keep, hz = setup(variant)
+    spec = replace(spec_for(target, hz), seed=seed)
     recordings = lt.load_spec_recordings(spec)
     started = time.time()
     train = lt.examples(spec, recordings, spec.train)
@@ -187,7 +179,7 @@ def feature_names(spec: lt.Spec, width: int) -> list[str]:
 
     names = list(ppg_onset.FEATURE_NAMES) + list(imu_onset.FEATURE_NAMES)
     if width > len(names):
-        names += [f"spec_{stat}_{c}_w{w}" for w in imu_onset.WINDOWS for stat in SPECTRAL_STATS
+        names += [f"spec_{stat}_{c}_w{w}" for w in imu_onset.grid_of(spec.motion_hz)[1] for stat in SPECTRAL_STATS
                   for c in (*imu_onset.AXES, "accel_mag", "gyro_mag")]
     return names[:width]
 

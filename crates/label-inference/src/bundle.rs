@@ -170,6 +170,19 @@ pub struct ThresholdSpec {
 pub struct Preprocessing {
     /// One of [`ModelKind::preprocessing`].
     pub kind: String,
+    /// For a pulse + motion trees model: the rate of the motion grid it reads (50 or 100 Hz, see
+    /// [`pinch_inference::imu_onset::MotionGrid`]). Absent in the first such models, which read 50 Hz, and for the others.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub motion_hz: Option<u32>,
+}
+
+impl Preprocessing {
+    /// The motion grid a pulse + motion trees model reads: what the manifest names, 50 Hz when it names none.
+    pub fn motion_grid(&self) -> pinch_inference::imu_onset::MotionGrid {
+        self.motion_hz
+            .and_then(pinch_inference::imu_onset::MotionGrid::at_hz)
+            .unwrap_or(pinch_inference::imu_onset::MotionGrid::HZ_50)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -326,6 +339,19 @@ pub fn validate_bundle(
         ));
     };
     let mismatch = |what: String| Err(BundleError::ContractMismatch(what));
+    if let Some(hz) = manifest.preprocessing.motion_hz {
+        if kind != ModelKind::PpgImu {
+            return mismatch(format!(
+                "only a '{PPG_IMU_PREPROCESSING}' model reads its motion at a rate it names, not a '{}' one",
+                kind.preprocessing()
+            ));
+        }
+        if pinch_inference::imu_onset::MotionGrid::at_hz(hz).is_none() {
+            return mismatch(format!(
+                "a '{PPG_IMU_PREPROCESSING}' model reads its motion at 50 or 100 Hz, not {hz} Hz"
+            ));
+        }
+    }
     if manifest.model.format != kind.model_format() {
         return mismatch(format!(
             "a '{}' model is a '{}' file, not a '{}' one",
@@ -441,6 +467,11 @@ pub(crate) mod tests {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ppg_imu_onset_bundle")
     }
 
+    /// The PPG + IMU bundle the trainer makes now: motion on the 100 Hz grid, as its manifest says.
+    pub fn motion_100hz_fixture_dir() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ppg_imu_onset_100hz_bundle")
+    }
+
     /// The earlier rolling-scaled CNN bundle, kept for the versions people already have.
     pub fn cnn_fixture_dir() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ppg_imu_cnn_bundle")
@@ -550,6 +581,37 @@ pub(crate) mod tests {
         assert_eq!(bundle.manifest.input_contract().window_ms, WINDOW_MS);
         assert_eq!(bundle.manifest.threshold_config().cooldown_ms, 1500);
         assert_eq!(bundle.model_sha256.len(), 64);
+    }
+
+    /// The PPG + IMU fixture with its manifest changed by `edit`, validated.
+    fn motion_edited(edit: impl FnOnce(&mut serde_json::Value)) -> Result<ValidatedBundle, BundleError> {
+        let dir = tempfile::tempdir().unwrap();
+        for entry in fs::read_dir(motion_fixture_dir()).unwrap() {
+            let entry = entry.unwrap();
+            fs::copy(entry.path(), dir.path().join(entry.file_name())).unwrap();
+        }
+        let path = dir.path().join("manifest.json");
+        let mut manifest: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        edit(&mut manifest);
+        fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        validate_bundle(dir.path(), None)
+    }
+
+    #[test]
+    fn a_motion_model_reads_motion_on_the_grid_its_manifest_names() {
+        use pinch_inference::imu_onset::MotionGrid;
+        // The first motion models name no rate: they read the 50 Hz grid they were trained on.
+        let first = validate_bundle(&motion_fixture_dir(), None).unwrap();
+        assert_eq!(first.manifest.preprocessing.motion_hz, None);
+        assert_eq!(first.manifest.preprocessing.motion_grid(), MotionGrid::HZ_50);
+        let fast = motion_edited(|m| m["preprocessing"]["motionHz"] = 100.into()).unwrap();
+        assert_eq!(fast.manifest.preprocessing.motion_grid(), MotionGrid::HZ_100);
+        let odd = motion_edited(|m| m["preprocessing"]["motionHz"] = 75.into()).err().unwrap().to_string();
+        assert!(odd.contains("50 or 100 Hz, not 75 Hz"), "{odd}");
+        assert!(
+            refused(|m| m["preprocessing"]["motionHz"] = 100.into())
+                .contains("only a 'ppg_imu_onset' model reads its motion at a rate it names")
+        );
     }
 
     #[test]

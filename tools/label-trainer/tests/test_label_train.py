@@ -40,7 +40,7 @@ def test_a_motion_model_reads_the_pulse_and_motion_and_detects_on_the_peak(tmp_p
     manifest = json.loads((bundle / "manifest.json").read_text())
     names = list(ppg_onset.FEATURE_NAMES) + list(imu_onset.FEATURE_NAMES)
     assert manifest["input"]["features"] == names and manifest["input"]["shape"] == [None, 2733]
-    assert manifest["sources"] == ["watchPpg", "watchOrientation"] and manifest["preprocessing"] == {"kind": "ppg_imu_onset"}
+    assert manifest["sources"] == ["watchPpg", "watchOrientation"] and manifest["preprocessing"] == {"kind": "ppg_imu_onset", "motionHz": 100}
     assert manifest["thresholds"]["trigger"] == "peak" and manifest["thresholds"]["cooldownMs"] == 1500
     assert manifest["thresholds"]["decisionDelayMs"] == ppg_onset.ONSET_DELAY_MS
     assert manifest["thresholds"]["activation"] in lt.THRESHOLD_CANDIDATES
@@ -332,4 +332,18 @@ def test_a_moment_two_recordings_of_one_session_share_is_decided_in_only_one(tmp
     spec = lt.parse_spec({**raw, "decideFromNs": {b: middle}})
     scored = lt.timeline(spec, recordings[b], lambda x: np.zeros(len(x)))
     assert scored is not None and (scored[0] > middle).all()
+
+
+def test_a_motion_model_reads_motion_at_100_hz_unless_the_spec_asks_for_50(tmp_path: Path) -> None:
+    raw = spec_for(tmp_path, motion=True, every_s=5.0)
+    assert lt.parse_spec(raw).motion_hz == 100
+    assert lt.parse_spec({**raw, "motionHz": 50}).motion_hz == 50
+    with pytest.raises(lt.TrainingRefused, match="motionHz must be one of"):
+        lt.parse_spec({**raw, "motionHz": 75})
+    recordings = lt.load_spec_recordings(lt.parse_spec(raw))
+    rid = raw["train"][0]
+    decisions = np.array([int(recordings[rid].timestamps_ns[-1])])
+    fast = lt.inputs(lt.parse_spec(raw), recordings[rid], decisions)
+    slow = lt.inputs(lt.parse_spec({**raw, "motionHz": 50}), recordings[rid], decisions)
+    assert fast.shape == slow.shape
 

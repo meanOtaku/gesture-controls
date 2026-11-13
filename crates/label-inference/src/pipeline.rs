@@ -507,7 +507,7 @@ impl LabelPipeline {
                 }
                 (Some(_), Some(at), None) => {
                     features(&samples, sample.raw_ts_ns).and_then(|mut pulse| {
-                        pulse.extend(imu_onset::features(&motion, at)?);
+                        pulse.extend(imu_onset::features_on(model.motion_grid, &motion, at)?);
                         Some(pulse)
                     })
                 }
@@ -539,8 +539,8 @@ impl LabelPipeline {
 pub(crate) mod tests {
     use super::*;
     use crate::model::tests::{
-        expected, expected_cnn, expected_median_cnn, expected_motion, loaded, loaded_cnn,
-        loaded_median_cnn, loaded_motion,
+        expected, expected_cnn, expected_median_cnn, expected_motion, expected_motion_100hz, loaded,
+        loaded_cnn, loaded_median_cnn, loaded_motion, loaded_motion_100hz,
     };
 
     /// One PPG batch of the samples `from..to` of `trace` (statuses all valid).
@@ -810,6 +810,30 @@ pub(crate) mod tests {
                 .filter(|p| p.is_some())
                 .count()
         );
+    }
+
+    #[test]
+    fn a_100_hz_motion_model_scores_the_live_streams_as_the_trainer_did() {
+        let model = loaded_motion_100hz();
+        assert_eq!(model.motion_grid, pinch_inference::imu_onset::MotionGrid::HZ_100);
+        let (trace, motion, probabilities) = expected_motion_100hz();
+        let (scores, rejected) = replay_streams(&model, (trace.clone(), motion, probabilities.clone()), 60);
+        assert!(rejected.is_empty(), "{rejected:?}");
+        assert!(scores.len() > 300, "{}", scores.len());
+        for score in &scores {
+            let i = trace.iter().position(|s| s.ts_ns - SDK_BEHIND_NS == score.timestamp_ns).unwrap();
+            let want = probabilities[i].expect("the trainer scored it too");
+            assert!((score.confidence - want).abs() < 1e-6, "sample {i}: {} vs {want}", score.confidence);
+        }
+        // Read on the 50 Hz grid instead, the same model gives other scores: the grid is the manifest's, not a default.
+        let mut wrong = loaded_motion_100hz();
+        wrong.motion_grid = pinch_inference::imu_onset::MotionGrid::HZ_50;
+        let (trace, motion, probabilities) = expected_motion_100hz();
+        let (other, _) = replay_streams(&wrong, (trace.clone(), motion, probabilities.clone()), 60);
+        assert!(other.iter().any(|score| {
+            let i = trace.iter().position(|s| s.ts_ns - SDK_BEHIND_NS == score.timestamp_ns).unwrap();
+            (score.confidence - probabilities[i].unwrap_or(f64::NAN)).abs() > 1e-6
+        }));
     }
 
     #[test]

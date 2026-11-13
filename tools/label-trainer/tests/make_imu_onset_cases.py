@@ -16,11 +16,12 @@ FIXTURE = Path(__file__).parent / "fixtures" / "imu_onset_cases.json"
 MS = 1_000_000
 
 
-def trace(n: int, seed: int, jitter_ms: float = 1.5, still_gyro: bool = False):
-    """`n` motion samples about 20 ms apart: small noise, a slow sway, and a sharp tap at samples 230-240."""
+def trace(n: int, seed: int, jitter_ms: float = 1.5, still_gyro: bool = False, step_ms: int = 20):
+    """`n` motion samples about `step_ms` apart: small noise, a slow sway, and a sharp tap (at samples 230-240 when 20 ms
+    apart; at the same moment, twice the samples, when 10 ms apart)."""
     rng = np.random.default_rng(seed)
-    t = 1_000_000_000_000 + np.cumsum(np.full(n, 20 * MS) + rng.integers(-int(jitter_ms * MS), int(jitter_ms * MS) + 1, n))
-    k = np.arange(n)
+    t = 1_000_000_000_000 + np.cumsum(np.full(n, step_ms * MS) + rng.integers(-int(jitter_ms * MS), int(jitter_ms * MS) + 1, n))
+    k = np.arange(n) * step_ms / 20
     sway = 0.05 * np.sin(2 * np.pi * k / 90.0)
     tap = np.where((k >= 230) & (k < 240), 0.8 * np.sin(np.pi * (k - 230) / 10.0), 0.0)
     accel = np.stack([sway + tap + rng.normal(0, 0.02, n), rng.normal(0, 0.02, n) - tap / 2, 0.03 + rng.normal(0, 0.02, n)], axis=1)
@@ -28,11 +29,12 @@ def trace(n: int, seed: int, jitter_ms: float = 1.5, still_gyro: bool = False):
     return t.astype(np.int64), np.round(np.concatenate([accel, gyro], axis=1), 7)
 
 
-def case(name: str, ts: np.ndarray, values: np.ndarray, decisions):
+def case(name: str, ts: np.ndarray, values: np.ndarray, decisions, hz: int = 50):
     decisions = np.asarray(decisions, dtype=np.int64)
-    rows = I.features(ts, values, decisions)
+    rows = I.features(ts, values, decisions, hz=hz)
     return {
         "name": name,
+        **({"hz": hz} if hz != 50 else {}),
         "samples": [[int(a), *map(float, v)] for a, v in zip(ts, values)],
         "decisions": [int(d) for d in decisions],
         "expected": [None if not np.isfinite(row).all() else [float(v) for v in row] for row in rows],
@@ -45,12 +47,20 @@ def build():
     keep = ~((np.arange(320) >= 250) & (np.arange(320) < 265))                   # 300 ms without samples
     still_ts, still_values = trace(260, 3, still_gyro=True)
     between = lambda t, i: int(t[i]) + 7 * MS                                    # a decision between two samples
+    # The same at 100 Hz, the grid the trainer now makes motion models on: samples 10 ms apart, the tap at 460-480.
+    fast_ts, fast_values = trace(640, 4, jitter_ms=0.8, step_ms=10)
+    fast_gap_ts, fast_gap_values = trace(640, 5, jitter_ms=0.8, step_ms=10)
+    fast_keep = ~((np.arange(640) >= 500) & (np.arange(640) < 530))              # 300 ms without samples
     return {
         "feature_names": list(I.FEATURE_NAMES),
         "cases": [
             case("jittered 50 Hz with a tap", ts, values, [ts[100], ts[213], ts[214], between(ts, 236), ts[245], ts[319]]),
             case("a gap of 300 ms", gap_ts[keep], gap_values[keep], [gap_ts[240], gap_ts[249], gap_ts[300], gap_ts[319]]),
             case("a still gyroscope", still_ts, still_values, [still_ts[230], still_ts[259]]),
+            case("jittered 100 Hz with a tap", fast_ts, fast_values,
+                 [fast_ts[200], fast_ts[427], fast_ts[428], between(fast_ts, 472), fast_ts[490], fast_ts[639]], hz=100),
+            case("a gap of 300 ms at 100 Hz", fast_gap_ts[fast_keep], fast_gap_values[fast_keep],
+                 [fast_gap_ts[480], fast_gap_ts[499], fast_gap_ts[600], fast_gap_ts[639]], hz=100),
         ],
     }
 

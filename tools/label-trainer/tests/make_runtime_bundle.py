@@ -1,5 +1,5 @@
 """Writes crates/label-inference/tests/fixtures/ppg_onset_bundle, ppg_imu_onset_bundle and ppg_imu_cnn_median_bundle: a
-bundle of each kind this trainer makes, and what it must answer. ppg_imu_cnn_bundle is the earlier rolling-scaled CNN, which
+bundle of each kind this trainer makes (and ppg_imu_onset_100hz_bundle), and what it must answer. ppg_imu_cnn_bundle is the earlier rolling-scaled CNN, which
 this trainer no longer makes: it is kept as it is, so the runtime stays tested on the models people already have.
 
 The runtime's tests load each bundle through the full validation and feed `expected.json`'s trace (pinches and fists for
@@ -24,15 +24,17 @@ from tests.pulse_data import spec_for, write_pulse_recording  # noqa: E402
 FIXTURES = Path(__file__).resolve().parents[3] / "crates/label-inference/tests/fixtures"
 
 
-def write(name: str, motion: bool, backend: str = lt.BACKEND) -> None:
+def write(name: str, motion: bool, backend: str = lt.BACKEND, motion_hz: int | None = None) -> None:
     out = FIXTURES / name
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         lt.MIN_NEGATIVE_SECONDS, lt.MAX_FALSE_ACTIVATIONS_PER_HOUR, lt.MIN_GESTURE_RECALL = 0.0, float("inf"), 0.0
         lt.MIN_BALANCED_ACCURACY, lt.MAX_FALSE_ACTIVATION_RATE = 0.0, 1.0
         # Gestures 5 s apart leave quiet time between them, so the model learns that quiet is not a start.
-        raw = spec_for(tmp, seconds=60.0, every_s=5.0, motion=motion)
+        raw = spec_for(tmp, seconds=60.0, every_s=5.0, motion=motion, motion_hz=motion_hz or 50)
         raw["backend"] = backend
+        if motion_hz:
+            raw["motionHz"] = motion_hz
         result = lt.run(raw, tmp / "run")
         assert result["outcome"] == "deployable", result["message"]
         if out.exists():
@@ -42,7 +44,8 @@ def write(name: str, motion: bool, backend: str = lt.BACKEND) -> None:
         for file in ("manifest.json", model_file):
             shutil.copy(tmp / "run" / "bundle" / file, out / file)
         data = (out / model_file).read_bytes()
-        trace = load_recording(write_pulse_recording(tmp, "live", seed=99, seconds=24.0, gestures_until_s=15.0, motion=motion))
+        trace = load_recording(write_pulse_recording(tmp, "live", seed=99, seconds=24.0, gestures_until_s=15.0, motion=motion,
+                                                     motion_hz=motion_hz or 50))
         ts, values = lt.pulse_of(trace)
         x = lt.inputs(lt.parse_spec(raw), trace, ts)
         ok = np.isfinite(x).all(axis=1)
@@ -61,7 +64,9 @@ def write(name: str, motion: bool, backend: str = lt.BACKEND) -> None:
 
 def main() -> None:
     write("ppg_onset_bundle", motion=False)
-    write("ppg_imu_onset_bundle", motion=True)
+    # ppg_imu_onset_bundle is the first motion models', on the 50 Hz grid with no rate named: kept as it is, as the runtime
+    # must keep running the models people already have. The trainer now makes them at 100 Hz.
+    write("ppg_imu_onset_100hz_bundle", motion=True, motion_hz=100)
     write("ppg_imu_cnn_median_bundle", motion=True, backend=lt.CNN_BACKEND)
 
 

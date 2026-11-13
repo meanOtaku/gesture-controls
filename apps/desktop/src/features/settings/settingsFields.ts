@@ -7,9 +7,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   headphonesRateHz: 60,
   recordingRateHz: 30,
   graphRefreshRateHz: 15,
-  watchOrientationRateHz: 50,
-  watchAccelerationRateHz: 50,
-  watchGyroscopeRateHz: 50,
+  // The watch's full motion rate (a Galaxy Watch4 sends at most 100 Hz): the pinch models are trained on it.
+  watchOrientationRateHz: 100,
+  watchAccelerationRateHz: 100,
+  watchGyroscopeRateHz: 100,
   watchPpgFlushRateHz: 10,
   watchHeartRateAcceptanceRateHz: 200,
   watchSkinTemperatureAcceptanceRateHz: 200,

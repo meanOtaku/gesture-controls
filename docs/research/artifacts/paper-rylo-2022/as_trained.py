@@ -16,6 +16,7 @@ import time
 from dataclasses import replace
 
 from paper_experiments import HERE, setup, spec_for
+from experiment import at_100_hz, spec_for as cnn_spec_for
 from label_trainer import label_train as lt
 
 VARIANTS = ("trees", "trees+spectral", "trees@100", "trees+spectral@100")
@@ -23,8 +24,14 @@ TARGETS = ("pinch_in", "pinch_out")
 
 
 def one(target: str, variant: str, seed: int) -> dict:
-    setup(variant)
-    spec = replace(spec_for(target), seed=seed)
+    if variant.startswith("cnn"):
+        # The CNN as the trainer makes it, on its own 50 Hz grid or (`cnn@100`) the 100 Hz one of `experiment.py`.
+        if variant.endswith("@100"):
+            at_100_hz()
+        spec = replace(cnn_spec_for(target), seed=seed)
+    else:
+        _, hz = setup(variant)
+        spec = replace(spec_for(target, hz), seed=seed)
     recordings = lt.load_spec_recordings(spec)
     started = time.time()
     train = lt.examples(spec, recordings, spec.train)
@@ -41,13 +48,15 @@ def main() -> None:
     variants = sys.argv[1:] or list(VARIANTS)
     path = HERE / "as-trained.json"
     results = json.loads(path.read_text()) if path.exists() else {}
+    seeds = [int(s) for s in __import__("os").environ.get("SEEDS", "17").split(",")]
     for target in TARGETS:
         for variant in variants:
-            key = f"{target} {variant}"
+          for seed in seeds:
+            key = f"{target} {variant}" + ("" if seed == 17 else f" seed {seed}")
             if key in results:
                 continue
             print(f"{key}...", flush=True)
-            done = subprocess.run([sys.executable, __file__, "--one", target, variant, "17"], capture_output=True, text=True)
+            done = subprocess.run([sys.executable, __file__, "--one", target, variant, str(seed)], capture_output=True, text=True)
             if done.returncode != 0:
                 print(done.stderr[-3000:], flush=True)
                 continue
@@ -55,6 +64,11 @@ def main() -> None:
             path.write_text(json.dumps(results, indent=1))
             r = results[key]
             print(f"  {r['caught']}/{r['gestures']} at {r['threshold']}, {r['perHour']:.1f} an hour", flush=True)
+            write_report(results)
+    write_report(results)
+
+
+def write_report(results: dict) -> None:
     lines = ["# The variants as the app's training judges them", "",
              "Cut-off chosen on the training recordings only; the 11 held-out recordings replayed once at it (seed 17). See",
              "`as_trained.py`.", "",
@@ -62,6 +76,7 @@ def main() -> None:
              "|---|---|---:|---|---:|---:|---|"]
     for key, r in results.items():
         target, variant = key.split(" ", 1)
+        variant = variant.replace(" seed ", ", seed ")
         on = ", ".join(f"{label} {n}" for label, n in sorted(r["falseOn"].items(), key=lambda kv: -kv[1])) or "-"
         delay = "-" if r["medianLatencyMs"] is None else f"{r['medianLatencyMs']:.0f} ms"
         lines.append(f"| {target} | {variant} | {r['threshold']} | {r['caught']}/{r['gestures']} | {r['perHour']:.1f} | {delay} | {on} |")
