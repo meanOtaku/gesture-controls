@@ -1,9 +1,11 @@
-/** A single labeled numeric readout, used in the small metric grids across Dashboard panels. */
+import { AnimatedText } from "../../../components/app/AnimatedNumber";
+
+/** A single labeled numeric readout, used in the small metric grids across Dashboard panels. Its numbers roll. */
 export function Metric({ label, value, accent }: { label: string; value: string; accent?: string }) {
-  return <article className={`metric ${accent ?? ""}`}><span className="label">{label}</span><strong>{value}</strong></article>;
+  return <article className={`metric ${accent ?? ""}`}><span className="label">{label}</span><strong><AnimatedText>{value}</AnimatedText></strong></article>;
 }
 
-/** A labeled raw-value row (vector, status string) rendered in monospace for diagnostics. */
+/** A labeled raw-value row (vector, status string) rendered in monospace for diagnostics. Its numbers roll. */
 export function VectorRow({ label, value }: { label: string; value: string }) {
-  return <div className="vector-row"><span className="label">{label}</span><code>{value}</code></div>;
+  return <div className="vector-row"><span className="label">{label}</span><code><AnimatedText>{value}</AnimatedText></code></div>;
 }

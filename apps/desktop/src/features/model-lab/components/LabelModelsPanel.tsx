@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useId, useState } from "react";
@@ -188,7 +188,7 @@ export function LabelModelsPanel({
         {facts.map(({ term, value }) => (
           <div key={term} className="flex flex-col">
             <dt className="text-muted-foreground">{term}</dt>
-            <dd className="m-0 tabular-nums">{value}</dd>
+            <dd className="m-0 tabular-nums"><AnimatedText>{value}</AnimatedText></dd>
           </div>
         ))}
       </dl>

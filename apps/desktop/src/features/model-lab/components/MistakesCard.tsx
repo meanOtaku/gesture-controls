@@ -107,7 +107,7 @@ export function MistakesCard({ desktopAvailable, models, datasets }: { desktopAv
   const falseCount = useMemo(() => report?.recordings.reduce((sum, r) => sum + r.falseActivations, 0) ?? 0, [report]);
   const judged = (totals: Judged, where: string) => (
     <>
-      {where}, {describeTotals(totals)}
+      {where}, <AnimatedText>{describeTotals(totals)}</AnimatedText>
       {withinBudget(totals, report!.budgetPerHour) ? <>{" (within the "}<AnimatedNumber value={report!.budgetPerHour} />{" an hour budget)"}</> : <>{" (over the "}<AnimatedNumber value={report!.budgetPerHour} />{" an hour budget)"}</>}.
     </>
   );

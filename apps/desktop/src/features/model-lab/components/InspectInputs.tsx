@@ -84,7 +84,7 @@ export function DeclaredFacts({ manifest }: { manifest: Record<string, unknown> 
       <h3 className="text-base font-semibold">Settings and test results</h3>
       <p className="field-hint">As its manifest states them. The app has not checked the test results itself.</p>
       <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
-        {known.map(([name, value]) => <div key={name}><dt className="text-muted-foreground">{name}</dt><dd className="text-numeric">{value}</dd></div>)}
+        {known.map(([name, value]) => <div key={name}><dt className="text-muted-foreground">{name}</dt><dd className="text-numeric"><AnimatedText>{value}</AnimatedText></dd></div>)}
       </dl>
     </section>
   );
