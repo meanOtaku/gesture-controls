@@ -1,11 +1,12 @@
 import NumberFlow, { type Format } from "@number-flow/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
-/** A number changing again within this long of its last change is changing too fast to roll: it would never settle. */
-const FAST_MS = 400;
-/** After a fast change, how long the number is shown plainly before it may roll again. */
-const CALM_MS = 2000;
+/**
+ * The quickest a number moves on to a newer value. A live reading arriving several times a second is held for this long
+ * between rolls, so each roll can finish and be seen rather than the digits being restarted mid-turn.
+ */
+const STEP_MS = 700;
 
 const inTest = (import.meta as { env?: { MODE?: string } }).env?.MODE === "test";
 
@@ -23,28 +24,44 @@ type AnimatedNumberProps = {
 };
 
 /**
- * A number that rolls to its new value when it changes (NumberFlow). It reads to a screen reader as the plain number and
- * stands still for anyone who asked for reduced motion.
+ * A number that rolls (NumberFlow): up from zero when it first appears, then to each new value. A value that changes
+ * faster than a roll takes is shown at most every [`STEP_MS`], always ending on the latest. It reads to a screen reader as
+ * the plain number and stands still for anyone who asked for reduced motion.
  *
- * Three cases are shown as plain text instead: a value that is not a finite number (so "NaN" stays "NaN"); a value that
- * changes several times a second, like a live sensor reading, whose digits would never stop rolling; and every value
+ * Two cases are shown as plain text instead: a value that is not a finite number (so "NaN" stays "NaN"), and every value
  * under test, so a sentence with a number in it can still be found whole.
  */
 export function AnimatedNumber({ value, digits, integerDigits, format }: AnimatedNumberProps) {
-  const last = useRef({ value, at: 0, fastUntil: 0 });
-  const now = typeof performance === "undefined" ? 0 : performance.now();
-  if (last.current.value !== value) {
-    if (last.current.at > 0 && now - last.current.at < FAST_MS) last.current.fastUntil = now + CALM_MS;
-    last.current.value = value;
-    last.current.at = now;
+  if (inTest || !Number.isFinite(value)) {
+    const text = integerDigits === undefined || !Number.isFinite(value)
+      ? plain(value, digits)
+      : `${value < 0 ? "-" : ""}${plain(Math.abs(value), digits).padStart(integerDigits + (digits ? digits + 1 : 0), "0")}`;
+    return <>{text}</>;
   }
-  const text = integerDigits === undefined || !Number.isFinite(value)
-    ? plain(value, digits)
-    : `${value < 0 ? "-" : ""}${plain(Math.abs(value), digits).padStart(integerDigits + (digits ? digits + 1 : 0), "0")}`;
-  if (inTest || !Number.isFinite(value) || now < last.current.fastUntil) return <>{text}</>;
+  return <RollingNumber value={value} digits={digits} integerDigits={integerDigits} format={format} />;
+}
+
+function RollingNumber({ value, digits, integerDigits, format }: AnimatedNumberProps) {
+  // Starts at zero and moves to the real value a frame after it is on screen, so it rolls in.
+  const [shown, setShown] = useState(0);
+  const lastStep = useRef(0);
+  useEffect(() => {
+    if (lastStep.current === 0) {
+      const frame = requestAnimationFrame(() => { lastStep.current = performance.now(); setShown(value); });
+      return () => cancelAnimationFrame(frame);
+    }
+    const wait = STEP_MS - (performance.now() - lastStep.current);
+    if (wait <= 0) {
+      lastStep.current = performance.now();
+      setShown(value);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => { lastStep.current = performance.now(); setShown(value); }, wait);
+    return () => window.clearTimeout(timer);
+  }, [value]);
   return (
     <NumberFlow
-      value={value}
+      value={shown}
       locales="en-GB"
       format={format ?? {
         useGrouping: false,
@@ -67,12 +84,14 @@ export function AnimatedText({ children }: { children: string }) {
   if (!/\d/.test(children)) return <AnimatedWord>{children}</AnimatedWord>;
   const parts: React.ReactNode[] = [];
   let from = 0;
+  let place = 0;
   for (const match of children.matchAll(NUMBER)) {
     const [whole, fraction = ""] = match[0].split(".");
     parts.push(children.slice(from, match.index));
     parts.push(
       <AnimatedNumber
-        key={match.index}
+        // Keyed by which number it is, not where it sits, so "9 min 59 s" becoming "10 min 0 s" rolls both.
+        key={place++}
         value={Number(match[0])}
         digits={fraction.length > 0 ? fraction.length : undefined}
         integerDigits={whole.length > 1 && whole.startsWith("0") ? whole.length : undefined}
