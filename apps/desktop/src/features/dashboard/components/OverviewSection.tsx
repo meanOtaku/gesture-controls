@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedWord } from "../../../components/app/AnimatedNumber";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
@@ -57,12 +57,12 @@ export function OverviewSection({ connected, calibrated, watchConnected, gesture
   return (
     <>
       <section className="overview-grid" aria-label="Device overview">
-        <Card><CardContent><span className="label">Headphones</span><strong>{connected ? "Connected" : "Waiting"}</strong><small>{deviceName ?? "Sony bridge not detected"}</small></CardContent></Card>
-        <Card><CardContent><span className="label">Galaxy Watch</span><strong>{watchConnected ? "Connected" : "Waiting"}</strong><small>{watchConnected ? "Streaming to this desktop" : "Searching for desktop"}</small></CardContent></Card>
+        <Card><CardContent><span className="label">Headphones</span><strong><AnimatedWord>{connected ? "Connected" : "Waiting"}</AnimatedWord></strong><small><AnimatedWord>{deviceName ?? "Sony bridge not detected"}</AnimatedWord></small></CardContent></Card>
+        <Card><CardContent><span className="label">Galaxy Watch</span><strong><AnimatedWord>{watchConnected ? "Connected" : "Waiting"}</AnimatedWord></strong><small><AnimatedWord>{watchConnected ? "Streaming to this desktop" : "Searching for desktop"}</AnimatedWord></small></CardContent></Card>
         <Card>
           <CardContent>
             <span className="label">Volume gesture</span>
-            <strong>{gestureReady ? "Ready" : watchConnected ? "Watch only" : "Set up"}</strong>
+            <strong><AnimatedWord>{gestureReady ? "Ready" : watchConnected ? "Watch only" : "Set up"}</AnimatedWord></strong>
             <small>{!watchConnected ? "Connect the Watch to begin" : !connected ? "Wrist gestures work now; headphones add head locations" : !calibrated ? "Capture your two head positions" : "Look top-right to open the knob"}</small>
           </CardContent>
         </Card>

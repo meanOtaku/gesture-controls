@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedWord } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { useState, useSyncExternalStore } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
@@ -87,7 +87,7 @@ export function LiveSignalsPage() {
   return <main className="shell telemetry-shell">
     <header className="hero">
       <div><p className="eyebrow">Spatial Gesture Control</p><h1>Live signals</h1><p className="subtitle">Watch what your sensors are sending right now. To record a session, use the Recorder.</p></div>
-      <div className={`connection ${datasetRecording ? "online" : "offline"}`}><span className="pulse" />{datasetRecording ? "Recording" : "Not recording"}</div>
+      <div className={`connection ${datasetRecording ? "online" : "offline"}`}><span className="pulse" /><AnimatedWord>{datasetRecording ? "Recording" : "Not recording"}</AnimatedWord></div>
     </header>
     <StreamStatus />
     <div className="card-stack">

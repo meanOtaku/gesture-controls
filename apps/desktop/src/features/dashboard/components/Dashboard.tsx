@@ -1,4 +1,5 @@
 import { Alert, AlertDescription } from "../../../components/ui/alert";
+import { AnimatedWord } from "../../../components/app/AnimatedNumber";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
@@ -88,9 +89,9 @@ export function Dashboard({
         </div>
         <div className={`connection ${view === "watch" ? (watchConnected ? "online" : "offline") : (connected ? "online" : "offline")}`}>
           <span className="pulse" />
-          {view === "watch"
+          <AnimatedWord>{view === "watch"
             ? (watchConnected ? "Watch connected" : "Waiting for watch")
-            : (connected ? "Bridge connected" : "Waiting for Sony bridge")}
+            : (connected ? "Bridge connected" : "Waiting for Sony bridge")}</AnimatedWord>
         </div>
       </header>
 

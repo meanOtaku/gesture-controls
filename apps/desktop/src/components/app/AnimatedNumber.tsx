@@ -1,4 +1,5 @@
 import NumberFlow, { type Format } from "@number-flow/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useRef } from "react";
 
 /** A number changing again within this long of its last change is changing too fast to roll: it would never settle. */
@@ -63,6 +64,7 @@ const NUMBER = /\d+(?:\.\d+)?/g;
  * included, is left as text. For a string that arrives already formatted, where the number cannot be passed by itself.
  */
 export function AnimatedText({ children }: { children: string }) {
+  if (!/\d/.test(children)) return <AnimatedWord>{children}</AnimatedWord>;
   const parts: React.ReactNode[] = [];
   let from = 0;
   for (const match of children.matchAll(NUMBER)) {
@@ -80,4 +82,36 @@ export function AnimatedText({ children }: { children: string }) {
   }
   parts.push(children.slice(from));
   return <>{parts}</>;
+}
+
+/** Both words sit in the same grid cell while one fades out and the other in, so the line does not jump. */
+const STACK: React.CSSProperties = { display: "inline-grid" };
+const CELL: React.CSSProperties = { gridArea: "1 / 1", whiteSpace: "nowrap" };
+
+/**
+ * A word or short phrase that slides and fades to its new text when it changes, such as "OFFLINE" becoming "ONLINE".
+ * Text with digits in it goes through [`AnimatedText`] instead, which rolls only the numbers. A screen reader hears
+ * just the current text once; anyone who asked for reduced motion, and every test, gets the plain text.
+ */
+export function AnimatedWord({ children }: { children: string }) {
+  const reduce = useReducedMotion();
+  if (inTest || reduce) return <>{children}</>;
+  return (
+    <span style={STACK}>
+      <span className="sr-only">{children}</span>
+      <AnimatePresence initial={false}>
+        <motion.span
+          key={children}
+          aria-hidden="true"
+          style={CELL}
+          initial={{ opacity: 0, y: "0.45em", filter: "blur(2px)" }}
+          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+          exit={{ opacity: 0, y: "-0.45em", filter: "blur(2px)" }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+        >
+          {children}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  );
 }

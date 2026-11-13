@@ -1,4 +1,5 @@
 import { HelpTooltip } from "../../../components/app/HelpTooltip";
+import { AnimatedWord } from "../../../components/app/AnimatedNumber";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Switch } from "../../../components/ui/switch";
@@ -41,7 +42,7 @@ export function WatchSensorControls({ watchStatus, isPending, onSetSensorEnabled
             return (
               <div className="vector-row flex items-center justify-between gap-3" key={id}>
                 <span className="label">{label}</span>
-                <span className="text-xs text-muted-foreground">{pending ? "Updating…" : enabled ? "Enabled" : "Disabled"}</span>
+                <span className="text-xs text-muted-foreground"><AnimatedWord>{pending ? "Updating…" : enabled ? "Enabled" : "Disabled"}</AnimatedWord></span>
                 <Switch
                   aria-label={`${label} ${enabled ? "enabled" : "disabled"}`}
                   checked={enabled}

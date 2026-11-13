@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { getCameraController } from "../../features/camera/cameraService";
 import { droneDevice, getDroneSnapshot, subscribeDrone } from "../../features/drone/droneStatus";
+import { AnimatedText, AnimatedWord } from "../../components/app/AnimatedNumber";
 import { useThemeIs } from "../../shared/theme/useThemeIs";
 import { NAV_LABELS, NAV_ORDER, type AppTab, type NavStatusInput } from "./AppNav";
 
@@ -61,7 +62,7 @@ function Unit({ name, tone, text }: { name: string; tone: Tone; text: string }) 
   return (
     <li className="nerv-unit" data-tone={tone} aria-label={`${name}: ${text}`}>
       <span className="nerv-unit-name">{name}</span>
-      <span className="nerv-unit-state" aria-hidden="true">{SYMBOL[tone]} {text}</span>
+      <span className="nerv-unit-state" aria-hidden="true">{SYMBOL[tone]} <AnimatedWord>{text}</AnimatedWord></span>
     </li>
   );
 }
@@ -95,7 +96,7 @@ function HeaderBar({ activeTab, devices, now }: { activeTab: AppTab; devices: De
         <time dateTime={now.toISOString()}><span className="sr-only">{clockText(now)}</span><SevenSegment text={clockText(now)} /></time>
       </div>
       {/* The live region stays put so the change is announced; the keyed span inside is remade each time so it slides in. */}
-      <div className="nerv-header-section" aria-live="polite"><span key={activeTab}>{sectionIdentifier(activeTab)}</span></div>
+      <div className="nerv-header-section" aria-live="polite"><span key={activeTab}><AnimatedText>{sectionIdentifier(activeTab)}</AnimatedText></span></div>
     </header>
   );
 }
@@ -104,7 +105,7 @@ function Item({ label, tone, text }: { label: string; tone: Tone; text: string }
   return (
     <li className="nerv-footer-item" data-tone={tone}>
       <span className="nerv-footer-label">{label}</span>
-      <span className="nerv-footer-value">{SYMBOL[tone]} {text}</span>
+      <span className="nerv-footer-value">{SYMBOL[tone]} <AnimatedWord>{text}</AnimatedWord></span>
     </li>
   );
 }
@@ -124,7 +125,7 @@ function FooterBar({ headphonesConnected, watchConnected, watchWorn, recordingSt
         <Item label="DRONE" tone={drone.tone} text={drone.text} />
         <Item label="RECORDER" tone={recording ? "caution" : "offline"} text={recordingState === "arming" ? "ARMING" : recording ? "RECORDING" : "IDLE"} />
       </ul>
-      <time className="nerv-footer-clock" dateTime={now.toISOString()}>{clockText(now)}</time>
+      <time className="nerv-footer-clock" dateTime={now.toISOString()}><AnimatedText>{clockText(now)}</AnimatedText></time>
     </footer>
   );
 }

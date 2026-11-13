@@ -1,4 +1,5 @@
 import { SectionHeader } from "../../../components/app/SectionHeader";
+import { AnimatedWord } from "../../../components/app/AnimatedNumber";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Switch } from "../../../components/ui/switch";
 
@@ -28,7 +29,7 @@ export function SteadyStartsSection({ enabled, onToggle }: SteadyStartsSectionPr
             <span className="label">Only start gestures from a still hand</span>
             <small className="text-xs text-muted-foreground">Applies to trained models, and to models trained from now on</small>
           </span>
-          <span className="text-xs text-muted-foreground">{enabled ? "On" : "Off"}</span>
+          <span className="text-xs text-muted-foreground"><AnimatedWord>{enabled ? "On" : "Off"}</AnimatedWord></span>
           <Switch aria-label={`Only start gestures from a still hand ${enabled ? "on" : "off"}`} checked={enabled} onCheckedChange={onToggle} />
         </div>
       </CardContent>

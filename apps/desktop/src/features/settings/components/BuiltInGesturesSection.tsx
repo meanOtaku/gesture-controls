@@ -1,4 +1,5 @@
 import { SectionHeader } from "../../../components/app/SectionHeader";
+import { AnimatedWord } from "../../../components/app/AnimatedNumber";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Switch } from "../../../components/ui/switch";
 import type { HeuristicGesture, HeuristicGestures } from "../../../shared/protocol/events";
@@ -42,7 +43,7 @@ export function BuiltInGesturesSection({ gestures, onToggle }: BuiltInGesturesSe
                   <span className="label">{label}</span>
                   <small className="text-xs text-muted-foreground">{detail}</small>
                 </span>
-                <span className="text-xs text-muted-foreground">{enabled ? "On" : "Off"}</span>
+                <span className="text-xs text-muted-foreground"><AnimatedWord>{enabled ? "On" : "Off"}</AnimatedWord></span>
                 <Switch
                   aria-label={`${label} gesture ${enabled ? "on" : "off"}`}
                   checked={enabled}

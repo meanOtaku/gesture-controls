@@ -1,4 +1,4 @@
-import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedWord } from "../../../components/app/AnimatedNumber";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
@@ -46,7 +46,7 @@ function WristGestureCard({ gesture, last, on, usedBy }: { gesture: WristGesture
     <li className={`gesture-card${lit ? " gesture-card--lit" : ""}`} aria-label={gesture.name}>
       <div className="flex items-center justify-between gap-2">
         <strong>{gesture.name}</strong>
-        <Badge variant={on ? "default" : "secondary"}>{on ? "On" : "Off in Settings"}</Badge>
+        <Badge variant={on ? "default" : "secondary"}><AnimatedWord>{on ? "On" : "Off in Settings"}</AnimatedWord></Badge>
       </div>
       <p className="field-hint">{gesture.how}</p>
       <div className="gesture-chips">
@@ -66,7 +66,7 @@ function StemCard({ down, usedBy }: { down: boolean; usedBy: string[] }) {
     <li className={`gesture-card${down ? " gesture-card--lit" : ""}`} aria-label="STEM button">
       <div className="flex items-center justify-between gap-2">
         <strong>STEM button</strong>
-        <Badge variant={down ? "default" : "secondary"}>{down ? "Held" : "Released"}</Badge>
+        <Badge variant={down ? "default" : "secondary"}><AnimatedWord>{down ? "Held" : "Released"}</AnimatedWord></Badge>
       </div>
       <p className="field-hint">Press and hold the button on the watch. It lights while it is held.</p>
       {usedBy.length > 0 && <small className="text-xs text-muted-foreground">Used by: {usedBy.join(", ")}.</small>}
@@ -81,7 +81,7 @@ function ModelCard({ label, score, detected, count, usedBy }: { label: string; s
     <li className={`gesture-card${lit ? " gesture-card--lit" : ""}`} aria-label={label}>
       <div className="flex items-center justify-between gap-2">
         <strong>{label}</strong>
-        <Badge variant={detected ? "default" : "secondary"}>{detected ? "Detected" : "Not detected"}</Badge>
+        <Badge variant={detected ? "default" : "secondary"}><AnimatedWord>{detected ? "Detected" : "Not detected"}</AnimatedWord></Badge>
       </div>
       <div className="gesture-meter" role="meter" aria-label={`${label} score`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((score ?? 0) * 100)}>
         <div className="gesture-meter-fill" style={{ width: `${Math.round((score ?? 0) * 100)}%` }} />

@@ -1,4 +1,5 @@
 import { Badge } from "../../../components/ui/badge";
+import { AnimatedWord } from "../../../components/app/AnimatedNumber";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { quaternionToEulerDegrees, type WatchStatus } from "../../../shared/protocol/events";
@@ -21,7 +22,7 @@ export function WatchTelemetryPanel({ watchStatus }: WatchTelemetryPanelProps) {
         <SectionHeader
           title={watchStatus?.connected ? "Watch connected" : "Waiting for watch"}
           description="Galaxy Watch"
-          status={<Badge variant={watchStatus?.connected ? "default" : "secondary"}>{watchStatus?.connected ? "Streaming" : "Disconnected"}</Badge>}
+          status={<Badge variant={watchStatus?.connected ? "default" : "secondary"}><AnimatedWord>{watchStatus?.connected ? "Streaming" : "Disconnected"}</AnimatedWord></Badge>}
         />
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
