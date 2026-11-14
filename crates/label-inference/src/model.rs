@@ -73,6 +73,8 @@ pub struct LoadedModel {
     pub kind: ModelKind,
     /// For a pulse + motion trees model, the motion grid its features are read from (its manifest's `motionHz`).
     pub motion_grid: pinch_inference::imu_onset::MotionGrid,
+    /// For a CNN, the grid its inputs are read on (its manifest's `motionHz`).
+    pub cnn_grid: pinch_inference::cnn_input::CnnGrid,
     pub input: InputContract,
     pub thresholds: Thresholds,
     pub quality: QualityRules,
@@ -110,6 +112,7 @@ impl LoadedModel {
             label: version.label.clone(),
             kind: bundle.kind,
             motion_grid: bundle.manifest.preprocessing.motion_grid(),
+            cnn_grid: bundle.manifest.preprocessing.cnn_grid(),
             // The registry is authoritative for the contract and thresholds the model runs under.
             input: version.input.clone(),
             thresholds: version.thresholds,
@@ -175,9 +178,10 @@ impl LoadedModel {
 
     /// The probability that this model's label just started, from its kind's features of one decision.
     pub fn predict(&self, features: &[f64]) -> Result<f64, ModelError> {
-        if features.len() != self.kind.feature_count() {
+        // As many as its manifest lists, which validation held to its kind at its rate (900 for a 100 Hz CNN).
+        if features.len() != self.input_names.len() {
             return Err(ModelError::WrongInputCount {
-                expected: self.kind.feature_count(),
+                expected: self.input_names.len(),
                 actual: features.len(),
             });
         }
@@ -196,7 +200,8 @@ impl LoadedModel {
 pub(crate) mod tests {
     use super::*;
     use crate::bundle::tests::{
-        cnn_fixture_dir, fixture_dir, median_cnn_fixture_dir, motion_100hz_fixture_dir,
+        cnn_fixture_dir, fixture_dir, median_cnn_100hz_fixture_dir, median_cnn_fixture_dir,
+        motion_100hz_fixture_dir,
         motion_fixture_dir,
     };
     use crate::bundle::validate_bundle;
@@ -247,6 +252,18 @@ pub(crate) mod tests {
     /// The 100 Hz PPG + IMU fixture's trace, as [`expected_motion`].
     pub fn expected_motion_100hz() -> (Vec<PpgSample>, Vec<MotionSample>, Vec<Option<f64>>) {
         expected_in(&motion_100hz_fixture_dir())
+    }
+
+    /// The 100 Hz median-scaled CNN fixture model, approved and active.
+    pub fn loaded_median_cnn_100hz() -> LoadedModel {
+        let bundle = validate_bundle(&median_cnn_100hz_fixture_dir(), None).unwrap();
+        let version = active_version(&bundle);
+        LoadedModel::load(bundle, &version).unwrap()
+    }
+
+    /// The 100 Hz median-scaled CNN fixture's trace, as [`expected_motion`].
+    pub fn expected_median_cnn_100hz() -> (Vec<PpgSample>, Vec<MotionSample>, Vec<Option<f64>>) {
+        expected_in(&median_cnn_100hz_fixture_dir())
     }
 
     /// The CNN fixture model, approved and active.

@@ -43,7 +43,7 @@ function CnnInputs({ inspection }: { inspection: Inspection }) {
     <section aria-label="Inputs" className="flex flex-col gap-2">
       <h3 className="text-base font-semibold">What it reads</h3>
       <p className="field-hint">
-        The model reads <AnimatedText>{inspection.inputCount.toLocaleString("en-US")}</AnimatedText> inputs: the last second of 9 channels at 50 ticks a second. A CNN learns from the shape of those channels over time, so unlike trees it has no share per input to list.
+        The model reads <AnimatedText>{inspection.inputCount.toLocaleString("en-US")}</AnimatedText> inputs: the last second of 9 channels at {inspection.inputCount >= 900 ? 100 : 50} ticks a second. A CNN learns from the shape of those channels over time, so unlike trees it has no share per input to list.
       </p>
       <div className="max-w-full overflow-auto">
         <table className="w-full text-sm" aria-label="Channels the model reads">

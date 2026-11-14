@@ -1,5 +1,6 @@
 """Writes crates/label-inference/tests/fixtures/ppg_onset_bundle, ppg_imu_onset_bundle and ppg_imu_cnn_median_bundle: a
-bundle of each kind this trainer makes (and ppg_imu_onset_100hz_bundle), and what it must answer. ppg_imu_cnn_bundle is the earlier rolling-scaled CNN, which
+bundle of each kind this trainer makes (the motion ones at 100 Hz, `_100hz`), and what it must answer. The 50 Hz motion
+and CNN bundles are kept as they were, for the models people already have. ppg_imu_cnn_bundle is the earlier rolling-scaled CNN, which
 this trainer no longer makes: it is kept as it is, so the runtime stays tested on the models people already have.
 
 The runtime's tests load each bundle through the full validation and feed `expected.json`'s trace (pinches and fists for
@@ -67,11 +68,12 @@ def main() -> None:
     # ppg_imu_onset_bundle is the first motion models', on the 50 Hz grid with no rate named: kept as it is, as the runtime
     # must keep running the models people already have. The trainer now makes them at 100 Hz.
     write("ppg_imu_onset_100hz_bundle", motion=True, motion_hz=100)
-    write("ppg_imu_cnn_median_bundle", motion=True, backend=lt.CNN_BACKEND)
+    # Likewise ppg_imu_cnn_median_bundle, the 50 Hz CNNs': kept as it is. The trainer now makes the CNN at 100 Hz too.
+    write("ppg_imu_cnn_median_100hz_bundle", motion=True, backend=lt.CNN_BACKEND, motion_hz=100)
 
 
 if __name__ == "__main__":
     if sys.argv[1:] == ["cnn"]:
-        write("ppg_imu_cnn_median_bundle", motion=True, backend=lt.CNN_BACKEND)
+        write("ppg_imu_cnn_median_100hz_bundle", motion=True, backend=lt.CNN_BACKEND, motion_hz=100)
     else:
         main()

@@ -57,6 +57,8 @@ def case(name, m, p, decisions):
     decisions = np.asarray(decisions, dtype=np.int64)
     rows = C.inputs(m[0], m[1], p[0], p[1], decisions, scaling=C.ROLLING)
     median = C.inputs(m[0], m[1], p[0], p[1], decisions, scaling=C.MEDIAN)
+    # On the 100 Hz grid, which the trainer now makes CNNs on (median scaling only, as those models use).
+    median_100 = C.inputs(m[0], m[1], p[0], p[1], decisions, scaling=C.MEDIAN, hz=100)
     return {
         "name": name,
         "motion": [[int(a), *map(float, v)] for a, v in zip(*m)],
@@ -64,6 +66,7 @@ def case(name, m, p, decisions):
         "decisions": [int(d) for d in decisions],
         "expected": [None if not np.isfinite(row).all() else [float(v) for v in row] for row in rows],
         "expected_median": [None if not np.isfinite(row).all() else [float(v) for v in row] for row in median],
+        "expected_median_100": [None if not np.isfinite(row).all() else [float(v) for v in row] for row in median_100],
     }
 
 
@@ -76,6 +79,7 @@ def build():
     between = lambda t, i: int(t[i]) + 13 * MS                              # a decision between two pulse samples
     return {
         "feature_names": list(C.FEATURE_NAMES),
+        "feature_names_100": list(C.feature_names(100)),
         "cases": [
             case("100 Hz motion, 25 Hz pulse, a tap", m, p, [p[0][200], p[0][280], p[0][300], between(p[0], 305), p[0][315]]),
             case("a gap of 320 ms in the pulse", gm, (gp[0][keep], gp[1][keep]), [gp[0][285], gp[0][305], gp[0][315]]),

@@ -29,7 +29,7 @@ export const PULSE_MODEL = {
     { title: "Pulse sensor", detail: "Green, red and infrared light, 25 times a second" },
     { title: "Compared with the recent past", detail: "Each channel z-scored against the previous 1 s, 2 s and 4 s" },
     { title: "How it changes", detail: "Slope, curvature and jerk of each, from the previous 9 samples: 1,701 inputs" },
-    { title: "Motion", detail: "Accelerometer and gyroscope, 50 times a second, summarised over 0.3, 0.6 and 1.3 s: 1,032 inputs" },
+    { title: "Motion", detail: "Accelerometer and gyroscope, 100 times a second, summarised over 0.3, 0.6 and 1.3 s: 1,032 inputs" },
     { title: "ExtraTrees", detail: "300 randomised trees vote on “a gesture just started”" },
     { title: "Peak trigger", detail: "Fires when the vote falls back after reaching the cut-off" },
   ],
@@ -53,13 +53,13 @@ export const CNN_MODEL = {
   trainingNote:
     "Train it on your gesture sessions together with everyday-noise recordings, and leave Settings → Gestures → Still hand off: with that on it never sees the hand moving, so it cannot learn that movement is not the gesture. Training it needs PyTorch, which the trainer installs the first time (a large download).",
   stages: [
-    { title: "Motion and pulse", detail: "Accelerometer and gyroscope, and green, red and infrared light, on one 50 Hz grid" },
+    { title: "Motion and pulse", detail: "Accelerometer and gyroscope, and green, red and infrared light, on one 100 Hz grid" },
     { title: "Scaled to its recent level", detail: "Each channel against the median and spread of its last 11 s, then squashed to 0-1" },
-    { title: "The last second", detail: "9 channels x 50 ticks: 450 inputs" },
-    { title: "CNN", detail: "Three dilated convolutions, max and mean over time, two dense layers; three networks averaged" },
+    { title: "The last second", detail: "9 channels x 100 ticks: 900 inputs" },
+    { title: "CNN", detail: "Four dilated convolutions, max and mean over time, two dense layers; three networks averaged" },
     { title: "Peak trigger", detail: "Fires when the vote falls back after reaching the cut-off" },
   ],
-  inputs: 450,
+  inputs: 900,
   networks: 3,
   /** Pinch ins caught with still hand, at most 1 false alarm a minute, on the current pinch model's split, measured with the
    * earlier rolling scaling

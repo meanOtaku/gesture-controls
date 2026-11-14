@@ -20,7 +20,7 @@ use std::sync::Mutex;
 
 use chrono::{SecondsFormat, Utc};
 use label_inference::{
-    RecordingInfo, RunPlan, begin_run, cnn_contract, complete_run, fail_run, monitor_only_run,
+    RecordingInfo, RunPlan, begin_run, cnn_contract_100, complete_run, fail_run, monitor_only_run,
     pinch_start_contract, plan_split_sessions, stage_bundle, trainer_backend,
 };
 use model_lab_core::{
@@ -184,11 +184,16 @@ fn spec_stages(stages: &[StageRequest], train: &BTreeSet<String>) -> Vec<serde_j
         .collect()
 }
 
+/// The rate of the grid the models this app trains read the motion (and, for the CNN, the pulse) on: the watch's full
+/// rate. The trainer is told it, its manifest says it, and the runtime reads the same (`preprocessing.motionHz`).
+pub const MOTION_HZ: u32 = 100;
+
 /// The trainer backend a request asks for, and what its model reads.
 fn method_of(request: &TrainRequest) -> Result<(&'static str, InputContract), String> {
     match request.method.as_deref() {
+        // The trees' motion features keep their names at 100 Hz, so their contract is the same.
         None | Some(BACKEND) => Ok((BACKEND, pinch_start_contract())),
-        Some(CNN_BACKEND) => Ok((CNN_BACKEND, cnn_contract())),
+        Some(CNN_BACKEND) => Ok((CNN_BACKEND, cnn_contract_100())),
         Some(other) => Err(format!("there is no training method '{other}'")),
     }
 }
@@ -412,6 +417,7 @@ fn build_spec(
         "hardNegatives": checked.hard_negatives,
         "labelOffsetMs": checked.label_offset_ms,
         "labelTiming": checked.label_timing,
+        "motionHz": MOTION_HZ,
         // Recordings of one session, by the session's first recording, and where each starts deciding (`session_plan`).
         "sessions": checked.sessions.iter().flat_map(|set| set.iter().map(move |id| (id.to_string(), set[0].to_string()))).collect::<BTreeMap<_, _>>(),
         "decideFromNs": checked.decide_from_ns,
@@ -1736,12 +1742,13 @@ mod tests {
         r.method = Some(CNN_BACKEND.into());
         let checked = check_request(&r, &datasets(), &sha).unwrap();
         assert_eq!(checked.backend, CNN_BACKEND);
-        assert_eq!(checked.input, cnn_contract());
+        // The 100 Hz CNN: 9 channels of 100 ticks, and the trainer is told the rate.
+        assert_eq!(checked.input, cnn_contract_100());
+        assert_eq!(checked.input.features.len(), 900);
         let split = plan_split_sessions(&checked.recordings, &checked.mapping, &checked.target, &[], &checked.sessions).unwrap();
-        assert_eq!(
-            build_spec(&checked, &split, &BTreeMap::new())["backend"],
-            CNN_BACKEND
-        );
+        let spec = build_spec(&checked, &split, &BTreeMap::new());
+        assert_eq!(spec["backend"], CNN_BACKEND);
+        assert_eq!(spec["motionHz"], MOTION_HZ);
         assert_eq!(
             trainer_backend(CNN_BACKEND),
             Some(model_lab_core::TrainerBackend::PyTorch)

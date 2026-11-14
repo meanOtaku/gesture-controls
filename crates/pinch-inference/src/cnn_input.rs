@@ -3,7 +3,9 @@
 //! An exact mirror of the trainer's `cnn_input.py`; the shared cases in `tools/label-trainer/tests/fixtures/
 //! cnn_input_cases.json` keep the two equal. For a decision at time T (on the watch clock both streams share):
 //!
-//! 1. A 50 Hz grid of [`GRID_TICKS`] ticks ends at T. Each tick holds each stream's last sample at or before it.
+//! 1. A grid of ticks ends at T: 50 Hz ([`CnnGrid::HZ_50`], [`GRID_TICKS`] ticks: the first CNNs) or 100 Hz
+//!    ([`CnnGrid::HZ_100`]: twice the ticks over the same 1 s window, 10 s history and moving-wrist spans), as a model's
+//!    manifest says (`preprocessing.motionHz`). Each tick holds each stream's last sample at or before it.
 //! 2. The channels are the accelerometer's and gyroscope's axes and the pulse sensor's green, red and infrared
 //!    ([`CHANNELS`]).
 //! 3. Each of the last [`WINDOW_TICKS`] ticks (1 s) is centred and scaled as [`Scaling`] says, the spread floored by
@@ -76,9 +78,75 @@ pub static FEATURE_NAMES: LazyLock<Vec<String>> = LazyLock::new(|| {
         .collect()
 });
 
+/// The ticks a decision's inputs come from: their spacing, the window the CNN sees, the history each tick is scaled
+/// against, and (in ticks) the moving-wrist RMS and margin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CnnGrid {
+    pub tick_ns: u64,
+    pub window: usize,
+    pub history: usize,
+    pub moving_rms: usize,
+    pub moving_margin: usize,
+}
+
+static FEATURE_NAMES_100: LazyLock<Vec<String>> = LazyLock::new(|| names(CnnGrid::HZ_100.window));
+
+fn names(window: usize) -> Vec<String> {
+    let digits = (window - 1).to_string().len();
+    CHANNELS
+        .iter()
+        .flat_map(|channel| (0..window).map(move |tick| format!("cnn_{channel}_t{tick:0digits$}")))
+        .collect()
+}
+
+impl CnnGrid {
+    /// The grid every CNN before the 100 Hz one reads (and a manifest that names no rate).
+    pub const HZ_50: Self = Self {
+        tick_ns: TICK_NS,
+        window: WINDOW_TICKS,
+        history: HISTORY_TICKS,
+        moving_rms: MOVING_RMS_TICKS,
+        moving_margin: MOVING_MARGIN_TICKS,
+    };
+    /// The watch's full rate: the same spans, twice the ticks.
+    pub const HZ_100: Self = Self {
+        tick_ns: 10_000_000,
+        window: 100,
+        history: 1000,
+        moving_rms: 30,
+        moving_margin: 50,
+    };
+
+    /// The grid for a rate a manifest names, if this app has it.
+    pub fn at_hz(hz: u32) -> Option<Self> {
+        match hz {
+            50 => Some(Self::HZ_50),
+            100 => Some(Self::HZ_100),
+            _ => None,
+        }
+    }
+
+    pub fn ticks(&self) -> usize {
+        self.window + self.history - 1
+    }
+
+    pub fn span_ns(&self) -> u64 {
+        (self.ticks() as u64 - 1) * self.tick_ns
+    }
+
+    pub fn feature_count(&self) -> usize {
+        CHANNELS.len() * self.window
+    }
+
+    /// The inputs' names on this grid, in order.
+    pub fn feature_names(&self) -> &'static [String] {
+        if *self == Self::HZ_100 { &FEATURE_NAMES_100 } else { &FEATURE_NAMES }
+    }
+}
+
 /// Whether no two consecutive timestamps are further apart than [`MAX_GAP_MS`] where the later one is in `(T - span, T]`.
-fn gap_free(ts: impl Iterator<Item = u64>, decision_ns: u64) -> bool {
-    let from = decision_ns.saturating_sub(SPAN_NS);
+fn gap_free(ts: impl Iterator<Item = u64>, decision_ns: u64, g: CnnGrid) -> bool {
+    let from = decision_ns.saturating_sub(g.span_ns());
     let limit = MAX_GAP_MS * 1_000_000;
     let mut previous: Option<u64> = None;
     for at in ts {
@@ -100,10 +168,12 @@ fn held<S, const N: usize>(
     ts: impl Fn(&S) -> u64,
     values: impl Fn(&S) -> [f64; N],
     decision_ns: u64,
+    g: CnnGrid,
 ) -> Option<Vec<[f64; N]>> {
-    (0..GRID_TICKS)
+    let ticks = g.ticks();
+    (0..ticks)
         .map(|k| {
-            let tick = decision_ns.checked_sub((GRID_TICKS - 1 - k) as u64 * TICK_NS)?;
+            let tick = decision_ns.checked_sub((ticks - 1 - k) as u64 * g.tick_ns)?;
             let after = samples.partition_point(|s| ts(s) <= tick);
             after.checked_sub(1).map(|i| values(&samples[i]))
         })
@@ -111,13 +181,18 @@ fn held<S, const N: usize>(
 }
 
 /// Puts one channel's scaled last ticks on the output, given the floor for a centre and the ticks left out.
-type Scaler = fn(&[f64], &dyn Fn(f64) -> f64, &[bool], &mut Vec<f64>);
+type Scaler = fn(&[f64], &dyn Fn(f64) -> f64, &[bool], CnnGrid, &mut Vec<f64>);
 
 /// The ticks [`Scaling::Median`] leaves out of a decision's grid (one row of accelerometer then gyroscope per tick). A tick
 /// is moving when the gyroscope's RMS magnitude over the [`MOVING_RMS_TICKS`] ending at it (as many as the grid has, at
 /// its start) is above [`MOVING_GYRO`]; a tick within [`MOVING_MARGIN_TICKS`] of a moving one is left out too. The last
 /// [`WINDOW_TICKS`] never are.
 pub fn moving_ticks(grid: &[[f64; 6]]) -> Vec<bool> {
+    moving_ticks_on(grid, CnnGrid::HZ_50)
+}
+
+/// [`moving_ticks`] with the RMS, margin and window of grid `g`.
+pub fn moving_ticks_on(grid: &[[f64; 6]], g: CnnGrid) -> Vec<bool> {
     let ticks = grid.len();
     let mut total = vec![0.0; ticks + 1];
     for (k, row) in grid.iter().enumerate() {
@@ -125,35 +200,41 @@ pub fn moving_ticks(grid: &[[f64; 6]]) -> Vec<bool> {
     }
     let mut count = vec![0usize; ticks + 1];
     for k in 0..ticks {
-        let begin = (k + 1).saturating_sub(MOVING_RMS_TICKS);
+        let begin = (k + 1).saturating_sub(g.moving_rms);
         let moving =
             (total[k + 1] - total[begin]) / (k + 1 - begin) as f64 > MOVING_GYRO * MOVING_GYRO;
         count[k + 1] = count[k] + usize::from(moving);
     }
     (0..ticks)
         .map(|k| {
-            k < ticks.saturating_sub(WINDOW_TICKS)
-                && count[(k + MOVING_MARGIN_TICKS + 1).min(ticks)]
-                    > count[k.saturating_sub(MOVING_MARGIN_TICKS)]
+            k < ticks.saturating_sub(g.window)
+                && count[(k + g.moving_margin + 1).min(ticks)]
+                    > count[k.saturating_sub(g.moving_margin)]
         })
         .collect()
 }
 
 /// One channel's last ticks, z-scored against the ticks ending at each and through the sigmoid (as the trainer computes
 /// it: sums of the values less the first tick).
-fn rolling(series: &[f64], floor: &dyn Fn(f64) -> f64, _left_out: &[bool], out: &mut Vec<f64>) {
+fn rolling(
+    series: &[f64],
+    floor: &dyn Fn(f64) -> f64,
+    _left_out: &[bool],
+    g: CnnGrid,
+    out: &mut Vec<f64>,
+) {
     let first = series[0];
-    let mut total = vec![0.0; GRID_TICKS + 1];
-    let mut squares = vec![0.0; GRID_TICKS + 1];
+    let mut total = vec![0.0; g.ticks() + 1];
+    let mut squares = vec![0.0; g.ticks() + 1];
     for (k, v) in series.iter().enumerate() {
         let shifted = v - first;
         total[k + 1] = total[k] + shifted;
         squares[k + 1] = squares[k] + shifted * shifted;
     }
-    let n = HISTORY_TICKS as f64;
-    for last in HISTORY_TICKS - 1..GRID_TICKS {
-        let mean = (total[last + 1] - total[last + 1 - HISTORY_TICKS]) / n;
-        let variance = (squares[last + 1] - squares[last + 1 - HISTORY_TICKS]) / n - mean * mean;
+    let n = g.history as f64;
+    for last in g.history - 1..g.ticks() {
+        let mean = (total[last + 1] - total[last + 1 - g.history]) / n;
+        let variance = (squares[last + 1] - squares[last + 1 - g.history]) / n - mean * mean;
         let std = variance.max(0.0).sqrt();
         let z = (series[last] - first - mean) / (std + floor(mean + first));
         out.push(1.0 / (1.0 + (-z).exp()));
@@ -179,7 +260,13 @@ fn middle(values: &mut [f64]) -> f64 {
 
 /// One channel's last ticks against its median and median absolute deviation over the ticks of `series` not `left_out`,
 /// through the sigmoid.
-fn median(series: &[f64], floor: &dyn Fn(f64) -> f64, left_out: &[bool], out: &mut Vec<f64>) {
+fn median(
+    series: &[f64],
+    floor: &dyn Fn(f64) -> f64,
+    left_out: &[bool],
+    g: CnnGrid,
+    out: &mut Vec<f64>,
+) {
     let mut scratch: Vec<f64> = series
         .iter()
         .zip(left_out)
@@ -197,15 +284,26 @@ fn median(series: &[f64], floor: &dyn Fn(f64) -> f64, left_out: &[bool], out: &m
     }
     let spread = MAD_TO_STD * middle(&mut scratch);
     let bottom = spread + floor(centre);
-    for v in &series[series.len() - WINDOW_TICKS..] {
+    for v in &series[series.len() - g.window..] {
         let z = ((v - centre) / bottom).clamp(-MAX_Z, MAX_Z);
         out.push(1.0 / (1.0 + (-z).exp()));
     }
 }
 
-/// The inputs for a decision at `decision_ns` from `motion` and `pulse` (each sorted by time, on the decision's clock), or
-/// `None` when it has none.
+/// The inputs for a decision at `decision_ns` from `motion` and `pulse` (each sorted by time, on the decision's clock), on
+/// the 50 Hz grid, or `None` when it has none.
 pub fn inputs(
+    motion: &[MotionSample],
+    pulse: &[PpgSample],
+    decision_ns: u64,
+    scaling: Scaling,
+) -> Option<Vec<f64>> {
+    inputs_on(CnnGrid::HZ_50, motion, pulse, decision_ns, scaling)
+}
+
+/// [`inputs`] on the grid a model reads.
+pub fn inputs_on(
+    g: CnnGrid,
     motion: &[MotionSample],
     pulse: &[PpgSample],
     decision_ns: u64,
@@ -217,8 +315,8 @@ pub fn inputs(
     };
     if motion.is_empty()
         || pulse.is_empty()
-        || !gap_free(motion.iter().map(|s| s.ts_ns), decision_ns)
-        || !gap_free(pulse.iter().map(|s| s.ts_ns), decision_ns)
+        || !gap_free(motion.iter().map(|s| s.ts_ns), decision_ns, g)
+        || !gap_free(pulse.iter().map(|s| s.ts_ns), decision_ns, g)
     {
         return None;
     }
@@ -231,16 +329,17 @@ pub fn inputs(
             ]
         },
         decision_ns,
+        g,
     )?;
-    let p = held(pulse, |s| s.ts_ns, |s| [s.green, s.red, s.ir], decision_ns)?;
+    let p = held(pulse, |s| s.ts_ns, |s| [s.green, s.red, s.ir], decision_ns, g)?;
     let left_out = match scaling {
-        Scaling::Median => moving_ticks(&m),
-        Scaling::Rolling => vec![false; GRID_TICKS],
+        Scaling::Median => moving_ticks_on(&m, g),
+        Scaling::Rolling => vec![false; g.ticks()],
     };
-    let mut out = Vec::with_capacity(FEATURE_COUNT);
+    let mut out = Vec::with_capacity(g.feature_count());
     for (c, floor) in MOTION_FLOOR.iter().enumerate() {
         let series: Vec<f64> = m.iter().map(|row| row[c]).collect();
-        scaled(&series, &|_| *floor, &left_out, &mut out);
+        scaled(&series, &|_| *floor, &left_out, g, &mut out);
     }
     for c in 0..3 {
         let series: Vec<f64> = p.iter().map(|row| row[c]).collect();
@@ -248,6 +347,7 @@ pub fn inputs(
             &series,
             &|centre| PULSE_FLOOR_SCALE * (centre.abs() + 1.0),
             &left_out,
+            g,
             &mut out,
         );
     }
@@ -268,11 +368,14 @@ mod tests {
         expected: Vec<Option<Vec<f64>>>,
         /// The same with [`Scaling::Median`].
         expected_median: Vec<Option<Vec<f64>>>,
+        /// [`Scaling::Median`] on the 100 Hz grid.
+        expected_median_100: Vec<Option<Vec<f64>>>,
     }
 
     #[derive(serde::Deserialize)]
     struct Cases {
         feature_names: Vec<String>,
+        feature_names_100: Vec<String>,
         cases: Vec<Case>,
     }
 
@@ -313,29 +416,37 @@ mod tests {
     #[test]
     fn the_names_are_the_trainers() {
         assert_eq!(*FEATURE_NAMES, cases().feature_names);
+        assert_eq!(CnnGrid::HZ_100.feature_names(), cases().feature_names_100);
+        assert_eq!(CnnGrid::HZ_50.feature_names(), &FEATURE_NAMES[..]);
     }
 
     #[test]
     fn inputs_match_the_trainer_on_the_shared_cases() {
-        check(Scaling::Rolling);
+        check(Scaling::Rolling, CnnGrid::HZ_50);
     }
 
     #[test]
     fn median_inputs_match_the_trainer_on_the_shared_cases() {
-        check(Scaling::Median);
+        check(Scaling::Median, CnnGrid::HZ_50);
     }
 
-    fn check(scaling: Scaling) {
+    #[test]
+    fn median_inputs_on_the_100_hz_grid_match_the_trainer() {
+        check(Scaling::Median, CnnGrid::HZ_100);
+    }
+
+    fn check(scaling: Scaling, g: CnnGrid) {
         let mut worst = 0.0f64;
         let mut compared = 0;
         for case in cases().cases {
             let (motion, pulse) = streams(&case);
-            let rows = match scaling {
-                Scaling::Rolling => &case.expected,
-                Scaling::Median => &case.expected_median,
+            let rows = match (scaling, g == CnnGrid::HZ_100) {
+                (Scaling::Median, true) => &case.expected_median_100,
+                (Scaling::Rolling, _) => &case.expected,
+                (Scaling::Median, false) => &case.expected_median,
             };
             for (decision, expected) in case.decisions.iter().zip(rows) {
-                match (inputs(&motion, &pulse, *decision, scaling), expected) {
+                match (inputs_on(g, &motion, &pulse, *decision, scaling), expected) {
                     (None, None) => {}
                     (Some(got), Some(expected)) => {
                         assert_eq!(got.len(), expected.len());
@@ -345,7 +456,7 @@ mod tests {
                                 (a - b).abs() <= TOLERANCE,
                                 "{}: {} at {decision}: {a} vs {b}",
                                 case.name,
-                                FEATURE_NAMES[i]
+                                g.feature_names()[i]
                             );
                         }
                         compared += 1;

@@ -112,12 +112,28 @@ impl ModelKind {
         }
     }
 
+    /// The features of a model of this kind whose manifest names motion rate `motion_hz`: for the median-scaled CNN at
+    /// 100 Hz, 9 channels of 100 ticks; otherwise [`ModelKind::feature_names`] (the trees' motion features keep their names
+    /// at either rate, being over the same spans).
+    pub fn feature_names_at(self, motion_hz: Option<u32>) -> &'static [String] {
+        match (self, motion_hz) {
+            (Self::CnnMedian, Some(hz)) => cnn_input::CnnGrid::at_hz(hz)
+                .map_or(&cnn_input::FEATURE_NAMES[..], |g| g.feature_names()),
+            _ => self.feature_names(),
+        }
+    }
+
     /// What a model of this kind reads: its sources and features, a decision every 40 ms from the pulse's last 5.6 s (the
     /// motion's 4.3 s lie inside it), or for the CNN the last 11 s of both. The trainer's manifest must declare exactly this.
     pub fn contract(self) -> InputContract {
+        self.contract_at(None)
+    }
+
+    /// [`ModelKind::contract`] for a model whose manifest names motion rate `motion_hz`.
+    pub fn contract_at(self, motion_hz: Option<u32>) -> InputContract {
         InputContract {
             sources: self.sources(),
-            features: self.feature_names().to_vec(),
+            features: self.feature_names_at(motion_hz).to_vec(),
             window_ms: self.window_ms(),
             stride_ms: STRIDE_MS,
             max_gap_ms: ppg_onset::MAX_GAP_MS as u32,

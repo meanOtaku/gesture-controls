@@ -157,8 +157,8 @@ def test_the_rows_it_must_keep_are_never_left_out_to_stay_within_its_negatives(m
     seen = []
     real_net = cnn._net
 
-    def recording_net():
-        net = real_net()
+    def recording_net(length=cnn.LENGTH):
+        net = real_net(length)
         original = net.forward
         net.forward = lambda x: (seen.append(x.detach().cpu().numpy().copy()), original(x))[1]
         return net
@@ -189,8 +189,11 @@ def test_a_cnn_spec_trains_a_cnn_bundle(tmp_path, monkeypatch):
     manifest = json.loads((tmp_path / "run" / "bundle" / "manifest.json").read_text())
     assert manifest["model"]["format"] == "cnn" and manifest["preprocessing"]["kind"] == "ppg_imu_cnn_median"
     assert manifest["window"]["durationMs"] == 11_000 and manifest["thresholds"]["decisionDelayMs"] == cnn.DECISION_DELAY_MS
-    assert manifest["input"]["features"] == list(cnn_input.FEATURE_NAMES)
-    assert (tmp_path / "run" / "bundle" / "model.cnn").exists()
+    # A new CNN reads the 100 Hz grid: 9 channels of 100 ticks, four convolutions, and its manifest says so.
+    assert manifest["preprocessing"]["motionHz"] == 100
+    assert manifest["input"]["features"] == list(cnn_input.feature_names(100)) and len(manifest["input"]["features"]) == 900
+    file = json.loads((tmp_path / "run" / "bundle" / "model.cnn").read_text())
+    assert file["length"] == 100 and len(file["members"][0]["conv"]) == 4
 
 
 def test_a_cnn_reads_the_pulse_and_motion_only():

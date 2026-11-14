@@ -177,6 +177,13 @@ pub struct Preprocessing {
 }
 
 impl Preprocessing {
+    /// The CNN grid a median-scaled CNN reads: what the manifest names, 50 Hz when it names none.
+    pub fn cnn_grid(&self) -> pinch_inference::cnn_input::CnnGrid {
+        self.motion_hz
+            .and_then(pinch_inference::cnn_input::CnnGrid::at_hz)
+            .unwrap_or(pinch_inference::cnn_input::CnnGrid::HZ_50)
+    }
+
     /// The motion grid a pulse + motion trees model reads: what the manifest names, 50 Hz when it names none.
     pub fn motion_grid(&self) -> pinch_inference::imu_onset::MotionGrid {
         self.motion_hz
@@ -340,15 +347,16 @@ pub fn validate_bundle(
     };
     let mismatch = |what: String| Err(BundleError::ContractMismatch(what));
     if let Some(hz) = manifest.preprocessing.motion_hz {
-        if kind != ModelKind::PpgImu {
+        if kind != ModelKind::PpgImu && kind != ModelKind::CnnMedian {
             return mismatch(format!(
-                "only a '{PPG_IMU_PREPROCESSING}' model reads its motion at a rate it names, not a '{}' one",
+                "only a '{PPG_IMU_PREPROCESSING}' or '{CNN_MEDIAN_PREPROCESSING}' model reads its motion at a rate it names, not a '{}' one",
                 kind.preprocessing()
             ));
         }
         if pinch_inference::imu_onset::MotionGrid::at_hz(hz).is_none() {
             return mismatch(format!(
-                "a '{PPG_IMU_PREPROCESSING}' model reads its motion at 50 or 100 Hz, not {hz} Hz"
+                "a '{}' model reads its motion at 50 or 100 Hz, not {hz} Hz",
+                kind.preprocessing()
             ));
         }
     }
@@ -368,8 +376,9 @@ pub fn validate_bundle(
             manifest.sources
         ));
     }
-    let feature_count = kind.feature_count();
-    if manifest.input.features != kind.feature_names() {
+    let expected_features = kind.feature_names_at(manifest.preprocessing.motion_hz);
+    let feature_count = expected_features.len();
+    if manifest.input.features != expected_features {
         return mismatch(format!(
             "the model must read the {feature_count} features of a '{}' model in this app's order",
             kind.preprocessing()
@@ -470,6 +479,11 @@ pub(crate) mod tests {
     /// The PPG + IMU bundle the trainer makes now: motion on the 100 Hz grid, as its manifest says.
     pub fn motion_100hz_fixture_dir() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ppg_imu_onset_100hz_bundle")
+    }
+
+    /// The median-scaled CNN bundle the trainer makes now: on the 100 Hz grid, as its manifest says.
+    pub fn median_cnn_100hz_fixture_dir() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ppg_imu_cnn_median_100hz_bundle")
     }
 
     /// The earlier rolling-scaled CNN bundle, kept for the versions people already have.
@@ -610,8 +624,30 @@ pub(crate) mod tests {
         assert!(odd.contains("50 or 100 Hz, not 75 Hz"), "{odd}");
         assert!(
             refused(|m| m["preprocessing"]["motionHz"] = 100.into())
-                .contains("only a 'ppg_imu_onset' model reads its motion at a rate it names")
+                .contains("only a 'ppg_imu_onset' or 'ppg_imu_cnn_median' model reads its motion at a rate it names")
         );
+    }
+
+    #[test]
+    fn a_cnn_reads_the_inputs_of_the_grid_its_manifest_names() {
+        use pinch_inference::cnn_input::CnnGrid;
+        let fast = validate_bundle(&median_cnn_100hz_fixture_dir(), None).unwrap();
+        assert_eq!(fast.manifest.preprocessing.cnn_grid(), CnnGrid::HZ_100);
+        assert_eq!(fast.manifest.input.features.len(), 900);
+        let first = validate_bundle(&median_cnn_fixture_dir(), None).unwrap();
+        assert_eq!(first.manifest.preprocessing.cnn_grid(), CnnGrid::HZ_50);
+        // A 50 Hz CNN cannot claim 100 Hz: its 450 inputs are not the 900 it would then read.
+        let dir = tempfile::tempdir().unwrap();
+        for entry in fs::read_dir(median_cnn_fixture_dir()).unwrap() {
+            let entry = entry.unwrap();
+            fs::copy(entry.path(), dir.path().join(entry.file_name())).unwrap();
+        }
+        let path = dir.path().join("manifest.json");
+        let mut manifest: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        manifest["preprocessing"]["motionHz"] = 100.into();
+        fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        let refused = validate_bundle(dir.path(), None).err().unwrap().to_string();
+        assert!(refused.contains("must read the 900 features"), "{refused}");
     }
 
     #[test]

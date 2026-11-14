@@ -154,8 +154,8 @@ class Spec:
     # For a recording of a session whose start is also in an earlier one: the watch time (ns) up to which that earlier one
     # has its moments. Its decisions start after it, so no moment counts twice; its earlier samples are still history.
     decide_from_ns: dict[str, int] = field(default_factory=dict)
-    # The rate of the motion grid a trees motion model reads (`imu_onset.GRIDS`); the bundle says it, so the runtime reads
-    # the same. 100 unless the spec asks for 50 (to train again as the first models were).
+    # The rate of the grid a motion model reads (`imu_onset.GRIDS` for the trees, `cnn_input.GRIDS` for the CNN); the bundle
+    # says it, so the runtime reads the same. 100 unless the spec asks for 50 (to train again as the first models were).
     motion_hz: int = imu_onset.MOTION_HZ
 
     def session_of(self, rid: str) -> str:
@@ -187,7 +187,7 @@ class Spec:
     @property
     def feature_names(self) -> tuple[str, ...]:
         if self.cnn:
-            return cnn_input.FEATURE_NAMES
+            return cnn_input.feature_names(self.motion_hz)
         return ppg_onset.FEATURE_NAMES + imu_onset.FEATURE_NAMES if self.motion else ppg_onset.FEATURE_NAMES
 
     @property
@@ -340,7 +340,7 @@ def inputs(spec: Spec, recording: Recording, decisions_ns: np.ndarray) -> np.nda
     ts, values = pulse_of(recording)
     if spec.cnn:
         motion_ts, axes = motion_of(recording)
-        return cnn_input.inputs(motion_ts, axes, ts, values, decisions_ns)
+        return cnn_input.inputs(motion_ts, axes, ts, values, decisions_ns, hz=spec.motion_hz)
     x = ppg_onset.features(ts, values, decisions_ns)
     if not spec.motion:
         return x
@@ -909,7 +909,8 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, A
                     " -> the last 1 s (9 x 50) -> CNN (3 dilated convolutions, max and mean pooling, 2 dense) -> peak trigger")
         from . import cnn
 
-        details = {"convolutions": [c for c, _ in cnn.CONVOLUTIONS], "kernel": cnn.KERNEL, "epochs": cnn.EPOCHS}
+        details = {"convolutions": [c for c, _ in cnn.CONVOLUTIONS_FOR[cnn_input.grid_of(spec.motion_hz).window]],
+                   "kernel": cnn.KERNEL, "epochs": cnn.EPOCHS}
     else:
         import sklearn
 
@@ -934,8 +935,9 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, A
                        # How long after a gesture starts the model decides: the runtime's still-hand gate looks before that.
                        "decisionDelayMs": spec.decision_delay_ms},
         "preprocessing": {"kind": CNN_PREPROCESSING if spec.cnn else PREPROCESSING[spec.sources],
-                          # The motion grid the trees read; absent (50 Hz) in the first models and for the CNN and the pulse alone.
-                          **({"motionHz": spec.motion_hz} if spec.motion and not spec.cnn else {})},
+                          # The grid the motion (and for the CNN, the pulse) is read on; absent (50 Hz) in the first models and
+                          # for the pulse alone.
+                          **({"motionHz": spec.motion_hz} if spec.motion else {})},
         "provenance": {
             "backend": spec.backend,
             "pipeline": pipeline,

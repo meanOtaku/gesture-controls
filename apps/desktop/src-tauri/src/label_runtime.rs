@@ -211,6 +211,8 @@ fn purge_old_models(store: &mut RegistryStore<FileStore>, dir: &Path) -> Result<
         label_inference::pinch_start_contract(),
         label_inference::ppg_onset_contract(),
         label_inference::cnn_contract(),
+        // The 100 Hz CNN the trainer now makes: without it here, its runs would be taken for an old kind and removed.
+        label_inference::cnn_contract_100(),
     ];
     let purged = store
         .mutate(|registry| {

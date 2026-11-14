@@ -1,7 +1,8 @@
 """The CNN pinch-start model: training, its file (`model.cnn`), and a plain evaluation of that file.
 
 Research: `docs/research/artifacts/double-pinch-2026-10/` steps 3, 8, 9 and 12. The network reads `cnn_input`'s 9 channels
-x 50 ticks: three dilated convolutions (32, 32, 64 channels, kernel 5, dilation 1, 2, 4), each with batch normalisation
+x 50 ticks (100 on the 100 Hz grid, the trainer's default, with a fourth convolution: 32, 32, 32, 64 channels, dilation 1, 2,
+4, 8; `CONVOLUTIONS_FOR`): three dilated convolutions (32, 32, 64 channels, kernel 5, dilation 1, 2, 4), each with batch normalisation
 and a ReLU; each channel's maximum and mean over time; a dense layer of 32 with a ReLU and dropout; one output through a
 sigmoid. `MEMBERS` such networks are trained from different seeds and their probabilities averaged, which steadies the
 score (step 12 averaged three). It learns the decisions `POSITIVE_FROM_MS`..`POSITIVE_TO_MS` after a start (the touch near the middle of its
@@ -38,7 +39,17 @@ FORMAT = "ppg-imu-cnn"
 VERSION = 1
 CHANNELS = len(cnn_input.CHANNELS)
 LENGTH = cnn_input.WINDOW_TICKS
-CONVOLUTIONS = ((32, 1), (32, 2), (64, 4))         # (channels, dilation)
+CONVOLUTIONS = ((32, 1), (32, 2), (64, 4))         # (channels, dilation), for the 50 ticks of the 50 Hz grid
+# Per window length (its ticks): on the 100 Hz grid's 100, a fourth convolution, so the filters reach as far in time.
+CONVOLUTIONS_FOR = {LENGTH: CONVOLUTIONS, 100: ((32, 1), (32, 2), (32, 4), (64, 8))}
+
+
+def length_of(x: np.ndarray) -> int:
+    """The window's ticks, from the inputs' width (channel by channel)."""
+    width = np.asarray(x).shape[1]
+    if width % CHANNELS or width // CHANNELS not in CONVOLUTIONS_FOR:
+        raise ValueError(f"{width} inputs are not {CHANNELS} channels of a window this network knows")
+    return width // CHANNELS
 KERNEL = 5
 HIDDEN = 32
 MEMBERS = 3
@@ -110,7 +121,7 @@ def device() -> str:
     return "cuda" if torch.cuda.is_available() and _runs_on("cuda") else "cpu"
 
 
-def _net():
+def _net(length: int = LENGTH):
     import torch
     from torch import nn
 
@@ -118,7 +129,7 @@ def _net():
         def __init__(self):
             super().__init__()
             layers, c = [], CHANNELS
-            for out, dilation in CONVOLUTIONS:
+            for out, dilation in CONVOLUTIONS_FOR[length]:
                 layers += [nn.Conv1d(c, out, KERNEL, padding=dilation * (KERNEL - 1) // 2, dilation=dilation),
                            nn.BatchNorm1d(out), nn.ReLU()]
                 c = out
@@ -136,14 +147,15 @@ class Model:
     """Trained networks, whose probabilities are averaged, with the scikit-learn-like `predict_proba` the trainer's
     evaluation uses."""
 
-    def __init__(self, nets):
+    def __init__(self, nets, length: int = LENGTH):
         self.nets = nets
+        self.length = length
 
     def predict_proba(self, x: np.ndarray) -> np.ndarray:
         import torch
 
         where = device()
-        windows = torch.from_numpy(np.asarray(x, dtype=np.float32).reshape(-1, CHANNELS, LENGTH))
+        windows = torch.from_numpy(np.asarray(x, dtype=np.float32).reshape(-1, CHANNELS, self.length))
         p = np.zeros(len(windows))
         with torch.no_grad():
             for net in self.nets:
@@ -165,30 +177,31 @@ def fit_stages(stages: list[tuple[np.ndarray, np.ndarray, np.ndarray | None, int
     """Trains MEMBERS networks through `stages` in order, each stage (x, y, keep, epochs) continuing from the weights the
     one before left: a training plan, such as pinches first and then everyday noise. A stage's rows are all it sees, so
     to keep what an earlier stage taught, its rows go into the later stage too (`label_train` does that, by rehearsal)."""
+    length = length_of(stages[0][0])
     nets = []
     for member in range(MEMBERS):
         member_seed = seed + member
-        net, rng = _new_net(member_seed), np.random.default_rng(member_seed)
+        net, rng = _new_net(member_seed, length), np.random.default_rng(member_seed)
         for x, y, keep, epochs in stages:
             _train(net, x, y, keep, epochs, rng)
         net.to("cpu").eval()
         nets.append(net)
-    return Model(nets)
+    return Model(nets, length)
 
 
 def _fit_one(x: np.ndarray, y: np.ndarray, seed: int, keep: np.ndarray | None = None):
     """One network trained in a single stage, as each member of `fit` is."""
-    net = _new_net(seed)
+    net = _new_net(seed, length_of(x))
     _train(net, x, y, keep, EPOCHS, np.random.default_rng(seed))
     return net.eval()
 
 
-def _new_net(seed: int):
+def _new_net(seed: int, length: int = LENGTH):
     import torch
 
     torch.manual_seed(seed)
     torch.set_num_threads(max(1, torch.get_num_threads()))
-    return _net()
+    return _net(length)
 
 
 def _augmented(windows, generator):
@@ -202,7 +215,7 @@ def _augmented(windows, generator):
     low, high = AUGMENT_SCALE
     scale = torch.empty(n, channels, 1, device=logit.device).uniform_(low, high, generator=generator)
     logit = logit * scale + AUGMENT_NOISE * torch.randn(logit.shape, device=logit.device, generator=generator)
-    most = round(AUGMENT_SHIFT_MS * 1_000_000 / cnn_input.TICK_NS)
+    most = round(AUGMENT_SHIFT_MS * ticks / 1000)    # the window is 1 s, so a tick is 1000 / ticks ms
     shifts = torch.randint(-most, most + 1, (n,), device=logit.device, generator=generator)
     # Moved in time, the tick at the edge repeated where the window has nothing.
     source = (torch.arange(ticks, device=logit.device)[None, :] - shifts[:, None]).clamp(0, ticks - 1)
@@ -229,7 +242,7 @@ def _train(net, x: np.ndarray, y: np.ndarray, keep: np.ndarray | None, epochs: i
         return
     where = device()
     net.to(where)
-    windows = torch.from_numpy(np.asarray(x, dtype=np.float32).reshape(-1, CHANNELS, LENGTH)).to(where)
+    windows = torch.from_numpy(np.asarray(x, dtype=np.float32).reshape(-1, CHANNELS, length_of(x))).to(where)
     truth = torch.from_numpy(y.astype(np.float32)).to(where)
     optimiser = torch.optim.Adam(net.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
     positives = max(1.0, float(y.sum()))
@@ -255,7 +268,7 @@ def _train(net, x: np.ndarray, y: np.ndarray, keep: np.ndarray | None, epochs: i
 def to_bytes(model: Model) -> bytes:
     """The model file: per network, the convolutions with their batch normalisation folded in, and the dense layers."""
     members = [_member(net) for net in model.nets]
-    file = {"format": FORMAT, "version": VERSION, "channels": CHANNELS, "length": LENGTH, "members": members}
+    file = {"format": FORMAT, "version": VERSION, "channels": CHANNELS, "length": model.length, "members": members}
     return (json.dumps(_single_precision(file), separators=(",", ":")) + "\n").encode()
 
 

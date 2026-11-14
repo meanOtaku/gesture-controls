@@ -16,7 +16,7 @@ import time
 from dataclasses import replace
 
 from paper_experiments import HERE, setup, spec_for
-from experiment import at_100_hz, spec_for as cnn_spec_for
+from experiment import spec_for as cnn_spec_for
 from label_trainer import label_train as lt
 
 VARIANTS = ("trees", "trees+spectral", "trees@100", "trees+spectral@100")
@@ -25,10 +25,9 @@ TARGETS = ("pinch_in", "pinch_out")
 
 def one(target: str, variant: str, seed: int) -> dict:
     if variant.startswith("cnn"):
-        # The CNN as the trainer makes it, on its own 50 Hz grid or (`cnn@100`) the 100 Hz one of `experiment.py`.
-        if variant.endswith("@100"):
-            at_100_hz()
-        spec = replace(cnn_spec_for(target), seed=seed)
+        # The CNN as the trainer makes it, on the 50 Hz grid or (`cnn@100`) the 100 Hz one (the trainer's `cnn_input.GRIDS`,
+        # the same as `experiment.py`'s `at_100_hz` it was first run with).
+        spec = replace(cnn_spec_for(target), seed=seed, motion_hz=100 if variant.endswith("@100") else 50)
     else:
         _, hz = setup(variant)
         spec = replace(spec_for(target, hz), seed=seed)

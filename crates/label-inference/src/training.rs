@@ -67,6 +67,12 @@ pub fn cnn_contract() -> InputContract {
     ModelKind::Cnn.contract()
 }
 
+/// What the CNN pinch-start model the trainer now makes reads: the same 11 s, on the 100 Hz grid (900 inputs; see
+/// [`pinch_inference::cnn_input::CnnGrid::HZ_100`]).
+pub fn cnn_contract_100() -> InputContract {
+    ModelKind::CnnMedian.contract_at(Some(100))
+}
+
 /// What the earlier PPG-only pinch-start model reads (see [`ModelKind::PpgOnly`]); its versions and runs are kept.
 pub fn ppg_onset_contract() -> InputContract {
     ModelKind::PpgOnly.contract()

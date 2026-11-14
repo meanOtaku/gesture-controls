@@ -503,7 +503,7 @@ impl LabelPipeline {
             // The model's inputs, from the samples' own timestamps, for a decision at this sample: what the trainer computes.
             let inputs = match (motion_through, sample.watch_ns, cnn_scaling) {
                 (Some(_), Some(at), Some(scaling)) => {
-                    cnn_input::inputs(&motion, &pulse_on_watch, at, scaling)
+                    cnn_input::inputs_on(model.cnn_grid, &motion, &pulse_on_watch, at, scaling)
                 }
                 (Some(_), Some(at), None) => {
                     features(&samples, sample.raw_ts_ns).and_then(|mut pulse| {
@@ -539,8 +539,9 @@ impl LabelPipeline {
 pub(crate) mod tests {
     use super::*;
     use crate::model::tests::{
-        expected, expected_cnn, expected_median_cnn, expected_motion, expected_motion_100hz, loaded,
-        loaded_cnn, loaded_median_cnn, loaded_motion, loaded_motion_100hz,
+        expected, expected_cnn, expected_median_cnn, expected_median_cnn_100hz, expected_motion,
+        expected_motion_100hz, loaded, loaded_cnn, loaded_median_cnn, loaded_median_cnn_100hz, loaded_motion,
+        loaded_motion_100hz,
     };
 
     /// One PPG batch of the samples `from..to` of `trace` (statuses all valid).
@@ -776,6 +777,13 @@ pub(crate) mod tests {
     #[test]
     fn a_median_cnn_scores_the_live_streams_as_the_trainer_did() {
         scores_the_live_streams(&loaded_median_cnn(), expected_median_cnn());
+    }
+
+    #[test]
+    fn a_100_hz_cnn_scores_the_live_streams_as_the_trainer_did() {
+        let model = loaded_median_cnn_100hz();
+        assert_eq!(model.cnn_grid, pinch_inference::cnn_input::CnnGrid::HZ_100);
+        scores_the_live_streams(&model, expected_median_cnn_100hz());
     }
 
     fn scores_the_live_streams(

@@ -66,6 +66,8 @@ def spec_for(target: str) -> lt.Spec:
         "sources": list(lt.MOTION_SOURCES), "backend": lt.CNN_BACKEND, "seed": SEEDS[0], "research": False, "labelOffsetMs": 0,
         "labelTiming": {rid: "camera" if "pinch" in rid else "noGesture" for rid in ids}, "steadyStarts": False,
         "hardNegatives": False,
+        # These variants were run on the trainer's 50 Hz grid; the trainer now defaults to 100 Hz, so it is named here.
+        "motionHz": 50,
     })
 
 
