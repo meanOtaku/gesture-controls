@@ -497,6 +497,33 @@ impl WatchRuntime {
     }
 }
 
+/// The theme the page named before the watch bridge was up; [`apply_pending_theme`] hands it over.
+static PENDING_THEME: Mutex<Option<String>> = Mutex::new(None);
+
+/// The desktop's theme, for the watch app to wear the same: sent to the watch now and to every watch that connects.
+#[tauri::command]
+pub fn set_watch_theme(app: AppHandle, theme: String) -> Result<(), String> {
+    // Held across the check, so a bridge that comes up meanwhile still finds the theme (see `apply_pending_theme`).
+    let mut pending = PENDING_THEME.lock().map_err(|_| "the theme could not be kept")?;
+    match app.try_state::<std::sync::Arc<WatchBridgeServer>>() {
+        Some(server) => server.set_theme(&theme).map_err(|error| error.to_string()),
+        None => {
+            *pending = Some(theme);
+            Ok(())
+        }
+    }
+}
+
+/// Gives a bridge that just came up the theme the page named before it existed. Call after it is managed.
+pub fn apply_pending_theme(server: &WatchBridgeServer) {
+    let theme = PENDING_THEME.lock().ok().and_then(|mut pending| pending.take());
+    if let Some(theme) = theme
+        && let Err(error) = server.set_theme(&theme)
+    {
+        tracing::warn!(%error, "the watch was not given the theme");
+    }
+}
+
 #[tauri::command]
 pub fn get_watch_link_diagnostics(app: AppHandle) -> LinkDiagnostics {
     app.try_state::<std::sync::Arc<WatchBridgeServer>>()

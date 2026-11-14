@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The watch's palette as theme attributes, so one layout wears any of the desktop's three themes (see themes.xml). -->
+<resources>
+    <attr name="gcBg" format="color" />
+    <attr name="gcPanel" format="color" />
+    <attr name="gcInk" format="color" />
+    <attr name="gcInk2" format="color" />
+    <attr name="gcInk3" format="color" />
+    <attr name="gcLine" format="color" />
+    <attr name="gcWash" format="color" />
+    <!-- The one primary action's fill, and the text on it. -->
+    <attr name="gcPrimary" format="color" />
+    <attr name="gcOnPrimary" format="color" />
+    <attr name="gcPrimaryPressed" format="color" />
+    <!-- The "approve" button's fill. -->
+    <attr name="gcAttentionFill" format="color" />
+    <attr name="gcAttentionPressed" format="color" />
+    <!-- Status words: connected, waiting, failed. Each readable on gcBg. -->
+    <attr name="gcOk" format="color" />
+    <attr name="gcAttention" format="color" />
+    <attr name="gcBad" format="color" />
+    <!-- Outline weight: neo-brutalism draws thick. -->
+    <attr name="gcStroke" format="dimension" />
+</resources>

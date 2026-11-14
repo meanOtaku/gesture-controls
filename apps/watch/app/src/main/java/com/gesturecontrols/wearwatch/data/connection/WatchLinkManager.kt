@@ -99,6 +99,9 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
     /** Forwards a validated `desktop.haptic` command; wired by MainActivity to a context-owned Vibrator. */
     var onHapticCommand: ((durationMs: Int) -> Unit)? = null
 
+    /** Forwards a `desktop.set_theme` naming a theme this app knows; wired by MainActivity. Called off the main thread. */
+    var onThemeCommand: ((theme: com.gesturecontrols.wearwatch.feature.theme.WatchTheme) -> Unit)? = null
+
     private val _state = MutableStateFlow(ConnectionState.DISCONNECTED)
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
 
@@ -378,6 +381,9 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
             WatchProtocol.TYPE_DESKTOP_SET_SENSOR -> dispatchSensorControlCommand(message.payload)
             WatchProtocol.TYPE_DESKTOP_SET_SENSOR_RATE -> dispatchSensorRateCommand(message.payload)
             WatchProtocol.TYPE_DESKTOP_HAPTIC -> dispatchHapticCommand(message.payload)
+            WatchProtocol.TYPE_DESKTOP_SET_THEME ->
+                com.gesturecontrols.wearwatch.feature.theme.WatchTheme.fromWire(message.payload.optString("theme"))
+                    ?.let { onThemeCommand?.invoke(it) }
         }
     }
 

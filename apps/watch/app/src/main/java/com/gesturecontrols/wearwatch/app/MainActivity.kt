@@ -1,5 +1,9 @@
 package com.gesturecontrols.wearwatch.app
 
+import androidx.core.view.doOnLayout
+import android.graphics.drawable.ColorDrawable
+import android.util.TypedValue
+import com.gesturecontrols.wearwatch.feature.theme.WatchTheme
 import com.gesturecontrols.wearwatch.R
 
 import com.gesturecontrols.wearwatch.data.connection.*
@@ -33,7 +37,6 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.core.view.ViewConfigurationCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -150,37 +153,16 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
         prefs = ConnectionPrefs(this)
+        // The desktop's theme as last sent, before any view exists, so the first frame already wears it.
+        currentTheme = WatchTheme.fromWire(prefs.theme) ?: WatchTheme.ELECTRIC
+        setTheme(styleFor(currentTheme))
+        setContentView(R.layout.activity_main)
+        bindViews()
+
         watchLink.deviceId = prefs.deviceId
         wearDetector = WearDetector(this, lifecycleScope)
         streamWhenNotWorn.value = prefs.streamWhenNotWorn
-        transportBluetoothButton = findViewById(R.id.transportBluetoothButton)
-        transportWifiButton = findViewById(R.id.transportWifiButton)
-        trustButton = findViewById(R.id.trustButton)
-        forgetTrustButton = findViewById(R.id.forgetTrustButton)
-        offWristButton = findViewById(R.id.offWristButton)
-        detailsToggleButton = findViewById(R.id.detailsToggleButton)
-        detailsPanel = findViewById(R.id.detailsPanel)
-        rootScroll = findViewById(R.id.rootScroll)
-        connectButton = findViewById(R.id.connectButton)
-        connectionStatusText = findViewById(R.id.connectionStatusText)
-        discoveryStatusText = findViewById(R.id.discoveryStatusText)
-        discoveryHistoryText = findViewById(R.id.discoveryHistoryText)
-        endpointSourceText = findViewById(R.id.endpointSourceText)
-
-        linkDiagnosticsText = findViewById(R.id.linkDiagnosticsText)
-        sensorStatusText = findViewById(R.id.sensorStatusText)
-        detailText = findViewById(R.id.detailText)
-        ppgStatusText = findViewById(R.id.ppgStatusText)
-        linkLogText = findViewById(R.id.linkLogText)
-        linkCountersText = findViewById(R.id.linkCountersText)
-        spo2Button = findViewById(R.id.spo2Button)
-        ecgButton = findViewById(R.id.ecgButton)
-        biaButton = findViewById(R.id.biaButton)
-        sweatLossButton = findViewById(R.id.sweatLossButton)
-
         renderEndpointSource()
 
         watchLink.batteryPercentProvider = { readBatteryPercent() }
@@ -257,34 +239,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
         watchLink.onHapticCommand = { durationMs -> triggerHaptic(durationMs) }
+        watchLink.onThemeCommand = { theme -> runOnUiThread { applyWatchTheme(theme) } }
 
-        connectButton.setOnClickListener { onConnectButtonClicked() }
-        trustButton.setOnClickListener { onTrustButtonClicked() }
-        forgetTrustButton.setOnClickListener { onForgetButtonClicked() }
         renderOffWristButton()
-        offWristButton.setOnClickListener {
-            val enabled = !streamWhenNotWorn.value
-            prefs.streamWhenNotWorn = enabled
-            streamWhenNotWorn.value = enabled
-            renderOffWristButton()
-        }
-        detailsToggleButton.setOnClickListener { toggleDetails() }
-        // The rotating bezel / crown scrolls the column, as on every other Wear screen.
-        rootScroll.setOnGenericMotionListener { _, event ->
-            if (event.action == MotionEvent.ACTION_SCROLL && event.isFromSource(InputDevice.SOURCE_ROTARY_ENCODER)) {
-                val factor = ViewConfigurationCompat.getScaledVerticalScrollFactor(ViewConfiguration.get(this), this)
-                rootScroll.scrollBy(0, Math.round(-event.getAxisValue(MotionEvent.AXIS_SCROLL) * factor))
-                true
-            } else {
-                false
-            }
-        }
-        transportBluetoothButton.setOnClickListener { onTransportSelected(WatchTransportKind.BLUETOOTH) }
-        transportWifiButton.setOnClickListener { onTransportSelected(WatchTransportKind.WIFI) }
-        spo2Button.setOnClickListener { onOnDemandButtonClicked(TRACKER_SPO2_ON_DEMAND) }
-        ecgButton.setOnClickListener { onOnDemandButtonClicked(TRACKER_ECG_ON_DEMAND) }
-        biaButton.setOnClickListener { onOnDemandButtonClicked(TRACKER_BIA_ON_DEMAND) }
-        sweatLossButton.setOnClickListener { onOnDemandButtonClicked(TRACKER_SWEAT_LOSS_ON_DEMAND) }
         // Restores the persisted selection; a fresh install (and any install
         // upgrading from the Wi-Fi-only build) starts on Bluetooth.
         applyTransport(prefs.transport, persist = false)
@@ -362,6 +319,100 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    /** Finds every view and gives it its listener; run again when a new theme re-inflates the layout. */
+    private fun bindViews() {
+        transportBluetoothButton = findViewById(R.id.transportBluetoothButton)
+        transportWifiButton = findViewById(R.id.transportWifiButton)
+        trustButton = findViewById(R.id.trustButton)
+        forgetTrustButton = findViewById(R.id.forgetTrustButton)
+        offWristButton = findViewById(R.id.offWristButton)
+        detailsToggleButton = findViewById(R.id.detailsToggleButton)
+        detailsPanel = findViewById(R.id.detailsPanel)
+        rootScroll = findViewById(R.id.rootScroll)
+        connectButton = findViewById(R.id.connectButton)
+        connectionStatusText = findViewById(R.id.connectionStatusText)
+        discoveryStatusText = findViewById(R.id.discoveryStatusText)
+        discoveryHistoryText = findViewById(R.id.discoveryHistoryText)
+        endpointSourceText = findViewById(R.id.endpointSourceText)
+
+        linkDiagnosticsText = findViewById(R.id.linkDiagnosticsText)
+        sensorStatusText = findViewById(R.id.sensorStatusText)
+        detailText = findViewById(R.id.detailText)
+        ppgStatusText = findViewById(R.id.ppgStatusText)
+        linkLogText = findViewById(R.id.linkLogText)
+        linkCountersText = findViewById(R.id.linkCountersText)
+        spo2Button = findViewById(R.id.spo2Button)
+        ecgButton = findViewById(R.id.ecgButton)
+        biaButton = findViewById(R.id.biaButton)
+        sweatLossButton = findViewById(R.id.sweatLossButton)
+
+        connectButton.setOnClickListener { onConnectButtonClicked() }
+        trustButton.setOnClickListener { onTrustButtonClicked() }
+        forgetTrustButton.setOnClickListener { onForgetButtonClicked() }
+        offWristButton.setOnClickListener {
+            val enabled = !streamWhenNotWorn.value
+            prefs.streamWhenNotWorn = enabled
+            streamWhenNotWorn.value = enabled
+            renderOffWristButton()
+        }
+        detailsToggleButton.setOnClickListener { toggleDetails() }
+        // The rotating bezel / crown scrolls the column, as on every other Wear screen.
+        rootScroll.setOnGenericMotionListener { _, event ->
+            if (event.action == MotionEvent.ACTION_SCROLL && event.isFromSource(InputDevice.SOURCE_ROTARY_ENCODER)) {
+                val factor = ViewConfigurationCompat.getScaledVerticalScrollFactor(ViewConfiguration.get(this), this)
+                rootScroll.scrollBy(0, Math.round(-event.getAxisValue(MotionEvent.AXIS_SCROLL) * factor))
+                true
+            } else {
+                false
+            }
+        }
+        transportBluetoothButton.setOnClickListener { onTransportSelected(WatchTransportKind.BLUETOOTH) }
+        transportWifiButton.setOnClickListener { onTransportSelected(WatchTransportKind.WIFI) }
+        spo2Button.setOnClickListener { onOnDemandButtonClicked(TRACKER_SPO2_ON_DEMAND) }
+        ecgButton.setOnClickListener { onOnDemandButtonClicked(TRACKER_ECG_ON_DEMAND) }
+        biaButton.setOnClickListener { onOnDemandButtonClicked(TRACKER_BIA_ON_DEMAND) }
+        sweatLossButton.setOnClickListener { onOnDemandButtonClicked(TRACKER_SWEAT_LOSS_ON_DEMAND) }
+    }
+
+    private var currentTheme = WatchTheme.ELECTRIC
+
+    private fun styleFor(theme: WatchTheme): Int = when (theme) {
+        WatchTheme.ELECTRIC -> R.style.AppTheme
+        WatchTheme.NEO -> R.style.AppTheme_Neo
+        WatchTheme.NERV -> R.style.AppTheme_Nerv
+    }
+
+    /** A colour of the theme being worn (one of the `gc*` attributes in attrs.xml). */
+    private fun themeColor(attr: Int): Int {
+        val value = TypedValue()
+        theme.resolveAttribute(attr, value, true)
+        return value.data
+    }
+
+    /**
+     * Wears the desktop's theme, remembered for the next start. The layout is inflated again under it rather than the
+     * activity recreated: the activity holds the link to the desktop, which a recreate would drop. Everything shown is
+     * then drawn again from the state it comes from.
+     */
+    private fun applyWatchTheme(next: WatchTheme) {
+        prefs.theme = next.wire
+        if (next == currentTheme || isFinishing || isDestroyed) return
+        currentTheme = next
+        LinkLog.add("wearing the desktop's ${next.wire} theme")
+        setTheme(styleFor(next))
+        window.setBackgroundDrawable(ColorDrawable(themeColor(R.attr.gcBg)))
+        setContentView(R.layout.activity_main)
+        bindViews()
+        renderEndpointSource()
+        renderOffWristButton()
+        renderTransportSelector()
+        renderTrustPrompt(bleTransport?.pendingTrustedCentral?.value)
+        renderState(watchLink.state.value)
+        renderPpgState(ppgCollector.state.value, ppgCollector.diagnostic.value)
+        updateOnDemandButtons(onDemandSampler.state.value)
+        rootScroll.requestFocus()
     }
 
     override fun onPause() {
@@ -683,13 +734,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
         connectionStatusText.setTextColor(
-            ContextCompat.getColor(
-                this,
+            themeColor(
                 when (state) {
-                    ConnectionState.CONNECTED -> R.color.gc_green
-                    ConnectionState.FAILED -> R.color.gc_red
-                    ConnectionState.CONNECTING, ConnectionState.RECONNECTING, ConnectionState.AWAITING_TRUST -> R.color.gc_yellow
-                    ConnectionState.DISCONNECTED -> R.color.gc_ink
+                    ConnectionState.CONNECTED -> R.attr.gcOk
+                    ConnectionState.FAILED -> R.attr.gcBad
+                    ConnectionState.CONNECTING, ConnectionState.RECONNECTING, ConnectionState.AWAITING_TRUST -> R.attr.gcAttention
+                    ConnectionState.DISCONNECTED -> R.attr.gcInk
                 },
             ),
         )
@@ -715,7 +765,7 @@ class MainActivity : AppCompatActivity() {
         }
         if (state == ConnectionState.CONNECTED && streamingPlan.value == StreamingPlan.PAUSED_OFF_BODY) {
             connectionStatusText.setText(R.string.status_paused)
-            connectionStatusText.setTextColor(ContextCompat.getColor(this, R.color.gc_yellow))
+            connectionStatusText.setTextColor(themeColor(R.attr.gcAttention))
             discoveryStatusText.setText(R.string.hint_paused)
             sensorStatusText.setText(R.string.sensors_idle)
         }
@@ -784,19 +834,25 @@ class MainActivity : AppCompatActivity() {
      */
     private fun fitStatusText() {
         val view = connectionStatusText
-        view.post {
-            val room = view.width - view.paddingLeft - view.paddingRight
-            if (room <= 0) return@post
-            val scale = resources.displayMetrics.scaledDensity
-            val text = view.text.toString().uppercase()
-            var size = STATUS_MAX_SP
-            while (size > STATUS_MIN_SP) {
-                view.paint.textSize = size * scale
-                if (view.paint.measureText(text) + view.paint.letterSpacing * view.paint.textSize * text.length <= room) break
-                size -= 1f
-            }
-            view.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, size)
+        // After layout, and then posted: a layout inflated anew (a new theme) has no width until it is laid out, and a
+        // size changed inside the layout pass itself is not laid out again.
+        view.doOnLayout { view.post { fitStatusTextNow(view) } }
+    }
+
+    private fun fitStatusTextNow(view: TextView) {
+        val room = view.width - view.paddingLeft - view.paddingRight
+        if (room <= 0) return
+        val scale = resources.displayMetrics.scaledDensity
+        val text = view.text.toString().uppercase()
+        // Measured on a copy: changing the view's own paint would draw it at whatever size was tried last.
+        val paint = android.text.TextPaint(view.paint)
+        var size = STATUS_MAX_SP
+        while (size > STATUS_MIN_SP) {
+            paint.textSize = size * scale
+            if (paint.measureText(text) + paint.letterSpacing * paint.textSize * text.length <= room) break
+            size -= 1f
         }
+        view.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, size)
     }
 
     private fun renderPpgState(state: PpgState, diagnostic: String?) {

@@ -29,7 +29,7 @@ use axum::routing::get;
 use futures_util::StreamExt;
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use spatial_protocol::{
-    CONTROLLABLE_SENSOR_IDS, DESKTOP_CONNECTED_TYPE, DESKTOP_HAPTIC_TYPE,
+    CONTROLLABLE_SENSOR_IDS, DESKTOP_CONNECTED_TYPE, DESKTOP_HAPTIC_TYPE, DESKTOP_SET_THEME_TYPE, DesktopThemePayload, WATCH_THEMES,
     DESKTOP_SET_SENSOR_RATE_TYPE, DESKTOP_SET_SENSOR_TYPE, DESKTOP_START_MEASUREMENT_TYPE,
     DESKTOP_STOP_MEASUREMENT_TYPE, DESKTOP_TIME_SYNC_TYPE, DesktopConnectedPayload,
     DesktopHapticPayload, DesktopMeasurementCommandPayload, DesktopOutboundEnvelope,
@@ -191,6 +191,8 @@ pub enum WatchBridgeError {
     SensorRateOutOfRange(f64),
     #[error("haptic duration {0}ms is outside the allowed range")]
     HapticDurationOutOfRange(u32),
+    #[error("'{0}' is not a theme the watch knows")]
+    UnknownTheme(String),
     #[error("watch BLE transport is already running")]
     BleAlreadyRunning,
 }
@@ -215,6 +217,8 @@ struct SharedState {
     sensor_commands: broadcast::Sender<SensorControlCommand>,
     sensor_rate_commands: broadcast::Sender<SensorRateCommand>,
     haptic_commands: broadcast::Sender<HapticCommand>,
+    /// The desktop's theme, sent to a watch when its link starts and whenever it changes.
+    theme: tokio::sync::watch::Sender<Option<String>>,
     active: AtomicBool,
     heartbeat_timeout: Duration,
     ble_status: Mutex<BleStatus>,
@@ -324,6 +328,7 @@ impl WatchBridgeServer {
                 sensor_commands,
                 sensor_rate_commands,
                 haptic_commands,
+                theme: tokio::sync::watch::channel(None).0,
                 active: AtomicBool::new(false),
                 heartbeat_timeout,
                 ble_status: Mutex::new(BleStatus::Idle),
@@ -411,6 +416,19 @@ impl WatchBridgeServer {
             return Err(WatchBridgeError::NoActiveConnection);
         }
         let _ = self.shared.sensor_rate_commands.send(command);
+        Ok(())
+    }
+
+    /// Sets the theme the watch app should wear: sent now if a watch is connected, and to every watch that connects later.
+    pub fn set_theme(&self, theme: &str) -> Result<(), WatchBridgeError> {
+        if !WATCH_THEMES.contains(&theme) {
+            return Err(WatchBridgeError::UnknownTheme(theme.to_string()));
+        }
+        self.shared.theme.send_if_modified(|current| {
+            let changed = current.as_deref() != Some(theme);
+            *current = Some(theme.to_string());
+            changed
+        });
         Ok(())
     }
 
@@ -1139,6 +1157,9 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
     let mut off_body = false;
     // When motion or pulse data last arrived: a watch set to stream off the wrist is still streaming.
     let mut last_sensor_data: Option<Instant> = None;
+    // Seen as changed at once, so a watch that connects is told the theme straight away.
+    let mut theme = shared.theme.subscribe();
+    theme.mark_changed();
 
     loop {
         let idle_timeout = if off_body && may_sleep_off_body {
@@ -1245,6 +1266,21 @@ async fn run_connection<L: WatchLinkTransport + ?Sized>(
                 // this is proof of life. Without it a slow write (a busy radio can hold one
                 // for seconds) outlasts the silence timeout while the watch's messages wait
                 // unread, and a healthy link is reported dead.
+                last_activity = Instant::now();
+            }
+            changed = theme.changed() => {
+                if changed.is_err() {
+                    continue;
+                }
+                let Some(name) = theme.borrow_and_update().clone() else { continue };
+                let request = DesktopOutboundEnvelope::new(
+                    DESKTOP_SET_THEME_TYPE,
+                    now_ns(),
+                    DesktopThemePayload { theme: name },
+                );
+                if send_envelope(link, &request, &shared.link).await.is_err() {
+                    break ConnectionEnd::WriteFailed;
+                }
                 last_activity = Instant::now();
             }
             command = haptic_commands.recv() => {
@@ -1537,6 +1573,7 @@ mod tests {
             sensor_commands,
             sensor_rate_commands,
             haptic_commands,
+            theme: tokio::sync::watch::channel(None).0,
             active: AtomicBool::new(false),
             heartbeat_timeout: Duration::from_secs(3),
             ble_status: Mutex::new(BleStatus::Idle),
@@ -1746,6 +1783,7 @@ mod tests {
                 sensor_commands,
                 sensor_rate_commands,
                 haptic_commands,
+                theme: tokio::sync::watch::channel(None).0,
                 active: AtomicBool::new(false),
                 heartbeat_timeout: Duration::from_millis(100),
                 ble_status: Mutex::new(BleStatus::Idle),
@@ -1774,6 +1812,67 @@ mod tests {
         assert!(long >= Duration::from_millis(450), "{long:?}");
     }
 
+    /// Keeps what was written to it; never says anything.
+    struct RecordingLink {
+        sent: Arc<Mutex<Vec<String>>>,
+    }
+
+    #[async_trait::async_trait]
+    impl WatchLinkTransport for RecordingLink {
+        async fn send_text(&mut self, text: String) -> Result<(), ()> {
+            self.sent.lock().unwrap().push(text);
+            Ok(())
+        }
+
+        async fn recv(&mut self) -> Option<Vec<u8>> {
+            std::future::pending().await
+        }
+    }
+
+    #[test]
+    fn a_watch_is_told_the_theme_when_its_link_starts_and_when_it_changes() {
+        let shared = shared_with_heartbeat(Duration::from_millis(300));
+        let server_theme = |theme: &str| {
+            shared.theme.send_if_modified(|current| {
+                *current = Some(theme.to_string());
+                true
+            })
+        };
+        server_theme("nerv");
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        runtime.block_on(async {
+            let changer = {
+                let shared = Arc::clone(&shared);
+                async move {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    shared.theme.send_replace(Some("neo".to_string()));
+                }
+            };
+            let mut link = RecordingLink { sent: Arc::clone(&sent) };
+            let run = run_connection(
+                &mut link,
+                &shared,
+                shared.commands.subscribe(),
+                shared.sensor_commands.subscribe(),
+                shared.sensor_rate_commands.subscribe(),
+                shared.haptic_commands.subscribe(),
+            );
+            let (end, ()) = tokio::join!(run, changer);
+            assert_eq!(end, ConnectionEnd::HeartbeatTimeout);
+        });
+        let themes: Vec<String> = sent
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|text| {
+                let value: serde_json::Value = serde_json::from_str(text).ok()?;
+                (value["type"] == DESKTOP_SET_THEME_TYPE).then(|| value["payload"]["theme"].as_str().unwrap().to_string())
+            })
+            .collect();
+        assert_eq!(themes, ["nerv", "neo"]);
+    }
+
     fn shared_with_heartbeat(heartbeat_timeout: Duration) -> Arc<SharedState> {
         let (events, _) = broadcast::channel(16);
         let (commands, _) = broadcast::channel(16);
@@ -1786,6 +1885,7 @@ mod tests {
             sensor_commands,
             sensor_rate_commands,
             haptic_commands,
+            theme: tokio::sync::watch::channel(None).0,
             active: AtomicBool::new(false),
             heartbeat_timeout,
             ble_status: Mutex::new(BleStatus::Idle),
@@ -1918,6 +2018,7 @@ mod tests {
             sensor_commands,
             sensor_rate_commands,
             haptic_commands,
+            theme: tokio::sync::watch::channel(None).0,
             active: AtomicBool::new(false),
             heartbeat_timeout: Duration::from_millis(150),
             ble_status: Mutex::new(BleStatus::Idle),

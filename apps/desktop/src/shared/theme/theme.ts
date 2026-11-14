@@ -30,6 +30,14 @@ export function readTheme(): AppTheme {
 
 const BROWSER_BAR_COLOUR: Record<AppTheme, string> = { electric: "#000066", neo: "#fbf3e4", nerv: "#000000" };
 
+/** Tells the desktop the theme, so the watch app wears it too (now, and whenever a watch connects). */
+function shareWithWatch(theme: AppTheme): void {
+  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+  void import("@tauri-apps/api/core")
+    .then(({ invoke }) => invoke("set_watch_theme", { theme }))
+    .catch(() => undefined);
+}
+
 /**
  * Puts a theme on the page. The floating volume knob is its own window with its own look and is never themed.
  * Returns whether it was applied.
@@ -44,6 +52,7 @@ export function applyTheme(theme: AppTheme): boolean {
   if (theme === "neo" || theme === "nerv") root.setAttribute("data-theme", theme);
   else root.removeAttribute("data-theme");
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", BROWSER_BAR_COLOUR[theme]);
+  shareWithWatch(theme);
   return true;
 }
 

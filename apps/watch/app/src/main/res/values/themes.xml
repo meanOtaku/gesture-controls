@@ -1,14 +1,72 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Electric, the desktop's original deep-blue look, and the base the other two override. The desktop names the
+         theme (desktop.set_theme); WatchTheme picks the style. -->
     <style name="AppTheme" parent="Theme.AppCompat.NoActionBar">
-        <item name="colorPrimary">@color/gc_ink</item>
-        <item name="colorPrimaryDark">@color/gc_bg</item>
-        <item name="colorAccent">@color/gc_yellow</item>
-        <item name="android:colorBackground">@color/gc_bg</item>
-        <item name="android:windowBackground">@color/gc_bg</item>
-        <item name="android:textColorPrimary">@color/gc_ink</item>
-        <item name="android:textColorSecondary">@color/gc_ink_2</item>
+        <item name="colorPrimary">?attr/gcInk</item>
+        <item name="colorPrimaryDark">?attr/gcBg</item>
+        <item name="colorAccent">?attr/gcAttentionFill</item>
+        <item name="android:colorBackground">?attr/gcBg</item>
+        <item name="android:windowBackground">?attr/gcBg</item>
+        <item name="android:textColorPrimary">?attr/gcInk</item>
+        <item name="android:textColorSecondary">?attr/gcInk2</item>
         <item name="android:fontFamily">sans-serif</item>
+        <item name="gcBg">@color/gc_bg</item>
+        <item name="gcPanel">@color/gc_panel</item>
+        <item name="gcInk">@color/gc_ink</item>
+        <item name="gcInk2">@color/gc_ink_2</item>
+        <item name="gcInk3">@color/gc_ink_3</item>
+        <item name="gcLine">@color/gc_line</item>
+        <item name="gcWash">@color/gc_wash</item>
+        <item name="gcPrimary">@color/gc_ink</item>
+        <item name="gcOnPrimary">@color/gc_blue</item>
+        <item name="gcPrimaryPressed">#CCF2F2F2</item>
+        <item name="gcAttentionFill">@color/gc_yellow</item>
+        <item name="gcAttentionPressed">#CCF2F200</item>
+        <item name="gcOk">@color/gc_green</item>
+        <item name="gcAttention">@color/gc_yellow</item>
+        <item name="gcBad">@color/gc_red</item>
+        <item name="gcStroke">1dp</item>
+    </style>
+
+    <!-- Neo-brutalism: cream paper, black ink, thick outlines, a pink primary. Status words are darkened to read on cream. -->
+    <style name="AppTheme.Neo">
+        <item name="gcBg">#FBF3E4</item>
+        <item name="gcPanel">#FFFDF8</item>
+        <item name="gcInk">#17130E</item>
+        <item name="gcInk2">#DB17130E</item>
+        <item name="gcInk3">#AD17130E</item>
+        <item name="gcLine">#17130E</item>
+        <item name="gcWash">#1A17130E</item>
+        <item name="gcPrimary">#FF6F91</item>
+        <item name="gcOnPrimary">#17130E</item>
+        <item name="gcPrimaryPressed">#CCFF6F91</item>
+        <item name="gcAttentionFill">#FFD23F</item>
+        <item name="gcAttentionPressed">#CCFFD23F</item>
+        <item name="gcOk">#0F7A63</item>
+        <item name="gcAttention">#A85A00</item>
+        <item name="gcBad">#C21F45</item>
+        <item name="gcStroke">2dp</item>
+    </style>
+
+    <!-- NERV: black panels, orange frames, green for normal state, amber for waiting, red for failure. -->
+    <style name="AppTheme.Nerv">
+        <item name="gcBg">#000000</item>
+        <item name="gcPanel">#0A0A0A</item>
+        <item name="gcInk">#E8E8E0</item>
+        <item name="gcInk2">#E6E8E8E0</item>
+        <item name="gcInk3">#9A9A94</item>
+        <item name="gcLine">#B3FF9900</item>
+        <item name="gcWash">#2650FF50</item>
+        <item name="gcPrimary">#FF9900</item>
+        <item name="gcOnPrimary">#000000</item>
+        <item name="gcPrimaryPressed">#CCFF9900</item>
+        <item name="gcAttentionFill">#FFCC00</item>
+        <item name="gcAttentionPressed">#CCFFCC00</item>
+        <item name="gcOk">#50FF50</item>
+        <item name="gcAttention">#FFCC00</item>
+        <item name="gcBad">#FF3030</item>
+        <item name="gcStroke">1dp</item>
     </style>
 
     <!-- Condensed uppercase label: section headings and small captions. -->
@@ -16,13 +74,13 @@
         <item name="android:fontFamily">sans-serif-condensed</item>
         <item name="android:textAllCaps">true</item>
         <item name="android:letterSpacing">0.12</item>
-        <item name="android:textColor">@color/gc_ink_3</item>
+        <item name="android:textColor">?attr/gcInk3</item>
         <item name="android:textSize">10sp</item>
         <item name="android:gravity">center</item>
     </style>
 
     <style name="Gc.Body" parent="">
-        <item name="android:textColor">@color/gc_ink_2</item>
+        <item name="android:textColor">?attr/gcInk2</item>
         <item name="android:textSize">11sp</item>
         <item name="android:gravity">center</item>
     </style>
@@ -34,7 +92,7 @@
         <item name="android:letterSpacing">0.1</item>
         <item name="android:textStyle">bold</item>
         <item name="android:textSize">12sp</item>
-        <item name="android:textColor">@color/gc_blue</item>
+        <item name="android:textColor">?attr/gcOnPrimary</item>
         <item name="android:background">@drawable/gc_button_primary</item>
         <item name="android:minHeight">@dimen/gc_touch_min</item>
         <item name="android:minWidth">0dp</item>

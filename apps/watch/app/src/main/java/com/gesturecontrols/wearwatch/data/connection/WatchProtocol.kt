@@ -58,6 +58,8 @@ object WatchProtocol {
 
     /** A short, bounded haptic pulse (e.g. wrist-rotation volume feedback); see [WatchLinkManager.onHapticCommand]. */
     const val TYPE_DESKTOP_HAPTIC = "desktop.haptic"
+    /** The desktop's theme, for this app to wear the same; see [WatchLinkManager.onThemeCommand]. */
+    const val TYPE_DESKTOP_SET_THEME = "desktop.set_theme"
     /** Inclusive bounds for `desktop.haptic`'s `durationMs`; mirrors `MIN_HAPTIC_DURATION_MS`/`MAX_HAPTIC_DURATION_MS` in spatial_protocol. */
     const val MIN_HAPTIC_DURATION_MS = 10
     const val MAX_HAPTIC_DURATION_MS = 200

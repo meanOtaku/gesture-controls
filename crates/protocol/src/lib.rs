@@ -114,6 +114,11 @@ pub const DESKTOP_HAPTIC_TYPE: &str = "desktop.haptic";
 /// `MIN_HAPTIC_DURATION_MS`/`MAX_HAPTIC_DURATION_MS` in `WatchProtocol.kt`.
 /// Kept short so a haptic command can never be (ab)used as a sustained buzz.
 pub const MIN_HAPTIC_DURATION_MS: u32 = 10;
+/// The desktop's look, for the watch app to wear the same (`desktop.set_theme`). Sent when a link starts and when it
+/// changes; a watch that does not know the message ignores it.
+pub const DESKTOP_SET_THEME_TYPE: &str = "desktop.set_theme";
+/// The themes `desktop.set_theme` may name, mirrored by `WatchTheme` in the watch app.
+pub const WATCH_THEMES: [&str; 3] = ["electric", "neo", "nerv"];
 pub const MAX_HAPTIC_DURATION_MS: u32 = 200;
 
 /// Generic enable/disable command for [`CONTROLLABLE_SENSOR_IDS`] — unlike
@@ -1400,6 +1405,13 @@ pub struct DesktopSensorRateCommandPayload {
 #[serde(rename_all = "camelCase")]
 pub struct DesktopHapticPayload {
     pub duration_ms: u32,
+}
+
+/// `desktop.set_theme` payload: `theme` is one of [`WATCH_THEMES`].
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopThemePayload {
+    pub theme: String,
 }
 
 #[cfg(test)]

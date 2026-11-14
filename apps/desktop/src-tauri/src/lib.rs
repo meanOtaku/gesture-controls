@@ -265,6 +265,7 @@ pub fn run() {
             overlay::refresh_system_volume,
             watch::get_watch_status,
             watch::get_watch_link_diagnostics,
+            watch::set_watch_theme,
             watch::start_measurement,
             watch::stop_measurement,
             watch::set_sensor_enabled,
@@ -394,6 +395,7 @@ pub fn run() {
                 let mut events = server.subscribe();
                 let server = Arc::new(server);
                 watch_handle.manage(Arc::clone(&server));
+                watch::apply_pending_theme(&server);
                 watch::spawn_link_diagnostics_emitter(watch_handle.clone(), Arc::clone(&server));
 
                 // Start only the transport the user selected; a fresh install

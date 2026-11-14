@@ -9,7 +9,7 @@
     android:id="@+id/rootScroll"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/gc_bg"
+    android:background="?attr/gcBg"
     android:fillViewport="true"
     android:focusable="true"
     android:focusableInTouchMode="true"
@@ -42,7 +42,7 @@
             android:maxLines="1"
             android:text="@string/status_disconnected"
             android:textAllCaps="true"
-            android:textColor="@color/gc_ink"
+            android:textColor="?attr/gcInk"
             android:textSize="34sp"
             android:textStyle="bold" />
 
@@ -59,7 +59,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:textColor="@color/gc_red"
+            android:textColor="?attr/gcBad"
             android:textSize="10sp" />
 
         <Button
@@ -92,7 +92,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/gc_gap"
-            android:background="@color/gc_panel"
+            android:background="?attr/gcPanel"
             android:orientation="vertical"
             android:padding="8dp"
             android:visibility="gone">
@@ -108,7 +108,7 @@
                 style="@style/Gc.Body"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textColor="@color/gc_ink_3"
+                android:textColor="?attr/gcInk3"
                 android:textSize="9sp" />
 
             <TextView
@@ -117,7 +117,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/sensors_idle"
-                android:textColor="@color/gc_ink_2" />
+                android:textColor="?attr/gcInk2" />
 
             <TextView
                 android:id="@+id/detailText"
@@ -125,7 +125,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:fontFamily="monospace"
-                android:textColor="@color/gc_ink_3"
+                android:textColor="?attr/gcInk3"
                 android:textSize="9sp" />
 
             <TextView
@@ -135,7 +135,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:text="@string/ppg_idle"
-                android:textColor="@color/gc_ink_2"
+                android:textColor="?attr/gcInk2"
                 android:textSize="10sp" />
 
             <TextView
@@ -153,7 +153,7 @@
                 android:layout_marginTop="4dp"
                 android:fontFamily="monospace"
                 android:gravity="start"
-                android:textColor="@color/gc_ink_3"
+                android:textColor="?attr/gcInk3"
                 android:textSize="8sp" />
         </LinearLayout>
 
@@ -169,7 +169,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/on_demand_heading"
-            android:textColor="@color/gc_ink_3"
+            android:textColor="?attr/gcInk3"
             android:textSize="9sp" />
 
         <LinearLayout

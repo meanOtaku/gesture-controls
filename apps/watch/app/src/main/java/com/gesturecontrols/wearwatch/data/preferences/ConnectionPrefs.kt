@@ -43,6 +43,11 @@ class ConnectionPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_STREAM_WHEN_NOT_WORN, false)
         set(value) = prefs.edit().putBoolean(KEY_STREAM_WHEN_NOT_WORN, value).apply()
 
+    /** The desktop's theme as last sent, worn from the moment the app opens; null before any desktop said. */
+    var theme: String?
+        get() = prefs.getString(KEY_THEME, null)
+        set(value) = prefs.edit().putString(KEY_THEME, value).apply()
+
     /**
      * This install's identity on the Wi-Fi transport, where the desktop has no
      * Bluetooth peripheral to identify the watch by and can only go by what the
@@ -64,6 +69,7 @@ class ConnectionPrefs(context: Context) {
         private const val KEY_TRANSPORT = "transport"
         private const val KEY_TRUSTED_CENTRAL = "trusted_central"
         private const val KEY_STREAM_WHEN_NOT_WORN = "stream_when_not_worn"
+        private const val KEY_THEME = "theme"
 
         /** A fresh, unique, protocol-safe device id. */
         fun newDeviceId(): String = "watch-" + UUID.randomUUID().toString()
