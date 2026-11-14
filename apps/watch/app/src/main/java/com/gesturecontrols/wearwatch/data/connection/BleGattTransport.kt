@@ -86,7 +86,7 @@ class BleGattTransport(
 
     /** Fragments waiting on [BluetoothGattServerCallback.onNotificationSent]. */
     private val outbound = OutboundQueue(MAX_QUEUED_FRAGMENTS)
-    private var notificationInFlight = false
+    private val inFlight = NotificationInFlight(NOTIFICATION_STALL_MS)
     /** Old messages dropped to keep the stream live, not yet reported, and when that was last reported. */
     private var unreportedDrops = 0
     @Volatile private var totalDrops = 0L
@@ -427,7 +427,7 @@ class BleGattTransport(
         mtu = DEFAULT_MTU
         _pendingTrustedCentral.value = null
         synchronized(outbound) { outbound.clear() }
-        notificationInFlight = false
+        inFlight.done()
         reassembler.clear()
         val server = gattServer
         gattServer = null
@@ -472,11 +472,19 @@ class BleGattTransport(
         val characteristic = telemetryCharacteristic ?: return
         val device = central ?: return
         if (!subscribed || !isTrusted(device)) return
+        val now = SystemClock.elapsedRealtime()
+        var stalledDrop = -1
         val frame = synchronized(outbound) {
-            if (notificationInFlight || outbound.isEmpty()) return
-            notificationInFlight = true
-            outbound.poll()
-        } ?: return
+            if (inFlight.giveUpIfStalled(now)) stalledDrop = outbound.dropStarted()
+            if (inFlight.busy || outbound.isEmpty()) null else {
+                inFlight.sent(now)
+                outbound.poll()
+            }
+        }
+        if (stalledDrop >= 0) {
+            LinkLog.add("a notification got no answer for ${NOTIFICATION_STALL_MS / 1000} s; went on without it (dropped the $stalledDrop fragments left of its message)")
+        }
+        if (frame == null) return
         val sent = runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 server.notifyCharacteristicChanged(device, characteristic, false, frame) ==
@@ -496,7 +504,7 @@ class BleGattTransport(
             val dropped = synchronized(outbound) {
                 val queued = outbound.size
                 outbound.clear()
-                notificationInFlight = false
+                inFlight.done()
                 queued
             }
             refusedNotifications++
@@ -555,7 +563,7 @@ class BleGattTransport(
                 reassembler.clear()
                 synchronized(outbound) {
                     outbound.clear()
-                    notificationInFlight = false
+                    inFlight.done()
                 }
                 _pendingTrustedCentral.value = if (isTrusted(device)) null else device.address
                 updateConnectedState()
@@ -573,7 +581,7 @@ class BleGattTransport(
                 reassembler.clear()
                 synchronized(outbound) {
                     outbound.clear()
-                    notificationInFlight = false
+                    inFlight.done()
                 }
                 updateConnectedState()
             }
@@ -608,6 +616,14 @@ class BleGattTransport(
                 _pendingTrustedCentral.value = device.address
             }
             subscribed = value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+            // A subscription is a desktop starting to listen, often a new desktop process on a link macOS kept up, so no
+            // connect was reported. It reassembles from scratch, and a notification the last one left unanswered never
+            // will be: start the stream afresh, or it could stay stopped behind that notification.
+            reassembler.clear()
+            synchronized(outbound) {
+                outbound.clear()
+                inFlight.done()
+            }
             LinkLog.add(
                 "desktop ${short(device)} turned notifications " + (if (subscribed) "on" else "off") +
                     (if (isTrusted(device)) "" else " (not trusted yet: waiting for approval)"),
@@ -662,7 +678,7 @@ class BleGattTransport(
 
         override fun onNotificationSent(device: BluetoothDevice, status: Int) {
             if (central?.address != device.address) return
-            synchronized(outbound) { notificationInFlight = false }
+            synchronized(outbound) { inFlight.done() }
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 // Same reasoning as a refused notify: the desktop would see a
                 // hole in this envelope, so abandon it rather than truncate.
@@ -708,6 +724,9 @@ class BleGattTransport(
         /** The desktop writes a time sync every 5 s while the watch is worn and streaming; five missed ones is a dead desktop. */
         private const val DESKTOP_SILENCE_MS = 25_000L
         private const val WATCHDOG_INTERVAL_MS = 5_000L
+
+        /** A notification is answered within milliseconds; one unanswered this long never will be. */
+        private const val NOTIFICATION_STALL_MS = 2_000L
 
         /**
          * About half a second of telemetry at a 517-byte MTU (combined messages are one or two fragments each). Past

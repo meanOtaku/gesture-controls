@@ -46,4 +46,17 @@ class OutboundQueueTest {
         assertEquals(0, queue.add(message(1, 5)))
         assertEquals(5, queue.size)
     }
+
+    @Test
+    fun `a message cut off in flight is dropped and the next one goes whole`() {
+        val queue = OutboundQueue(maxQueuedFragments = 12)
+        val first = listOf(byteArrayOf(1), byteArrayOf(2), byteArrayOf(3))
+        val second = listOf(byteArrayOf(4), byteArrayOf(5))
+        queue.add(first)
+        queue.add(second)
+        queue.poll()
+        org.junit.Assert.assertEquals(2, queue.dropStarted())
+        org.junit.Assert.assertArrayEquals(byteArrayOf(4), queue.poll())
+        org.junit.Assert.assertEquals(0, OutboundQueue(4).dropStarted())
+    }
 }

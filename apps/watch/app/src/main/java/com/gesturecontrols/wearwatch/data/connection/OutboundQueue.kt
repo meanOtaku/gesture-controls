@@ -46,6 +46,18 @@ class OutboundQueue(private val maxQueuedFragments: Int) {
         return fragment
     }
 
+    /**
+     * Drops the rest of the message whose sending began (its fragment in flight was lost, so the desktop can never
+     * complete it); the messages after it still go. Returns how many fragments were dropped.
+     */
+    fun dropStarted(): Int {
+        if (!firstStarted) return 0
+        val rest = messages.removeFirst().size
+        queued -= rest
+        firstStarted = false
+        return rest
+    }
+
     fun clear() {
         messages.clear()
         queued = 0
