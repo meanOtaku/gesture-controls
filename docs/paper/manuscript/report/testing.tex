@@ -1,3 +1,55 @@
-% Report-only chapter section: software testing (placed before the shared results).
-\section{Software Testing}
-\todo{Unit and integration tests per component (Rust crates, desktop TS tests, trainer pytest), fixture-based fail-closed tests, what each establishes and what it does not.}
+% Report-only section of the Results chapter: software testing.
+% Sources: docs/architecture/components-and-deployment.md §5–6, .github/workflows,
+% test counts taken from the repository on 14 Nov 2026.
+\section{Software Testing}\label{sec:software-testing}
+
+Alongside the detection results above, the software is checked by automated tests at several levels. This section describes what those tests cover, how they are run, and what they cannot show.
+
+\subsection{Test suites}
+
+Table~\ref{tab:tests} lists the automated tests by component. The counts are the number of test functions or test cases in the repository at the time of writing.
+
+\begin{table}[htbp]
+\centering
+\caption{Automated tests by component.}\label{tab:tests}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}X r l@{}}
+\toprule
+\textbf{Component} & \textbf{Tests} & \textbf{Language} \\
+\midrule
+Desktop backend (Tauri) & 368 & Rust \\
+Label inference (bundle validation, trees, CNN) & 122 & Rust \\
+Gesture recipe engine & 88 & Rust \\
+Interaction engine (calibration, dwell, wrist mapper, gesture policy) & 71 & Rust \\
+Model Lab domain & 46 & Rust \\
+Watch transport (BLE, WebSocket, framing) & 45 & Rust \\
+Volume and system control & 47 & Rust \\
+Head tracking (native and UDP providers) & 23 & Rust \\
+Protocol and pinch inference & 23 & Rust \\
+Desktop front end (158 test files) & 1,002 & TypeScript \\
+Label trainer and replay & 93 & Python \\
+Watch application & 78 & Kotlin \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The Rust total, 950 tests, also includes 117 tests for the separate drone-control crate, which is outside the scope of this report and left out of the table.
+
+\subsection{What the tests check}
+
+\paragraph{Fail-closed behaviour.} Many of the backend tests feed the decision chain with bad input (out-of-order timestamps, stale orientation, a different device, non-finite values, a model that returns something other than a probability) and check that an open grab is released and no volume change is made. The gesture policy has tests for its cancellation paths and for the rule that a simultaneous release beats a start.
+
+\paragraph{Model integrity.} The label-inference tests try to load bundles that are malformed, oversized, carry the wrong hash, declare the wrong features or contain non-finite weights, and check that each one is refused.
+
+\paragraph{Training--runtime parity.} The features are computed twice, by the Python trainer and by the Rust runtime. Four shared fixture files hold reference cases for the pulse features, the motion features, the CNN input and the detection rule. Both implementations are tested against the same fixtures, so a change on one side that is not made on the other fails the tests. This is what allows a model trained in Python to be trusted when it runs in Rust.
+
+\paragraph{Transport and protocol.} The watch-bridge and watch tests cover message framing and reassembly over Bluetooth, sequence handling, device identity, the default transport choice and the watch's sensor-clock rebasing.
+
+\paragraph{Label handling.} The trainer tests confirm that a non-empty \texttt{manual\_label} overrides the original label, that a blank one keeps it and that \texttt{-} removes it.
+
+\subsection{Continuous integration}
+
+Two GitHub Actions workflows run on every change. They check Rust formatting, run Clippy with warnings treated as errors, and run the full Rust test suite on Ubuntu, macOS 14 and Windows Server 2022. They also run the front-end tests, type checks and production build, the native head-tracking tests on macOS and Windows, and a package build for each platform. The Python trainer tests and the watch unit tests are not yet part of continuous integration and are run by hand.
+
+\subsection{Limits of the automated tests}
+
+The automated tests run without physical devices. They show that the code behaves as intended on the inputs they supply; they do not show that the system works with a real watch, real headphones or every operating system's volume control. A successful package build in CI is evidence that the application builds, not that it installs and runs on a clean machine. Testing with real hardware was done by hand during development: recording sessions with the watch and headphones, the Bluetooth load measurements in Chapter~\ref{ch:implementation}, and the detection results reported earlier in this chapter. A structured hardware test against the project's release checklist is still to be done. \todo{add any manual hardware test results you want to report, e.g. a short table of scenarios tried and outcomes.}

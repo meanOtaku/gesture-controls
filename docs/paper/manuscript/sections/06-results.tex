@@ -20,7 +20,7 @@ The manifest records a window ROC AUC of 0.981993, balanced accuracy of 0.881720
 \iffull
 \begin{table}[t]
 \centering\small
-\caption{Stored manifest fields for the pinch-in model. The event values were reproduced by replay. These are development results, not a prospective test.}
+\caption[Stored manifest fields of the pinch-in model]{Stored manifest fields for the pinch-in model. The event values were reproduced by replay. These are development results, not a prospective test.}
 \begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}Xr>{\raggedright\arraybackslash}X@{}}
 \toprule
 \textbf{Field} & \textbf{Value} & \textbf{Status} \\
@@ -44,7 +44,7 @@ The model was saved without its event log, so we recovered it by replaying the s
 
 \begin{table}[t]
 \centering\small
-\caption{Replayed event outcomes of the hand-labelled pinch-in model on its eight evaluation recordings.}\label{tab-replay}
+\caption[Replayed event outcomes of the pinch-in model]{Replayed event outcomes of the hand-labelled pinch-in model on its eight evaluation recordings.}\label{tab-replay}
 \begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}Xr>{\raggedright\arraybackslash}X@{}}
 \toprule
 \textbf{Outcome} & \textbf{Value} & \textbf{Basis} \\
@@ -59,6 +59,22 @@ Latency, median (IQR; p95) & 442 ms (384--510; 649) & From emission \\
 \bottomrule
 \end{tabularx}
 \end{table}
+
+\iffull
+Figure~\ref{fig:score-timeline} shows how this looks over time for one evaluation recording, the pinch-hold session of 4 November. Of its 21 annotated starts, 17 were caught. The other four show three different ways a pinch can be missed. One produced no response at all. One raised the score to 0.906, short of the 0.99 activation threshold. The remaining two produced an event about 280\,ms after the start, just before the 300\,ms match window opens; the evaluation counts these as late, although they came slightly early. Between pinches the score stays close to zero, and the recording has no false activations. Figure~\ref{fig:latency} shows the latencies of all 47 caught starts across the eight recordings: most fall between 350 and 550\,ms, with a tail up to 755\,ms.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{figures/score-timeline.pdf}
+\caption[Model score over an evaluation recording]{Score of the hand-labelled pinch-in model over the evaluation recording \nolinkurl{gesture-dataset-pinch_hold-2026-11-04T04-50-33.518Z}, replayed with the trainer's own detection rule. Shaded bands are annotated pinch gestures; markers below the axis are annotated starts, markers above are emitted events. The grey region in the top panel is shown in detail below.}\label{fig:score-timeline}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\linewidth]{figures/latency-histogram.pdf}
+\caption[Latency of caught pinches]{Latency from the annotated start to the emitted event for the 47 caught pinch-in starts in the eight evaluation recordings (25\,ms bins). The shaded region is the 300--900\,ms match window.}\label{fig:latency}
+\end{figure}
+\fi
 
 \iffull
 Latency is measured from the annotated start to the moment the event is emitted. The margin behind the zero false-activation count is thin. In the everyday-activity recording the highest score reached 0.970, just under the 0.99 threshold; lowering the threshold to 0.98 would have added one false activation, and 0.95 would have added two. We report this as a sensitivity check, not as a reason to pick a different threshold.
@@ -89,7 +105,7 @@ Performance varied widely by day: 21 of 171 on 14 October, 37 of 52 on 17 Octobe
 \begin{widefigure}
 \centering
 \includegraphics[width=1\linewidth,height=\textheight,keepaspectratio,alt={Historical day-level continuous recall and condition-specific false activations for the selected camera-labelled configuration.}]{figures/historical-day-transfer.png}
-\caption{Historical camera-label results, leave-one-day-out. Bars show caught/eligible starts per day; the dashed line is the pooled 161/372. False-activation rates use each condition's own no-gesture time. All days come from one participant.}\label{fig-historical}
+\caption[Historical camera-label results by day]{Historical camera-label results, leave-one-day-out. Bars show caught/eligible starts per day; the dashed line is the pooled 161/372. False-activation rates use each condition's own no-gesture time. All days come from one participant.}\label{fig-historical}
 \end{widefigure}
 
 \iffull

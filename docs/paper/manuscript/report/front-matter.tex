@@ -1,29 +1,126 @@
 % Report-only: title page, declaration, acknowledgements, abstract, lists.
-% Adjust to your institution's required front-matter order once known.
+% If your institution prescribes an order or wording, follow it and adjust here.
+
+% ---------------------------------------------------------------- Title page
+% Layout follows the mid-term dissertation progress report.
+\newcommand{\institute}{Maulana Azad National Institute of Technology, Bhopal}
+\newcommand{\department}{Department of Mechanical Engineering}
+\newcommand{\degree}{Master of Technology in Robotics and Automation}
+\newcommand{\scholarNo}{25216061107}
+\newcommand{\supervisorA}{Dr.\ Vijay Bhaskar Semwal}
+\newcommand{\supervisorB}{Dr.\ Jitendra Adhikari}
+\newcommand{\submissionDate}{\todo{month year}}
+
 \begin{titlepage}
 \centering
-\vspace*{2cm}
-{\LARGE\bfseries \paperTitle\par}
-\vspace{1.5cm}
-{\large Project Report\par}
-\vspace{1cm}
-{\large \authorName\par}
-\vspace{1cm}
-\todo{degree / programme, department, institution}\par
-\todo{supervisor}\par
+\definecolor{manitblue}{RGB}{31,56,100}
+{\normalsize\bfseries\color{manitblue} \MakeUppercase{\institute}\par}
+\vspace{0.2cm}
+{\normalsize \department{} --- M.Tech (Robotics and Automation)\par}
+\vspace{1.2cm}
+\includegraphics[width=3.2cm]{figures/manit-logo.jpg}\par
+\vspace{1.2cm}
+{\Large\bfseries\color{manitblue} M.TECH DISSERTATION REPORT\par}
+\vspace{1.2cm}
+{\Large\bfseries\itshape\color{manitblue} \paperTitle\par}
+\vspace{1.2cm}
+{\normalsize Submitted in partial fulfilment of the requirements for the award of the degree of\par}
+{\normalsize\bfseries \degree\par}
+\vspace{1.2cm}
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{|p{4cm}|p{6.5cm}|}
+\hline
+\textbf{Submitted by:} & \authorName \\ \hline
+\textbf{Scholar No.:} & \scholarNo \\ \hline
+\textbf{Supervisors:} & \supervisorA{} \newline \supervisorB \\ \hline
+\end{tabular}
 \vfill
-{\large \todo{month year}\par}
+{\normalsize \submissionDate\par}
 \end{titlepage}
 
+% ---------------------------------------------------------------- Certificate
+\chapter*{Certificate}
+\addcontentsline{toc}{chapter}{Certificate}
+
+This is to certify that the dissertation entitled ``\paperTitle'', submitted by \authorName{} (Scholar No.\ \scholarNo) in partial fulfilment of the requirements for the award of the degree of \degree{}, \department, \institute, is a record of the candidate's own work, carried out under our supervision.
+\todo{replace with MANIT's prescribed certificate wording if there is one}
+
+\vspace{3cm}
+\noindent
+\begin{minipage}[t]{0.45\linewidth}
+\supervisorA\\
+Supervisor\\
+\department\\
+MANIT Bhopal
+\end{minipage}\hfill
+\begin{minipage}[t]{0.45\linewidth}
+\supervisorB\\
+Supervisor\\
+\department\\
+MANIT Bhopal
+\end{minipage}
+
+% ---------------------------------------------------------------- Declaration
 \chapter*{Declaration}
-\todo{Institution's declaration of originality, if required.}
+\addcontentsline{toc}{chapter}{Declaration}
 
+I hereby declare that the work presented in this dissertation, entitled ``\paperTitle'', submitted in partial fulfilment of the requirements for the award of the degree of \degree{} in the \department, \institute, is my own work, carried out under the supervision of \supervisorA{} and \supervisorB.
+
+Where I have used the work of others, it is acknowledged and cited. The system described was designed and built by me, and all recordings were made by me as the only participant. Generative AI tools assisted with drafting, editing and checking parts of this report, as described in the declarations section; the design, results and conclusions are my own, and I take full responsibility for them. This work has not been submitted, in part or in full, for any other degree or diploma.
+
+\vspace{2.5cm}
+\noindent\authorName\\
+Scholar No.\ \scholarNo\\
+Date: \todo{date}\\
+Place: Bhopal
+
+% ---------------------------------------------------------------- Acknowledgements
 \chapter*{Acknowledgements}
-\todo{Acknowledgements.}
+\addcontentsline{toc}{chapter}{Acknowledgements}
 
+I am deeply grateful to my supervisor, \supervisorA, who inspired this project and set its direction. Dr.\ Semwal's guidance and encouragement kept the work moving through every stage, from the first prototype to this report.
+
+I also thank my supervisor \supervisorB{} for the support and advice given throughout the project, and the faculty and staff of the \department{} at MANIT Bhopal for the facilities and help they provided.
+
+This project builds on open-source work, and I thank the developers of sony-head-tracker, MediaPipe, Tauri, btleplug, PyTorch and scikit-learn for making their tools freely available.
+
+Finally, I thank my family and friends for their patience and support throughout.
+
+\vspace{1.5cm}
+\noindent\authorName
+
+% ---------------------------------------------------------------- Abstract
 \chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
 \input{abstract}
 
+\vspace{1em}
+\noindent\textbf{Keywords:} smartwatch, photoplethysmography, inertial sensing, head-directed selection, pinch gestures, continuous gesture detection, augmented reality, virtual reality.
+
+% ---------------------------------------------------------------- Lists
 \tableofcontents
 \listoffigures
 \listoftables
+
+% ---------------------------------------------------------------- Abbreviations
+\chapter*{List of Abbreviations}
+\addcontentsline{toc}{chapter}{List of Abbreviations}
+
+\begin{tabular}{@{}ll@{}}
+AR/VR & Augmented reality / virtual reality \\
+AUC & Area under the (receiver-operating-characteristic) curve \\
+BLE & Bluetooth Low Energy \\
+CI & Continuous integration \\
+CNN & Convolutional neural network \\
+FAR & False-activation rate (false events per hour of no-gesture time) \\
+GATT & Generic Attribute Profile (Bluetooth) \\
+IMU & Inertial measurement unit (accelerometer and gyroscope) \\
+IQR & Interquartile range \\
+MAD & Median absolute deviation \\
+mDNS & Multicast DNS \\
+MTU & Maximum transmission unit \\
+PPG & Photoplethysmography \\
+ROC & Receiver operating characteristic \\
+SDK & Software development kit \\
+SHA-256 & Secure Hash Algorithm, 256-bit \\
+\end{tabular}

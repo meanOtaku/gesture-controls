@@ -1,9 +1,30 @@
 % Report-only additions to the Introduction chapter (after the shared intro).
 \section{Objectives}
-\todo{List the project's concrete objectives (e.g. build the sensing-to-action pipeline, train a causal pinch detector, evaluate it continuously, demonstrate volume control).}
+
+The project set out to:
+\begin{enumerate}
+\item build a complete sensing-to-action pipeline in which head orientation from consumer headphones selects an on-screen target and smartwatch signals detect when the user pinches;
+\item design an interaction that keeps brief gesture events separate from sustained control, so that a missed or false detection cannot leave the system changing the volume on its own;
+\item record and label a dataset of pinches and everyday activity, including manually corrected labels and camera-based reference labels;
+\item train a causal pinch detector that runs on the laptop in real time, and evaluate it over whole recordings with event-level measures: catches, misses, latency and false activations per hour;
+\item check the dataset and the stored results for reproducibility, including duplicate recordings and changing label versions;
+\item identify what further studies are needed to support stronger claims, including use in AR/VR headsets.
+\end{enumerate}
 
 \section{Scope}
-\todo{What is in scope (laptop volume control, one participant, Galaxy Watch4 + Sony headphones) and what is out of scope (drone work, on-watch inference, population claims).}
+
+\paragraph{In scope.} The report covers hands-free control of laptop volume by one user, the author, using Sony WH-1000XM5 headphones for head tracking, a Samsung Galaxy Watch4 for PPG and inertial sensing, and an Apple MacBook Air (M3) running the desktop application. It describes the full system as built and evaluates the pinch-in detector on recorded data.
+
+\paragraph{Out of scope.} Several things are deliberately left out:
+\begin{itemize}
+\item \textbf{Other users.} No multi-participant study has been run, so the results do not describe how the system performs for other people.
+\item \textbf{A user study of the interaction.} Task time, error and workload for look--pinch--turn have not yet been measured against a conventional volume control.
+\item \textbf{Pinch-out evaluation.} No matched model for pinch release was available for evaluation.
+\item \textbf{AR/VR headsets.} Use in a headset is discussed as a prospect only; it was not tested.
+\item \textbf{Inference on the watch.} All models run on the laptop; the watch only streams data.
+\item \textbf{Other actions.} The codebase also contains a gesture-recipe engine for brightness, scrolling and media keys, and a separate drone-control experiment. Neither is evaluated in this report.
+\end{itemize}
 
 \section{Organisation of the Report}
-\todo{One sentence per chapter, written once chapters are settled.}
+
+Chapter~\ref{related-work-and-evaluation-context} reviews related work on wrist-based gesture sensing and look-then-act interaction. Chapter~\ref{ch:requirements} lists the requirements and the hardware and software platform. Chapter~\ref{system-design} presents the system design, and Chapter~\ref{ch:implementation} describes how each component is implemented. Chapter~\ref{reference-annotations-and-source-audit} explains how the reference labels were produced and audits the dataset. Chapter~\ref{causal-detection-and-event-accounting} describes the detector and the event-level metrics, and Chapter~\ref{results} reports the results, including software testing. Chapter~\ref{discussion} discusses what the results show, including prospects for AR and VR, and Chapter~\ref{limitations-and-reproducibility} sets out the limitations. Chapter~\ref{prospective-validation-protocol} proposes the studies that should follow, and Chapter~\ref{conclusion} concludes. The appendices give the dataset inventory and a short user guide.

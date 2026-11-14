@@ -1,13 +1,72 @@
 % Report-only chapter: requirements and hardware/software platform.
+% Sources: docs/architecture/project-brief.md, components-and-deployment.md,
+% safety-and-fail-closed-behavior.md, crates/interaction-engine defaults.
 \chapter{Requirements and Platform}\label{ch:requirements}
+
+This chapter sets out what the system has to do, the constraints it has to respect, and the hardware and software it runs on. The requirements come from the project brief written at the start of the work and were refined as the prototype developed.
+
 \section{Functional Requirements}
-\todo{Target selection by head orientation; pinch-in/pinch-out detection; wrist-roll mapping to volume; Off/Monitor/Live modes; recording and labelling. Source: docs/architecture/project-brief.md.}
+
+\begin{description}
+\item[FR1 Head-directed targeting.] The system shall map head orientation to on-screen targets. The user calibrates by facing the screen centre and then the volume target, and each target is stored as a quaternion. At run time the nearest target is found by quaternion angular distance, $2\arccos(|\langle q, q_t\rangle|)$, rather than fixed yaw and pitch limits. A target becomes active when the head stays within 12° of it for 400\,ms; both values are configurable.
+\item[FR2 Pinch detection.] The system shall detect the start of a pinch (pinch-in) and its release (pinch-out) from smartwatch PPG and inertial signals, as separate events.
+\item[FR3 Grab and release.] A pinch-in while the volume target is active shall start a grab; a pinch-out, or any cancellation condition, shall end it.
+\item[FR4 Wrist-rotation control.] During a grab, wrist roll relative to the angle at grab time shall set the system volume.
+\item[FR5 Operating modes.] The user shall be able to switch between Off (no inference), Monitor (inference and feedback without any effect on the system) and Live (inference that can change the volume).
+\item[FR6 Recording.] The system shall record synchronised watch, head-tracker and optional camera data as immutable recording bundles.
+\item[FR7 Labelling.] The user shall be able to label recordings by hand, or from camera hand landmarks, while keeping the original labels.
+\item[FR8 Training and model management.] The user shall be able to train per-label models from recordings, inspect their evaluation, and activate, monitor or roll back a model.
+\item[FR9 Watch transport.] The watch shall connect over Bluetooth Low Energy by default, with Wi-Fi as an alternative selectable on both sides.
+\end{description}
 
 \section{Non-functional Requirements}
-\todo{Latency budget, fail-closed behaviour, false-activation tolerance, battery, privacy of physiological data. Source: docs/architecture/safety-and-fail-closed-behavior.md, docs/performance.md.}
+
+\begin{description}
+\item[NFR1 Fail closed.] Any stage that rejects input (out-of-order data, poor signal quality, stale orientation, an unloadable model, a non-probability output) shall end an open grab rather than let it continue. A held grab whose model data have been silent for 750\,ms shall be released.
+\item[NFR2 No surprise actuation.] The system shall never start in Live mode: a saved Live setting is lowered to Monitor at startup.
+\item[NFR3 Bounded output.] Volume shall change only through the interaction policy, within its valid range and at a bounded rate.
+\item[NFR4 Responsiveness.] A pinch should be recognised within roughly half a second, and volume changes should follow the wrist smoothly.
+\item[NFR5 Low false activation.] The detector should rarely fire during ordinary activity such as typing or using a mouse.
+\item[NFR6 Local processing and privacy.] All processing shall run on the user's own computer. Camera frames are never stored, only hand landmarks, and nothing is sent over the network.
+\item[NFR7 Integrity.] A model shall be loaded only if its file matches the hash in its manifest and its declared input contract matches the runtime's.
+\item[NFR8 Watch battery.] The watch app should release its sensors and wake lock whenever no desktop is receiving data.
+\item[NFR9 Portability.] The desktop application should run on macOS and Windows, with Linux supported for development.
+\end{description}
 
 \section{Hardware}
-\todo{Samsung Galaxy Watch4 (PPG green/red/IR, accelerometer, gyroscope; public sensor ceiling about 100 Hz), Sony headphones head tracking, laptop specification, camera used only for reference labels.}
+
+\begin{table}[htbp]
+\centering
+\caption{Hardware used in the prototype.}\label{tab:hardware}
+\begin{tabularx}{\linewidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Device} & \textbf{Role and sensors} \\
+\midrule
+Samsung Galaxy Watch4 & Raw green, red and infrared PPG through the Samsung Health Sensor SDK; accelerometer, gyroscope and rotation vector through Android's sensor API. Wear OS 3 or later. The public motion sensors run at up to 100\,Hz. \\
+Sony WH-1000XM5 headphones & Head orientation from the headphones' built-in motion sensors, read through the open-source sony-head-tracker interface. \\
+Apple MacBook Air (M3, 16\,GB RAM, macOS 26) & Runs the desktop application: transport, inference, interaction policy and volume control. Its built-in camera captures reference hand landmarks during recording. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Both wearables act only as sensors. Nothing is trained or inferred on the watch or the headphones, which keeps the watch app simple and lets models be changed without reinstalling it.
 
 \section{Software Stack}
-\todo{Tauri desktop app (TypeScript/React front end, Rust crates), Kotlin Wear OS watch app, Python label trainer (PyTorch, scikit-learn), tract for desktop inference.}
+
+\begin{table}[htbp]
+\centering
+\caption{Main software components and the technologies they use.}\label{tab:stack}
+\begin{tabularx}{\linewidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Component} & \textbf{Technology} \\
+\midrule
+Desktop application & Tauri 2 with a Rust backend and a React/TypeScript front end built with Vite \\
+Rust crates & Head tracking, watch transport (btleplug for Bluetooth, Axum for the WebSocket server), feature extraction and inference, interaction engine, native volume control \\
+Watch application & Kotlin on Wear OS, built with Gradle; OkHttp for the WebSocket transport \\
+Model training & Python 3.11 with scikit-learn (ExtraTrees) and PyTorch (CNN), run through \texttt{uv} \\
+Camera landmarks & MediaPipe Hand Landmarker running inside the application's web view \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The desktop application targets macOS 14 or later and Windows 11 (x64), with Linux used for development. The watch application requires Wear OS 3 (API level 30) or later, and a Galaxy Watch4 or newer for raw PPG.

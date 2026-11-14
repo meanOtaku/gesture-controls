@@ -5,7 +5,7 @@
 
 \subsect{Sensing and computation placement}\label{sensing-and-computation-placement}
 
-The prototype combines a pair of Sony consumer headphones, a Samsung Galaxy Watch and a Tauri desktop application \cite{tauri}. The headphones provide head orientation through the open-source sony-head-tracker interface \cite{sonyheadtracker}. The watch streams raw green, red and infrared PPG through the Samsung Health Sensor SDK \cite{samsungsdk}, along with three-axis acceleration and angular velocity. Both devices act only as sensors; training, inference and every interaction decision happen on the laptop. A camera is used while recording to produce reference labels from MediaPipe hand landmarks \cite{mediapipe}, but it plays no part in normal use.
+The prototype combines Sony WH-1000XM5 consumer headphones, a Samsung Galaxy Watch and a Tauri desktop application \cite{tauri}. The headphones provide head orientation through the open-source sony-head-tracker interface \cite{sonyheadtracker}. The watch streams raw green, red and infrared PPG through the Samsung Health Sensor SDK \cite{samsungsdk}, along with three-axis acceleration and angular velocity. Both devices act only as sensors; training, inference and every interaction decision happen on the laptop. A camera is used while recording to produce reference labels from MediaPipe hand landmarks \cite{mediapipe}, but it plays no part in normal use.
 
 \iffull
 The watch can connect over Bluetooth Low Energy or Wi-Fi. Samples keep the timestamps assigned on the watch rather than the time they arrive at the laptop. We treat transport, buffering and resampling as separate steps: the model works on a 50\,Hz grid, but that does not mean every sensor was sampled at 50\,Hz or that the detector makes a decision every 20\,ms. We record the actual input and decision rates for each experiment.
@@ -16,7 +16,7 @@ The watch connects over Bluetooth Low Energy or Wi-Fi, and samples keep their wa
 \begin{widefigure}
 \centering
 \includegraphics[width=1\linewidth,height=\textheight,keepaspectratio,alt={System architecture: headphone orientation supplies target selection, watch PPG and IMU supply desktop causal inference, and a paired interaction policy controls bounded volume writes; camera reference annotation is an offline path.}]{figures/system-overview.png}
-\caption{System overview. Head orientation selects the target, watch PPG and IMU feed a causal detector on the laptop, and a paired grab/release policy drives bounded volume changes. The camera is used only to create reference labels.}\label{fig-system}
+\caption[System overview]{System overview. Head orientation selects the target, watch PPG and IMU feed a causal detector on the laptop, and a paired grab/release policy drives bounded volume changes. The camera is used only to create reference labels.}\label{fig-system}
 \end{widefigure}
 
 \subsect{Head targeting and paired interaction}\label{head-targeting-and-paired-interaction}
