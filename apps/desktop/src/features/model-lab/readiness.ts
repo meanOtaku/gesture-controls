@@ -8,6 +8,8 @@ import { useEffect, useState } from "react";
  * `docs/research/artifacts/readiness-2026-11/`); after a stream drops, a CNN has nothing to score for up to 11 s.
  */
 export const LABEL_READINESS_EVENT = "label-readiness";
+/** How often the light asks for the readiness as well as listening for it. */
+const RECHECK_MS = 1_000;
 
 export type ReadinessState = "ready" | "moving" | "settling" | "waiting" | "stale" | "warmingUp" | "gap" | "offWrist";
 
@@ -69,10 +71,15 @@ export function useModelReadiness(): { readiness: Readiness | null; now: number 
     let disposed = false;
     // Anything but a list (an older desktop without the command) is no models running.
     const take = (list: unknown) => { if (!disposed) setViews({ list: Array.isArray(list) ? list : [], at: Date.now() }); };
-    void invoke<ReadinessView[]>("get_label_readiness").then(take).catch(() => undefined);
+    const ask = () => void invoke<ReadinessView[]>("get_label_readiness").then(take).catch(() => undefined);
+    ask();
     const registration = listen<ReadinessView[]>(LABEL_READINESS_EVENT, ({ payload }) => take(payload));
+    // The event says every change, but one missed (a page that was busy, a listener not yet registered) would leave the
+    // light saying "ready" with no watch at all; asking again now and then puts it right within a second.
+    const recheck = window.setInterval(ask, RECHECK_MS);
     return () => {
       disposed = true;
+      window.clearInterval(recheck);
       void registration.then((unlisten) => unlisten()).catch(() => undefined);
     };
   }, []);

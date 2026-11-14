@@ -148,13 +148,43 @@ fn watch_events_closed(error: &tokio::sync::broadcast::error::RecvError) -> bool
     matches!(error, tokio::sync::broadcast::error::RecvError::Closed)
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    tracing_subscriber::fmt()
-        .with_target(true)
-        .with_thread_ids(true)
+/// Where the desktop's log is kept, besides the terminal: `~/Library/Logs/<app id>/desktop.log` (`$HOME/.local/state` off
+/// macOS). The run before is kept as `desktop.previous.log`, so a restart (a rebuild in development) does not lose the log
+/// of what went wrong just before it.
+fn log_file_path() -> Option<std::path::PathBuf> {
+    let home = std::path::PathBuf::from(std::env::var_os("HOME")?);
+    let base = if cfg!(target_os = "macos") { home.join("Library/Logs") } else { home.join(".local/state") };
+    Some(base.join("dev.meanotaku.spatial-gesture-control").join("desktop.log"))
+}
+
+/// The log goes to the terminal and to [`log_file_path`]: a watch link that dropped in a run started from an app icon,
+/// or from a terminal long closed, can still be read afterwards.
+fn init_logging() {
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+    let file = log_file_path().and_then(|path| {
+        std::fs::create_dir_all(path.parent()?).ok()?;
+        let _ = std::fs::rename(&path, path.with_file_name("desktop.previous.log"));
+        std::fs::File::create(&path).ok()
+    });
+    let terminal = tracing_subscriber::fmt::layer().with_target(true).with_thread_ids(true);
+    let file = file.map(|file| {
+        tracing_subscriber::fmt::layer()
+            .with_ansi(false)
+            .with_target(true)
+            .with_writer(std::sync::Mutex::new(file))
+    });
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::filter::LevelFilter::INFO)
+        .with(terminal)
+        .with(file)
         .try_init()
         .ok();
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    init_logging();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -381,6 +411,8 @@ pub fn run() {
                 info!(?transport, "watch bridge started");
 
                 let runtime = watch_handle.state::<watch::WatchRuntime>();
+                // The watch repeats its wear state every few seconds; only a change is worth a log line.
+                let mut last_worn: Option<bool> = None;
                 loop {
                     match events.recv().await {
                         Ok(event) => {
@@ -409,6 +441,7 @@ pub fn run() {
                                 }
                                 WatchEvent::Disconnected => {
                                     miss_recorder::note(&watch_handle, "watch", "disconnected");
+                                    last_worn = None;
                                     watch_handle.state::<drone::DroneRuntime>().watch_lost();
                                     watch_handle
                                         .state::<automation::AutomationRuntime>()
@@ -449,8 +482,10 @@ pub fn run() {
                                     watch_handle.state::<automation::AutomationRuntime>().cancel(&watch_handle);
                                 }
                                 WatchEvent::WearStateUpdated(sample) if sample.worn => {
-                                    debug!("watch wear state: worn");
-                                    miss_recorder::note(&watch_handle, "watch", "worn");
+                                    if last_worn.replace(true) != Some(true) {
+                                        debug!("watch wear state: worn");
+                                        miss_recorder::note(&watch_handle, "watch", "worn");
+                                    }
                                     watch_handle
                                         .state::<label_runtime::LabelRuntimeHost>()
                                         .set_worn(&watch_handle, true);
@@ -459,8 +494,10 @@ pub fn run() {
                                     // Off the wrist the watch stops streaming on purpose; a held
                                     // grab must not outlive the data that was driving it, and the
                                     // gesture models must not score a watch lying on a table.
-                                    info!("watch taken off the wrist; releasing any interaction");
-                                    miss_recorder::note(&watch_handle, "watch", "off the wrist");
+                                    if last_worn.replace(false) != Some(false) {
+                                        info!("watch taken off the wrist; releasing any interaction");
+                                        miss_recorder::note(&watch_handle, "watch", "off the wrist");
+                                    }
                                     watch_handle
                                         .state::<label_runtime::LabelRuntimeHost>()
                                         .set_worn(&watch_handle, false);

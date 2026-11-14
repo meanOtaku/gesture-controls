@@ -72,6 +72,12 @@ pub fn att_payload_for(mtu: usize) -> usize {
 const SCAN_POLL_INTERVAL: Duration = Duration::from_millis(250);
 pub const BLE_SCAN_TIMEOUT: Duration = Duration::from_secs(20);
 pub const BLE_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+/// Longest one write-with-response may take. A busy radio was measured holding a write for 3 s; a write the watch never
+/// answers would otherwise stall the session for good, the watch still showing a desktop connected and the desktop
+/// receiving nothing.
+pub const BLE_WRITE_TIMEOUT: Duration = Duration::from_secs(10);
+/// Longest the subscription (a write of the telemetry characteristic's CCCD) or a disconnect may take, for the same reason.
+const BLE_GATT_OP_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// What the desktop is currently doing on the BLE path, for the settings UI.
 /// `Streaming` is only reached after the watch's trust gate lets real telemetry
@@ -113,6 +119,8 @@ pub enum BleError {
         "failed to subscribe to watch telemetry — the watch may need to be paired/bonded with this computer first: {0}"
     )]
     Subscribe(#[source] btleplug::Error),
+    #[error("the watch did not answer within {0} s while {1}")]
+    TimedOut(u64, &'static str),
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -343,7 +351,7 @@ impl BleLink {
                 Ok(link)
             }
             Err(error) => {
-                let _ = peripheral.disconnect().await;
+                let _ = tokio::time::timeout(BLE_GATT_OP_TIMEOUT, peripheral.disconnect()).await;
                 Err(error)
             }
         }
@@ -370,9 +378,9 @@ impl BleLink {
 
         // Writes the CCCD on the watch's telemetry characteristic; the watch
         // rejects this until the devices are bonded.
-        peripheral
-            .subscribe(&telemetry)
+        tokio::time::timeout(BLE_GATT_OP_TIMEOUT, peripheral.subscribe(&telemetry))
             .await
+            .map_err(|_| BleError::TimedOut(BLE_GATT_OP_TIMEOUT.as_secs(), "subscribing to its telemetry"))?
             .map_err(BleError::Subscribe)?;
         let notifications = peripheral
             .notifications()
@@ -409,10 +417,13 @@ impl BleLink {
         let fragments = fragment(text.as_bytes(), self.att_payload())
             .map_err(|error| BleError::Connect(btleplug::Error::Other(Box::new(error))))?;
         for frame in fragments {
-            self.peripheral
-                .write(&self.command, &frame, WriteType::WithResponse)
-                .await
-                .map_err(BleError::Connect)?;
+            tokio::time::timeout(
+                BLE_WRITE_TIMEOUT,
+                self.peripheral.write(&self.command, &frame, WriteType::WithResponse),
+            )
+            .await
+            .map_err(|_| BleError::TimedOut(BLE_WRITE_TIMEOUT.as_secs(), "a command was written to it"))?
+            .map_err(BleError::Connect)?;
         }
         Ok(())
     }
@@ -470,8 +481,10 @@ impl BleLink {
         } = self;
         drop(notifications);
         drop(command);
-        if let Err(error) = peripheral.disconnect().await {
-            debug!(%error, "watch BLE disconnect reported an error");
+        match tokio::time::timeout(BLE_GATT_OP_TIMEOUT, peripheral.disconnect()).await {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => debug!(%error, "watch BLE disconnect reported an error"),
+            Err(_) => warn!("the watch BLE disconnect did not finish; going on without it"),
         }
     }
 }
