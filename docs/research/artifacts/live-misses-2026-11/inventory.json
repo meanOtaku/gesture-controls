@@ -1,0 +1,510 @@
+[
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-everyday_noise-2026-11-04T03-44-21.667Z",
+  "minutes": 10.12,
+  "kind": "noise",
+  "train": true,
+  "labels": {
+   "everyday_noise": 14982
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-everyday_noise-2026-11-04T04-27-35.286Z",
+  "minutes": 10.17,
+  "kind": "noise",
+  "train": false,
+  "labels": {
+   "everyday_noise": 14986
+  },
+  "eval": true
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch-2026-10-14T01-13-08.108Z",
+  "minutes": 1.0,
+  "kind": "pinch",
+  "train": true,
+  "labels": {
+   "pinch_in": 314,
+   "pinch_hold": 397,
+   "pinch_out": 307
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-03T01-05-59.434Z",
+  "minutes": 2.29,
+  "kind": "pinch",
+  "train": true,
+  "labels": {
+   "pinch_in": 291,
+   "pinch_hold": 262,
+   "pinch_out": 275
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-03T01-08-34.844Z",
+  "minutes": 2.27,
+  "kind": "pinch",
+  "train": false,
+  "labels": {
+   "pinch_in": 267,
+   "pinch_hold": 310,
+   "pinch_out": 251
+  },
+  "eval": true
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-03T01-11-04.170Z",
+  "minutes": 2.25,
+  "kind": "pinch",
+  "train": true,
+  "labels": {
+   "pinch_in": 274,
+   "pinch_hold": 290,
+   "pinch_out": 280
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-03T01-14-58.817Z",
+  "minutes": 2.27,
+  "kind": "pinch",
+  "train": true,
+  "labels": {
+   "pinch_in": 297,
+   "pinch_hold": 249,
+   "pinch_out": 277
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-03T12-37-53.427Z",
+  "minutes": 2.2,
+  "kind": "pinch",
+  "train": true,
+  "labels": {
+   "pinch_in": 296,
+   "pinch_out": 293,
+   "pinch_hold": 239
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-04T04-47-01.331Z",
+  "minutes": 2.34,
+  "kind": "pinch",
+  "train": true,
+  "labels": {
+   "pinch_in": 259,
+   "pinch_hold": 266,
+   "pinch_out": 262
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-04T04-50-33.518Z",
+  "minutes": 2.49,
+  "kind": "pinch",
+  "train": false,
+  "labels": {
+   "pinch_in": 277,
+   "pinch_hold": 306,
+   "pinch_out": 268
+  },
+  "eval": true
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-06T05-30-51.772Z",
+  "minutes": 2.42,
+  "kind": "pinch",
+  "train": true,
+  "labels": {
+   "pinch_in": 239,
+   "pinch_hold": 307,
+   "pinch_out": 220
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-06T05-46-24.047Z",
+  "minutes": 2.35,
+  "kind": "pinch",
+  "train": true,
+  "labels": {
+   "pinch_in": 264,
+   "pinch_hold": 260,
+   "pinch_out": 236
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-06T07-08-33.250Z",
+  "minutes": 2.4,
+  "kind": "pinch",
+  "train": true,
+  "labels": {
+   "pinch_out": 242,
+   "pinch_in": 240,
+   "pinch_hold": 298
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-06T08-10-50.079Z",
+  "minutes": 2.35,
+  "kind": "pinch",
+  "train": false,
+  "labels": {
+   "pinch_in": 297,
+   "pinch_hold": 391,
+   "pinch_out": 261
+  },
+  "eval": true
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-06T08-41-12.292Z",
+  "minutes": 2.47,
+  "kind": "pinch",
+  "train": true,
+  "labels": {
+   "pinch_in": 320,
+   "pinch_hold": 255,
+   "pinch_out": 293
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-06T08-44-16.477Z",
+  "minutes": 2.35,
+  "kind": "pinch",
+  "train": true,
+  "labels": {
+   "pinch_in": 334,
+   "pinch_hold": 376,
+   "pinch_out": 352
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-09T10-59-34.843Z",
+  "minutes": 2.37,
+  "kind": "pinch",
+  "train": false,
+  "labels": {
+   "pinch_in": 283,
+   "pinch_hold": 301,
+   "pinch_out": 254
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-09T12-00-11.890Z",
+  "minutes": 2.29,
+  "kind": "pinch",
+  "train": false,
+  "labels": {
+   "pinch_in": 245,
+   "pinch_hold": 557,
+   "pinch_out": 209
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-09T13-48-35.709Z",
+  "minutes": 2.32,
+  "kind": "pinch",
+  "train": false,
+  "labels": {
+   "pinch_in": 304,
+   "pinch_hold": 593,
+   "pinch_out": 284
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-09T13-51-14.408Z",
+  "minutes": 2.35,
+  "kind": "pinch",
+  "train": false,
+  "labels": {
+   "pinch_in": 341,
+   "pinch_hold": 621,
+   "pinch_out": 299
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-09T13-54-14.793Z",
+  "minutes": 2.34,
+  "kind": "pinch",
+  "train": false,
+  "labels": {
+   "pinch_in": 285,
+   "pinch_out": 262,
+   "pinch_hold": 651
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-29-29.795Z",
+  "minutes": 0.75,
+  "kind": "pinch",
+  "train": false,
+  "labels": {
+   "pinch_in": 139,
+   "pinch_hold": 394,
+   "pinch_out": 133
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-29-39.070Z",
+  "minutes": 0.75,
+  "kind": "pinch",
+  "train": false,
+  "labels": {
+   "pinch_out": 147,
+   "pinch_in": 147,
+   "pinch_hold": 473
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-29-43.334Z",
+  "minutes": 0.75,
+  "kind": "pinch",
+  "train": false,
+  "labels": {
+   "pinch_out": 127,
+   "pinch_in": 121,
+   "pinch_hold": 503
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-29-55.671Z",
+  "minutes": 0.75,
+  "kind": "pinch",
+  "train": false,
+  "labels": {
+   "pinch_out": 122,
+   "pinch_in": 118,
+   "pinch_hold": 547
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-30-01.021Z",
+  "minutes": 0.75,
+  "kind": "pinch",
+  "train": false,
+  "labels": {
+   "pinch_in": 130,
+   "pinch_hold": 584,
+   "pinch_out": 105
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-30-03.764Z",
+  "minutes": 0.75,
+  "kind": "pinch",
+  "train": false,
+  "labels": {
+   "pinch_out": 102,
+   "pinch_in": 96,
+   "pinch_hold": 484
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-30-09.372Z",
+  "minutes": 0.75,
+  "kind": "pinch",
+  "train": false,
+  "labels": {
+   "pinch_out": 94,
+   "pinch_in": 132,
+   "pinch_hold": 416
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T08-11-45.283Z",
+  "minutes": 0.62,
+  "kind": "pinch",
+  "train": false,
+  "labels": {
+   "pinch_in": 79,
+   "pinch_hold": 210,
+   "pinch_out": 81
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T08-12-02.014Z",
+  "minutes": 0.75,
+  "kind": "pinch",
+  "train": false,
+  "labels": {
+   "pinch_in": 142,
+   "pinch_hold": 419,
+   "pinch_out": 132
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-still-2026-11-04T04-00-31.075Z",
+  "minutes": 3.17,
+  "kind": "noise",
+  "train": false,
+  "labels": {
+   "still": 4494
+  },
+  "eval": true
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-still-2026-11-06T07-11-20.266Z",
+  "minutes": 1.81,
+  "kind": "noise",
+  "train": true,
+  "labels": {
+   "still": 2515
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-still-2026-11-06T07-13-21.030Z",
+  "minutes": 1.26,
+  "kind": "noise",
+  "train": false,
+  "labels": {
+   "still": 1688
+  },
+  "eval": true
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-still-2026-11-06T07-14-43.573Z",
+  "minutes": 1.21,
+  "kind": "noise",
+  "train": true,
+  "labels": {
+   "still": 1613
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-supported-2026-11-04T04-03-55.246Z",
+  "minutes": 5.17,
+  "kind": "noise",
+  "train": true,
+  "labels": {
+   "supported": 7492
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-supported-2026-11-04T04-10-07.238Z",
+  "minutes": 5.17,
+  "kind": "noise",
+  "train": true,
+  "labels": {
+   "supported": 7490
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-supported-2026-11-04T04-15-37.172Z",
+  "minutes": 5.17,
+  "kind": "noise",
+  "train": true,
+  "labels": {
+   "supported": 7495
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-supported-2026-11-04T04-21-36.838Z",
+  "minutes": 5.17,
+  "kind": "noise",
+  "train": true,
+  "labels": {
+   "supported": 7494
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-supported-2026-11-06T06-16-23.565Z",
+  "minutes": 5.17,
+  "kind": "noise",
+  "train": true,
+  "labels": {
+   "supported": 7499
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-supported-2026-11-06T06-23-39.358Z",
+  "minutes": 2.74,
+  "kind": "noise",
+  "train": true,
+  "labels": {
+   "supported": 3904
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-supported-2026-11-06T06-27-29.681Z",
+  "minutes": 5.17,
+  "kind": "noise",
+  "train": false,
+  "labels": {
+   "supported": 7501
+  },
+  "eval": true
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-supported-2026-11-06T06-33-21.079Z",
+  "minutes": 5.17,
+  "kind": "noise",
+  "train": false,
+  "labels": {
+   "supported": 7499
+  },
+  "eval": true
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-unlabeled-2026-11-14T09-58-34.967Z",
+  "minutes": 20.17,
+  "kind": "noise",
+  "train": false,
+  "labels": {
+   "everyday_noise": 29958
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/Hand labeled/gesture-dataset-unlabeled-2026-11-14T10-29-35.618Z",
+  "minutes": 26.69,
+  "kind": "noise",
+  "train": false,
+  "labels": {
+   "everyday_noise": 39954
+  },
+  "eval": false
+ },
+ {
+  "dir": "/Users/vaibhavbisht/Documents/GitHub/gesture-controls/data/recordings/new/gesture-dataset-pinch_in-2026-11-04T04-46-55.110Z",
+  "minutes": 2.22,
+  "kind": "pinch",
+  "train": false,
+  "labels": {
+   "pinch_in": 153,
+   "pinch_hold": 341,
+   "pinch_out": 150
+  },
+  "eval": false
+ }
+]

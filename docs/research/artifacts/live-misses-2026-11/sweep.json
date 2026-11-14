@@ -1,0 +1,357 @@
+{
+ "everyday noise|0.999": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 3,
+  "neg_s": 3388.38992256,
+  "falseOn": {
+   "everyday_noise": 3
+  }
+ },
+ "everyday noise|0.998": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 6,
+  "neg_s": 3388.38992256,
+  "falseOn": {
+   "everyday_noise": 6
+  }
+ },
+ "everyday noise|0.995": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 13,
+  "neg_s": 3388.38992256,
+  "falseOn": {
+   "everyday_noise": 13
+  }
+ },
+ "everyday noise|0.99": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 20,
+  "neg_s": 3388.38992256,
+  "falseOn": {
+   "everyday_noise": 20
+  }
+ },
+ "everyday noise|0.98": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 28,
+  "neg_s": 3388.38992256,
+  "falseOn": {
+   "everyday_noise": 28
+  }
+ },
+ "everyday noise|0.97": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 28,
+  "neg_s": 3388.38992256,
+  "falseOn": {
+   "everyday_noise": 28
+  }
+ },
+ "everyday noise|0.95": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 33,
+  "neg_s": 3388.38992256,
+  "falseOn": {
+   "everyday_noise": 33
+  }
+ },
+ "everyday noise|0.93": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 40,
+  "neg_s": 3388.38992256,
+  "falseOn": {
+   "everyday_noise": 40
+  }
+ },
+ "everyday noise|0.9": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 43,
+  "neg_s": 3388.38992256,
+  "falseOn": {
+   "everyday_noise": 43
+  }
+ },
+ "everyday noise|0.85": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 52,
+  "neg_s": 3388.38992256,
+  "falseOn": {
+   "everyday_noise": 52
+  }
+ },
+ "everyday noise|0.8": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 61,
+  "neg_s": 3388.38992256,
+  "falseOn": {
+   "everyday_noise": 61
+  }
+ },
+ "pinch sessions|0.999": {
+  "gestures": 178,
+  "caught": 100,
+  "fa": 1,
+  "neg_s": 830.709046112,
+  "falseOn": {
+   "unlabelled": 1
+  }
+ },
+ "pinch sessions|0.998": {
+  "gestures": 178,
+  "caught": 105,
+  "fa": 1,
+  "neg_s": 830.709046112,
+  "falseOn": {
+   "unlabelled": 1
+  }
+ },
+ "pinch sessions|0.995": {
+  "gestures": 178,
+  "caught": 107,
+  "fa": 2,
+  "neg_s": 830.709046112,
+  "falseOn": {
+   "unlabelled": 2
+  }
+ },
+ "pinch sessions|0.99": {
+  "gestures": 178,
+  "caught": 108,
+  "fa": 2,
+  "neg_s": 830.709046112,
+  "falseOn": {
+   "unlabelled": 2
+  }
+ },
+ "pinch sessions|0.98": {
+  "gestures": 178,
+  "caught": 109,
+  "fa": 3,
+  "neg_s": 830.709046112,
+  "falseOn": {
+   "unlabelled": 3
+  }
+ },
+ "pinch sessions|0.97": {
+  "gestures": 178,
+  "caught": 110,
+  "fa": 3,
+  "neg_s": 830.709046112,
+  "falseOn": {
+   "unlabelled": 3
+  }
+ },
+ "pinch sessions|0.95": {
+  "gestures": 178,
+  "caught": 113,
+  "fa": 4,
+  "neg_s": 830.709046112,
+  "falseOn": {
+   "unlabelled": 4
+  }
+ },
+ "pinch sessions|0.93": {
+  "gestures": 178,
+  "caught": 115,
+  "fa": 4,
+  "neg_s": 830.709046112,
+  "falseOn": {
+   "unlabelled": 4
+  }
+ },
+ "pinch sessions|0.9": {
+  "gestures": 178,
+  "caught": 117,
+  "fa": 6,
+  "neg_s": 830.709046112,
+  "falseOn": {
+   "unlabelled": 5,
+   "pinch_out": 1
+  }
+ },
+ "pinch sessions|0.85": {
+  "gestures": 178,
+  "caught": 122,
+  "fa": 6,
+  "neg_s": 830.709046112,
+  "falseOn": {
+   "unlabelled": 5,
+   "pinch_out": 1
+  }
+ },
+ "pinch sessions|0.8": {
+  "gestures": 178,
+  "caught": 122,
+  "fa": 6,
+  "neg_s": 830.709046112,
+  "falseOn": {
+   "unlabelled": 5,
+   "pinch_out": 1
+  }
+ },
+ "live misses (13 Nov)|0.999": {
+  "gestures": 30,
+  "caught": 10,
+  "fa": 0,
+  "neg_s": 33.250168594,
+  "falseOn": {}
+ },
+ "live misses (13 Nov)|0.998": {
+  "gestures": 30,
+  "caught": 11,
+  "fa": 0,
+  "neg_s": 33.250168594,
+  "falseOn": {}
+ },
+ "live misses (13 Nov)|0.995": {
+  "gestures": 30,
+  "caught": 14,
+  "fa": 0,
+  "neg_s": 33.250168594,
+  "falseOn": {}
+ },
+ "live misses (13 Nov)|0.99": {
+  "gestures": 30,
+  "caught": 17,
+  "fa": 0,
+  "neg_s": 33.250168594,
+  "falseOn": {}
+ },
+ "live misses (13 Nov)|0.98": {
+  "gestures": 30,
+  "caught": 18,
+  "fa": 0,
+  "neg_s": 33.250168594,
+  "falseOn": {}
+ },
+ "live misses (13 Nov)|0.97": {
+  "gestures": 30,
+  "caught": 20,
+  "fa": 0,
+  "neg_s": 33.250168594,
+  "falseOn": {}
+ },
+ "live misses (13 Nov)|0.95": {
+  "gestures": 30,
+  "caught": 20,
+  "fa": 0,
+  "neg_s": 33.250168594,
+  "falseOn": {}
+ },
+ "live misses (13 Nov)|0.93": {
+  "gestures": 30,
+  "caught": 20,
+  "fa": 0,
+  "neg_s": 33.250168594,
+  "falseOn": {}
+ },
+ "live misses (13 Nov)|0.9": {
+  "gestures": 30,
+  "caught": 20,
+  "fa": 0,
+  "neg_s": 33.250168594,
+  "falseOn": {}
+ },
+ "live misses (13 Nov)|0.85": {
+  "gestures": 30,
+  "caught": 20,
+  "fa": 0,
+  "neg_s": 33.250168594,
+  "falseOn": {}
+ },
+ "live misses (13 Nov)|0.8": {
+  "gestures": 30,
+  "caught": 21,
+  "fa": 0,
+  "neg_s": 33.250168594,
+  "falseOn": {}
+ },
+ "still / supported|0.999": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 0,
+  "neg_s": 841.7525025279999,
+  "falseOn": {}
+ },
+ "still / supported|0.998": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 0,
+  "neg_s": 841.7525025279999,
+  "falseOn": {}
+ },
+ "still / supported|0.995": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 0,
+  "neg_s": 841.7525025279999,
+  "falseOn": {}
+ },
+ "still / supported|0.99": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 0,
+  "neg_s": 841.7525025279999,
+  "falseOn": {}
+ },
+ "still / supported|0.98": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 0,
+  "neg_s": 841.7525025279999,
+  "falseOn": {}
+ },
+ "still / supported|0.97": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 0,
+  "neg_s": 841.7525025279999,
+  "falseOn": {}
+ },
+ "still / supported|0.95": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 0,
+  "neg_s": 841.7525025279999,
+  "falseOn": {}
+ },
+ "still / supported|0.93": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 0,
+  "neg_s": 841.7525025279999,
+  "falseOn": {}
+ },
+ "still / supported|0.9": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 0,
+  "neg_s": 841.7525025279999,
+  "falseOn": {}
+ },
+ "still / supported|0.85": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 0,
+  "neg_s": 841.7525025279999,
+  "falseOn": {}
+ },
+ "still / supported|0.8": {
+  "gestures": 0,
+  "caught": 0,
+  "fa": 0,
+  "neg_s": 841.7525025279999,
+  "falseOn": {}
+ }
+}

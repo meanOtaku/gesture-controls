@@ -1,0 +1,84 @@
+{
+  "windows": 44092,
+  "positiveWindows": 279,
+  "negativeWindows": 43813,
+  "rocAuc": 0.984247731909164,
+  "activationThreshold": 0.99,
+  "thresholdSource": "trainingRecordings",
+  "thresholdChosenOnEvaluationRecordings": false,
+  "precision": 1.0,
+  "recall": 0.8279569892473119,
+  "f1": 0.9058823529411765,
+  "accuracy": 0.9989113671414316,
+  "falseActivationRate": 0.0,
+  "confusion": {
+    "truePositive": 231,
+    "falsePositive": 0,
+    "falseNegative": 48,
+    "trueNegative": 43813
+  },
+  "balancedAccuracy": 0.913978494623656,
+  "atDefaultThreshold": {
+    "threshold": 0.5,
+    "precision": 0.920863309352518,
+    "recall": 0.9175627240143369,
+    "f1": 0.9192100538599641,
+    "accuracy": 0.9989794066950921,
+    "falseActivationRate": 0.0005021340697966357,
+    "confusion": {
+      "truePositive": 256,
+      "falsePositive": 22,
+      "falseNegative": 23,
+      "trueNegative": 43791
+    }
+  },
+  "brierScore": 0.0009098209994122856,
+  "expectedCalibrationError": 0.0010097475558302883,
+  "crossCheckRocAuc": 0.9955296842202936,
+  "crossCheckEvents": {
+    "recordings": 20,
+    "gestures": 214,
+    "caught": 169,
+    "gestureRecall": 0.7897196261682243,
+    "repeats": 0,
+    "late": 14,
+    "repeatsPer100Gestures": 0.0,
+    "medianLatencyMs": 469.098581,
+    "falseActivations": 28,
+    "negativeSeconds": 3393.768336279,
+    "falseActivationsPerHour": 29.701496982707805,
+    "falseOn": {
+      "everyday_noise": 27,
+      "unlabelled": 1
+    },
+    "cohort": "all",
+    "recordingMinutes": 62.38175536213333,
+    "falseActivationsBudgetPerHour": 5.0,
+    "withinTarget": false
+  },
+  "events": {
+    "recordings": 8,
+    "gestures": 57,
+    "caught": 49,
+    "gestureRecall": 0.8596491228070176,
+    "repeats": 0,
+    "late": 4,
+    "repeatsPer100Gestures": 0.0,
+    "medianLatencyMs": 485.206777,
+    "falseActivations": 1,
+    "negativeSeconds": 1735.381792729,
+    "falseActivationsPerHour": 2.074471459297016,
+    "falseOn": {
+      "unlabelled": 1
+    },
+    "cohort": "all",
+    "policy": {
+      "activation": 0.99,
+      "release": 0.84,
+      "cooldownMs": 1500,
+      "trigger": "peak"
+    }
+  },
+  "steadyStarts": false,
+  "hardNegatives": 4
+}
