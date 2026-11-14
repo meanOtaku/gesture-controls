@@ -811,7 +811,8 @@ class MainActivity : AppCompatActivity() {
             StreamingPlan.PENDING -> Unit
             StreamingPlan.WAITING -> {
                 stopSensorCollection()
-                StreamingForegroundService.releaseWakeLock(this)
+                // Kept running (without the wake lock) so the app is not frozen while a desktop looks for it.
+                StreamingForegroundService.startWaiting(this)
             }
             StreamingPlan.STOPPED -> {
                 stopSensorCollection()

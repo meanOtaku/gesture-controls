@@ -123,6 +123,24 @@ pub enum BleError {
     TimedOut(u64, &'static str),
 }
 
+impl BleError {
+    /// Whether the adapter itself is unusable, not just this attempt: btleplug's channel to the system Bluetooth service
+    /// closed (it says "Channel closed"), after which every call on that adapter fails at once. A new adapter recovers.
+    pub fn adapter_broken(&self) -> bool {
+        let source = match self {
+            BleError::Adapter(error)
+            | BleError::Connect(error)
+            | BleError::Discover(error)
+            | BleError::Subscribe(error) => error,
+            _ => return false,
+        };
+        source
+            .to_string()
+            .to_ascii_lowercase()
+            .contains("channel closed")
+    }
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum FramingError {
     #[error("message of {0} bytes exceeds the {MAX_BLE_MESSAGE_BYTES}-byte BLE frame limit")]
@@ -380,7 +398,12 @@ impl BleLink {
         // rejects this until the devices are bonded.
         tokio::time::timeout(BLE_GATT_OP_TIMEOUT, peripheral.subscribe(&telemetry))
             .await
-            .map_err(|_| BleError::TimedOut(BLE_GATT_OP_TIMEOUT.as_secs(), "subscribing to its telemetry"))?
+            .map_err(|_| {
+                BleError::TimedOut(
+                    BLE_GATT_OP_TIMEOUT.as_secs(),
+                    "subscribing to its telemetry",
+                )
+            })?
             .map_err(BleError::Subscribe)?;
         let notifications = peripheral
             .notifications()
@@ -419,10 +442,13 @@ impl BleLink {
         for frame in fragments {
             tokio::time::timeout(
                 BLE_WRITE_TIMEOUT,
-                self.peripheral.write(&self.command, &frame, WriteType::WithResponse),
+                self.peripheral
+                    .write(&self.command, &frame, WriteType::WithResponse),
             )
             .await
-            .map_err(|_| BleError::TimedOut(BLE_WRITE_TIMEOUT.as_secs(), "a command was written to it"))?
+            .map_err(|_| {
+                BleError::TimedOut(BLE_WRITE_TIMEOUT.as_secs(), "a command was written to it")
+            })?
             .map_err(BleError::Connect)?;
         }
         Ok(())
@@ -602,6 +628,16 @@ async fn first_matching(adapter: &Adapter) -> Result<Option<FoundWatch>, BleErro
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_closed_channel_to_the_system_bluetooth_service_means_a_new_adapter_is_needed() {
+        let closed = || btleplug::Error::Other("Channel closed".into());
+        assert!(BleError::Adapter(closed()).adapter_broken());
+        assert!(BleError::Subscribe(closed()).adapter_broken());
+        assert!(!BleError::Connect(btleplug::Error::TimedOut(std::time::Duration::from_secs(1))).adapter_broken());
+        assert!(!BleError::WatchNotFound.adapter_broken());
+        assert!(!BleError::TimedOut(10, "subscribing to its telemetry").adapter_broken());
+    }
+
     #[test]
     fn ble_device_id_is_derived_from_the_peripheral_identifier() {
         // macOS: CoreBluetooth UUID; Windows: Bluetooth address; Linux: BlueZ path.

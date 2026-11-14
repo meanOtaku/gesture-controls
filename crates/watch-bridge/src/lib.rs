@@ -29,20 +29,20 @@ use axum::routing::get;
 use futures_util::StreamExt;
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use spatial_protocol::{
-    CONTROLLABLE_SENSOR_IDS, DESKTOP_CONNECTED_TYPE, DESKTOP_HAPTIC_TYPE, DESKTOP_SET_THEME_TYPE, DesktopThemePayload, WATCH_THEMES,
-    DESKTOP_SET_SENSOR_RATE_TYPE, DESKTOP_SET_SENSOR_TYPE, DESKTOP_START_MEASUREMENT_TYPE,
-    DESKTOP_STOP_MEASUREMENT_TYPE, DESKTOP_TIME_SYNC_TYPE, DesktopConnectedPayload,
-    DesktopHapticPayload, DesktopMeasurementCommandPayload, DesktopOutboundEnvelope,
-    DesktopSensorControlPayload, DesktopSensorRateCommandPayload, DesktopTimeSyncPayload,
-    MAX_HAPTIC_DURATION_MS, MAX_PPG_FLUSH_RATE_HZ, MAX_SENSOR_RATE_HZ, MIN_HAPTIC_DURATION_MS,
-    MIN_PPG_FLUSH_RATE_HZ, MIN_SENSOR_RATE_HZ, ON_DEMAND_MEDICAL_TRACKER_IDS,
-    RATE_CONTROLLABLE_SENSOR_IDS, SENSOR_PPG_FLUSH, WATCH_ORIENTATION_TYPE, WATCH_PPG_BATCH_TYPE,
-    WATCH_PROTOCOL_VERSION, WATCH_SENSOR_BATCH_TYPE, WatchBiaResultSample, WatchButtonSample,
-    WatchEcgBatchSample, WatchEdaBatchSample, WatchEnvelope, WatchHeartRateBatchSample,
-    WatchHeartbeatSample, WatchInboundMessage, WatchMedicalStatusSample, WatchOrientationSample,
-    WatchPpgBatchSample, WatchPpgStatusSample, WatchSensorStatusSample,
-    WatchSkinTemperatureBatchSample, WatchSpo2BatchSample, WatchSweatLossBatchSample,
-    WatchTimeSyncSample, WatchWearStateSample,
+    CONTROLLABLE_SENSOR_IDS, DESKTOP_CONNECTED_TYPE, DESKTOP_HAPTIC_TYPE,
+    DESKTOP_SET_SENSOR_RATE_TYPE, DESKTOP_SET_SENSOR_TYPE, DESKTOP_SET_THEME_TYPE,
+    DESKTOP_START_MEASUREMENT_TYPE, DESKTOP_STOP_MEASUREMENT_TYPE, DESKTOP_TIME_SYNC_TYPE,
+    DesktopConnectedPayload, DesktopHapticPayload, DesktopMeasurementCommandPayload,
+    DesktopOutboundEnvelope, DesktopSensorControlPayload, DesktopSensorRateCommandPayload,
+    DesktopThemePayload, DesktopTimeSyncPayload, MAX_HAPTIC_DURATION_MS, MAX_PPG_FLUSH_RATE_HZ,
+    MAX_SENSOR_RATE_HZ, MIN_HAPTIC_DURATION_MS, MIN_PPG_FLUSH_RATE_HZ, MIN_SENSOR_RATE_HZ,
+    ON_DEMAND_MEDICAL_TRACKER_IDS, RATE_CONTROLLABLE_SENSOR_IDS, SENSOR_PPG_FLUSH,
+    WATCH_ORIENTATION_TYPE, WATCH_PPG_BATCH_TYPE, WATCH_PROTOCOL_VERSION, WATCH_SENSOR_BATCH_TYPE,
+    WATCH_THEMES, WatchBiaResultSample, WatchButtonSample, WatchEcgBatchSample,
+    WatchEdaBatchSample, WatchEnvelope, WatchHeartRateBatchSample, WatchHeartbeatSample,
+    WatchInboundMessage, WatchMedicalStatusSample, WatchOrientationSample, WatchPpgBatchSample,
+    WatchPpgStatusSample, WatchSensorStatusSample, WatchSkinTemperatureBatchSample,
+    WatchSpo2BatchSample, WatchSweatLossBatchSample, WatchTimeSyncSample, WatchWearStateSample,
 };
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -868,17 +868,44 @@ async fn run_ble_transport(shared: Arc<SharedState>, cancel: Arc<BleCancel>) {
     // No adapter usually means Bluetooth is switched off. Keep asking, so turning it back on
     // reconnects the watch without restarting the app; giving up here would leave the transport
     // dead for the rest of the session while the UI said "retrying".
-    let adapter = loop {
-        match ble::open_adapter().await {
-            Ok(adapter) => break adapter,
-            Err(error) => {
-                warn!(%error, "watch BLE transport could not open an adapter; will retry");
-                shared.set_ble_status(BleStatus::Failed(format!(
-                    "no Bluetooth adapter available ({error}); is Bluetooth on?"
-                )));
-                shared.link.retry_in(BLE_ADAPTER_RETRY_INTERVAL);
+    loop {
+        let adapter = loop {
+            match ble::open_adapter().await {
+                Ok(adapter) => break adapter,
+                Err(error) => {
+                    warn!(%error, "watch BLE transport could not open an adapter; will retry");
+                    shared.set_ble_status(BleStatus::Failed(format!(
+                        "no Bluetooth adapter available ({error}); is Bluetooth on?"
+                    )));
+                    shared.link.retry_in(BLE_ADAPTER_RETRY_INTERVAL);
+                    tokio::select! {
+                        _ = tokio::time::sleep(BLE_ADAPTER_RETRY_INTERVAL) => continue,
+                        _ = cancel.cancelled() => {
+                            shared.set_ble_status(BleStatus::Idle);
+                            return;
+                        }
+                    }
+                }
+            }
+        };
+        match run_ble_sessions(&adapter, &shared, &cancel).await {
+            SessionsEnd::Cancelled => {
+                ble::stop_scan(&adapter).await;
+                shared.set_ble_status(BleStatus::Idle);
+                return;
+            }
+            // btleplug's line to the system Bluetooth service broke (its event channel closed): every later call on
+            // this adapter fails at once, for good. Only a new adapter, with its own line, recovers without restarting
+            // the app.
+            SessionsEnd::AdapterBroken => {
+                warn!("the Bluetooth adapter stopped answering; opening it again");
+                shared.link.event(
+                    "warn",
+                    "the Bluetooth adapter stopped answering; opening it again",
+                );
+                drop(adapter);
                 tokio::select! {
-                    _ = tokio::time::sleep(BLE_ADAPTER_RETRY_INTERVAL) => continue,
+                    _ = tokio::time::sleep(BLE_RETRY_INTERVAL) => {}
                     _ = cancel.cancelled() => {
                         shared.set_ble_status(BleStatus::Idle);
                         return;
@@ -886,21 +913,39 @@ async fn run_ble_transport(shared: Arc<SharedState>, cancel: Arc<BleCancel>) {
                 }
             }
         }
-    };
+    }
+}
+
+/// How a run of BLE sessions on one adapter ended.
+enum SessionsEnd {
+    Cancelled,
+    AdapterBroken,
+}
+
+/// Scans, connects and streams on `adapter` until cancelled or until the adapter itself is broken.
+async fn run_ble_sessions(
+    adapter: &btleplug::platform::Adapter,
+    shared: &Arc<SharedState>,
+    cancel: &Arc<BleCancel>,
+) -> SessionsEnd {
     while !cancel.is_cancelled() {
         shared.link.scan_started();
         shared.set_ble_status(BleStatus::Scanning);
         let connect = tokio::select! {
-            result = BleLink::connect(&adapter, ble::BLE_SCAN_TIMEOUT) => result,
+            result = BleLink::connect(adapter, ble::BLE_SCAN_TIMEOUT) => result,
             // Cancelling drops the scan future partway, so its own stop_scan
             // never ran; stop the radio explicitly before leaving.
             _ = cancel.cancelled() => {
-                ble::stop_scan(&adapter).await;
+                ble::stop_scan(adapter).await;
                 break;
             }
         };
         let mut link = match connect {
             Ok(link) => link,
+            Err(error) if error.adapter_broken() => {
+                warn!(%error, "watch BLE connect failed: the adapter is broken");
+                return SessionsEnd::AdapterBroken;
+            }
             Err(error) => {
                 warn!(%error, "watch BLE connect failed");
                 shared.set_ble_status(BleStatus::Failed(error.to_string()));
@@ -1015,8 +1060,7 @@ async fn run_ble_transport(shared: Arc<SharedState>, cancel: Arc<BleCancel>) {
             _ = cancel.cancelled() => break,
         }
     }
-    ble::stop_scan(&adapter).await;
-    shared.set_ble_status(BleStatus::Idle);
+    SessionsEnd::Cancelled
 }
 
 /// Waits for the first envelope the watch's trust gate lets through, keeping
@@ -1840,7 +1884,10 @@ mod tests {
         };
         server_theme("nerv");
         let sent = Arc::new(Mutex::new(Vec::new()));
-        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
         runtime.block_on(async {
             let changer = {
                 let shared = Arc::clone(&shared);
@@ -1849,7 +1896,9 @@ mod tests {
                     shared.theme.send_replace(Some("neo".to_string()));
                 }
             };
-            let mut link = RecordingLink { sent: Arc::clone(&sent) };
+            let mut link = RecordingLink {
+                sent: Arc::clone(&sent),
+            };
             let run = run_connection(
                 &mut link,
                 &shared,
@@ -1867,7 +1916,8 @@ mod tests {
             .iter()
             .filter_map(|text| {
                 let value: serde_json::Value = serde_json::from_str(text).ok()?;
-                (value["type"] == DESKTOP_SET_THEME_TYPE).then(|| value["payload"]["theme"].as_str().unwrap().to_string())
+                (value["type"] == DESKTOP_SET_THEME_TYPE)
+                    .then(|| value["payload"]["theme"].as_str().unwrap().to_string())
             })
             .collect();
         assert_eq!(themes, ["nerv", "neo"]);

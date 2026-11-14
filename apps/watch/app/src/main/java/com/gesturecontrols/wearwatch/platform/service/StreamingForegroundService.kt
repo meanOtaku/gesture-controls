@@ -35,6 +35,12 @@ class StreamingForegroundService : Service() {
                 releaseWakeLock()
                 return START_NOT_STICKY
             }
+            ACTION_WAIT -> {
+                running = true
+                startForeground(NOTIFICATION_ID, createNotification())
+                releaseWakeLock()
+                return START_NOT_STICKY
+            }
         }
 
         running = true
@@ -96,6 +102,7 @@ class StreamingForegroundService : Service() {
         private const val ACTION_START = "com.gesturecontrols.wearwatch.action.START_STREAMING"
         private const val ACTION_STOP = "com.gesturecontrols.wearwatch.action.STOP_STREAMING"
         private const val ACTION_WAKE_OFF = "com.gesturecontrols.wearwatch.action.WAKE_OFF"
+        private const val ACTION_WAIT = "com.gesturecontrols.wearwatch.action.WAIT"
         private const val WAKE_LOCK_MAX_MS = 12L * 60 * 60 * 1000
 
         @Volatile private var running = false
@@ -127,6 +134,21 @@ class StreamingForegroundService : Service() {
                     Intent(context, StreamingForegroundService::class.java).setAction(ACTION_WAKE_OFF),
                 )
             }.onFailure { Log.w(TAG, "could not release the streaming wake lock", it) }
+        }
+
+        /**
+         * Waiting for a desktop: the service runs, without the CPU wake lock. Without it the app sits in the background
+         * as a cached process, and Samsung's app freezer (Freecess) freezes it: the Bluetooth stack still accepts the
+         * desktop's connection and subscription, but the frozen app never answers, so the desktop times out and nothing
+         * connects until the app is opened again.
+         */
+        fun startWaiting(context: Context) {
+            runCatching {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, StreamingForegroundService::class.java).setAction(ACTION_WAIT),
+                )
+            }.onFailure { Log.w(TAG, "could not start the service while waiting for a desktop", it) }
         }
 
         fun stop(context: Context) {
