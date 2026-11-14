@@ -1,0 +1,26 @@
+% IEEE conference paper (IEEEtran, conference mode).
+% Build: latexmk -pdf paper-ieee.tex
+\documentclass[conference]{IEEEtran}
+\input{preamble-common}
+\usepackage{cite}
+\usepackage[hidelinks]{hyperref}
+\let\sect\section
+\let\subsect\subsection
+% Single-column figures keep the conference version within its page budget.
+\newenvironment{widefigure}{\begin{figure}[t]}{\end{figure}}
+\begin{document}
+\title{\paperTitle}
+\author{\IEEEauthorblockN{\authorName}
+\IEEEauthorblockA{\todo{affiliation}\\ \todo{city, country}\\ \todo{email}}}
+\maketitle
+\begin{abstract}
+\input{abstract}
+\end{abstract}
+\begin{IEEEkeywords}
+Smartwatch, photoplethysmography, inertial sensing, head-directed selection, pinch gestures, continuous gesture detection, augmented reality, virtual reality.
+\end{IEEEkeywords}
+\input{sections/00-all}
+\input{sections/11-declarations}
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+\end{document}

@@ -1,0 +1,83 @@
+% Shared section: used by paper-ieee.tex, paper-lncs.tex and report.tex.
+% Use \sect / \subsect for headings (see README), never \section directly.
+
+\sect{Causal Detection and Event Accounting}\label{causal-detection-and-event-accounting}
+
+\iffull
+\subsect{Median-scaled optical--inertial input}\label{median-scaled-opticalinertial-input}
+\fi
+
+The model takes nine channels: three axes each of acceleration and angular velocity, and three PPG wavelengths. At decision time \(T\), each channel is placed on a 20\,ms grid by zero-order hold, using only samples recorded at or before each tick. The grid has 549 ticks ending at \(T\), spanning 10.96\,s of an 11\,s history window. The last 50 ticks form the model input, flattened channel by channel into 450 values.
+
+Let \(G_T\) be the grid, \(W_T\) its last 50 ticks, and \(c\) a channel. We define
+\[
+m_c(T)=\operatorname{median}_{j\in G_T}x_{c,j},
+\]
+\[
+s_c(T)=1.4826\operatorname{median}_{j\in G_T}|x_{c,j}-m_c(T)|,
+\]
+\[
+u_{c,t}=\sigma\left(\operatorname{clip}\left(\frac{x_{c,t}-m_c(T)}{s_c(T)+\epsilon_c(T)},-500,500\right)\right),\quad t\in W_T.
+\]
+
+\iffull
+The floor \(\epsilon_c\) is 0.02\,m/s² for acceleration, 0.01\,rad/s for angular velocity and \(0.001(|m_c(T)|+1)\) for PPG. A single centre and spread is computed over the whole grid at each decision, so the transform uses only past data. If the history is too short or contains a large gap, the input is marked unavailable instead of being scored as a negative. The scaling used for display in Fig.~\ref{fig-annotation} is different and should not be confused with this transform.
+\else
+The floor \(\epsilon_c\) is 0.02\,m/s² for acceleration, 0.01\,rad/s for angular velocity and \(0.001(|m_c(T)|+1)\) for PPG. The transform uses only past data, and an input with too little history or a large gap is marked unavailable rather than scored as a negative.
+\fi
+
+\iffull
+Earlier models used a rolling ten-second mean and standard deviation ending at each tick. Each model declares its preprocessing type, and that declaration, not the free-text description, decides which transform applies. Some median-model manifests still describe the rolling pipeline in their provenance text; this is an exporter bug that needs fixing, and we have not relabelled the old results.
+\fi
+
+\iffull
+\subsect{Models and learning configuration}\label{models-and-learning-configuration}
+\fi
+
+\iffull
+The CNN, written in PyTorch \cite{pytorch}, has three dilated convolutions \cite{yu2016dilated,bai2018tcn} with 32, 32 and 64 channels, kernel width five and dilations of one, two and four. Batch normalisation \cite{ioffe2015batchnorm} is followed by max and mean pooling, a 32-unit dense layer and a single binary output. The trainer can average three models trained with different seeds. Its default configuration trains for twelve epochs with Adam \cite{kingma2015adam} (learning rate 0.001, weight decay 0.0001) in batches of 256. Positive training examples are taken 0.4--0.6\,s after an annotated pinch start; negatives and class weights follow the trainer configuration.
+\else
+The CNN, written in PyTorch \cite{pytorch}, has three dilated convolutions \cite{yu2016dilated,bai2018tcn} (32, 32 and 64 channels, kernel width five, dilations one, two and four), batch normalisation \cite{ioffe2015batchnorm}, max and mean pooling, a 32-unit dense layer and a binary output. It is trained for twelve epochs with Adam \cite{kingma2015adam} (learning rate 0.001, weight decay 0.0001, batches of 256), with positive examples taken 0.4--0.6\,s after an annotated start. An ExtraTrees model on engineered features \cite{geurts2006extra,sklearn} also exists but has not yet been compared on the corrected labels.
+\fi
+
+\iffull
+This is the documented default, not a full training log for every model. The hand-labelled model records twelve epochs, seed 17 and its convolution widths, but not its complete sampling or ensemble-selection history. The project also includes an ExtraTrees model on engineered features \cite{geurts2006extra,sklearn}; we have not yet compared it with the CNN on the corrected labels.
+\fi
+
+\iffull
+\subsect{From scores to emitted events}\label{from-scores-to-emitted-events}
+\fi
+
+\iffull
+The detector turns the score stream into events using an activation threshold and a lower release threshold. Once the score passes the activation threshold, an event is emitted at the first decision where the score falls, so the event time is when the peak was confirmed, not the peak itself. The detection ends when the score drops below the release threshold, and a cooldown then blocks an immediate retrigger. Latency is measured from the emitted time.
+\else
+Events come from hysteresis on the score. Once it passes the activation threshold, an event is emitted at the first decision where the score falls; the detection ends below the release threshold, and a cooldown blocks retriggering. For the hand-labelled model these are 0.99, 0.84 and 1,500\,ms, with a nominal decision delay of 500\,ms. Latency is measured from the emitted time.
+\fi
+
+\iffull
+For the hand-labelled pinch-in model, the activation threshold is 0.99, the release threshold 0.84 and the cooldown 1,500\,ms. Its nominal decision delay of 500\,ms is a training and scoring setting, not a measured sensor-to-action latency. These values belong to this model and should not be carried over to the historical comparisons.
+\fi
+
+\iffull
+\subsect{Continuous metrics and eligibility}\label{continuous-metrics-and-eligibility}
+\fi
+
+\iffull
+We score each detector over whole recordings. An event that falls within the match window of an eligible annotated start is matched to it one-to-one. A second event during a gesture that was already caught is a repeat. An event during an uncaught gesture but outside its window is late. An event while no gesture is under way is a false activation. For the 500\,ms CNN delay, the match window runs from 300 to 900\,ms after the annotated start. Exclusions and event-merging rules are reported with each experiment.
+\else
+An event within 300--900\,ms after an eligible annotated start is matched to it one-to-one. A second event during a caught gesture is a repeat, an event during an uncaught gesture but outside its window is late, and any event while no gesture is under way is a false activation.
+\fi
+
+Event recall and false-activation rate are
+\[
+R_e=\frac{N_{\mathrm{caught}}}{N_{\mathrm{eligible\ starts}}},\qquad
+\lambda_{\mathrm{FA}}=\frac{N_{\mathrm{false\ events}}}{T_{\mathrm{eligible\ no\ gesture}}/3600},
+\]
+with time in seconds. We also report misses, repeats, late events and latency. Window ROC AUC and window F1 are kept as diagnostics; they are not event-level measures.
+
+\iffull
+The exposure calculation needs care. The evaluator takes the span from the first to the last eligible decision and subtracts gesture and excluded intervals, but it does not subtract gaps inside that span where no decisions were made. Such gaps would inflate the no-gesture time. For the hand-labelled model we rebuilt the decision timeline: decisions arrive every 40\,ms in all eight evaluation recordings, with no gap longer than 250\,ms, so its exposure is not inflated. The evaluator should still report coverage directly.
+
+\else
+We checked that gaps in the decision stream do not inflate the no-gesture time: decisions arrive every 40\,ms in all eight evaluation recordings, with no gap longer than 250\,ms.
+\fi

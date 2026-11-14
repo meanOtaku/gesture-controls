@@ -1,0 +1,63 @@
+% Shared section: used by paper-ieee.tex, paper-lncs.tex and report.tex.
+% Use \sect / \subsect for headings (see README), never \section directly.
+
+\sect{Discussion}\label{discussion}
+
+\iffull
+\subsect{What the implemented system establishes}\label{what-the-implemented-system-establishes}
+\fi
+
+\iffull
+For RQ1, the design keeps brief recognition events apart from the ongoing interaction state and from the output. This matters in practice: if the release pinch is missed, the head leaving the target or a stale signal still ends the grab, so the system does not keep changing the volume. A designed safeguard is not a measured failure rate, though. We have not yet measured target-selection error, task time, unintended commands, cancellation latency or any accessibility benefit across users.
+\else
+For RQ1, keeping recognition events apart from the interaction state means a missed release does not leave the volume changing: the head leaving the target or a stale signal still ends the grab. We have not yet measured target-selection error, task time or unintended commands.
+\fi
+
+\iffull
+The audit also exposed a reproducibility problem that is easy to fall into. A re-exported recording looks like a new session, and corrections disappear when a script reads the old label column. Hashing the sensor streams and storing both label versions makes these problems visible. Finding no duplicate across the hand-labelled split is reassuring, but it does not rule out every kind of leakage.
+\else
+The audit also shows how easily a dataset can mislead. A re-exported recording looks like a new session, and corrections vanish when a script reads the old label column; hashing streams and storing both label versions makes this visible.
+\fi
+
+\subsect{Prospects for AR and VR}\label{prospects-for-ar-and-vr}
+
+\iffull
+Nothing in the detection pipeline depends on the laptop. The detector sees only watch signals, and head orientation is also available from any AR/VR headset. In principle, the same pinch-in and pinch-out events could confirm and release a selection made by head or eye direction inside a headset. The wrist sensor would add most where camera hand tracking struggles: hands out of the cameras' view, hands occluded by objects, poor lighting, or interfaces where running the hand-tracking cameras just to detect a pinch costs too much power. It could also work alongside camera tracking, filling the gaps when the hand leaves the view.
+\else
+Nothing in the detection pipeline depends on the laptop: the detector sees only watch signals, and AR/VR headsets provide head orientation. The same pinch events could confirm a head- or gaze-directed selection in a headset, and would help most where camera hand tracking struggles: hands out of view or occluded, poor lighting, or when running cameras just to detect a pinch costs too much power.
+\fi
+
+\iffull
+These are possibilities, not findings. We have not run the system in a headset. Head movement in immersive use is larger and faster than at a desk, which may change both targeting and how much arm motion the detector has to reject. A pinch sensed at the wrist also gives no visual feedback of the hand unless the application adds it. The false-activation and latency results reported here would need to be measured again under those conditions.
+\else
+These are possibilities, not findings. Immersive use involves larger head movements and more arm motion, so the false-activation and latency results would need to be measured again in a headset.
+\fi
+
+\iffull
+\subsect{Annotation changes versus learning improvements}\label{annotation-changes-versus-learning-improvements}
+\fi
+
+\iffull
+If scores improve after relabelling, there are two possible reasons: the reference labels became more accurate, or the model was retrained differently. Often both happen at once. Two analyses can separate them. The first rescores the same frozen predictions against the original and the corrected labels. The second trains a model on each label version with the same source groups and selection procedure. A single before-and-after number cannot tell the two effects apart.
+\else
+If scores improve after relabelling, either the labels became more accurate or the model was retrained differently, and often both. Rescoring the same frozen predictions against each label version, and training one model per label version on the same split, would separate the two effects. Manual review is itself a measurement: an independent reviewer should label a pre-chosen sample, because relabelling while looking at a model's own false alarms biases the result toward that model.
+\fi
+
+\iffull
+Manual review is itself a measurement, with its own error. The definitions of contact and release, camera visibility, frame timing, clock alignment and the handling of disagreements should all be written down. Relabelling while looking at a model's own false alarms can bias the result toward that model. An independent reviewer should label a pre-chosen sample, and ambiguous or excluded stretches should be reported rather than dropped.
+\fi
+
+\iffull
+\subsect{Why zero observed events is not all-day reliability}\label{why-zero-observed-events-is-not-all-day-reliability}
+\fi
+
+\iffull
+Seeing zero false activations does not mean the true rate is zero. If false events follow a constant-rate Poisson process, observing none in \(T_h\) eligible hours gives a one-sided 95\% upper bound of \(-\ln(0.05)/T_h\) \cite{garwood1936poisson}, the basis of the ``rule of three'' for zero counts \cite{hanley1983zero}. Real activities and people are not that uniform, so this is an approximation. With 0.48 eligible hours, the upper bound is 6.2 false activations per hour, which is far from all-day reliability.
+\else
+Finally, zero observed false activations does not mean a zero rate. Under a constant-rate Poisson model, observing none in \(T_h\) hours gives a one-sided 95\% upper bound of \(-\ln(0.05)/T_h\) \cite{garwood1936poisson,hanley1983zero}; for 0.48\,h that is 6.2 per hour, far from all-day reliability.
+\fi
+
+\iffull
+Likewise, overlapping windows are not independent samples, and training seeds are not extra participants. A population-level interval needs participants as the sampling unit; a personalised study needs repeated sessions. For an interface whose errors can happen at bad moments, the worst condition matters as much as the pooled result.
+
+\fi

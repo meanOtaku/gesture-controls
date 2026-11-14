@@ -6,8 +6,8 @@
 
 ## Read first
 
-- [Full evidence and old-versus-hand-labelled audit](../EVIDENCE_AUDIT.md).
-- [Detailed Q2 study plan, completed capabilities and primary literature](../Q2_RESEARCH_PLAN.md).
+- [Full evidence and old-versus-hand-labelled audit](../../EVIDENCE_AUDIT.md).
+- [Detailed Q2 study plan, completed capabilities and primary literature](../../Q2_RESEARCH_PLAN.md).
 - [Springer conference counterpart](../springer/IMPROVEMENTS.md). Keep the two conference `body.tex` files identical when applying scientific edits; wrappers, float placement and citations can be format-specific.
 
 ## 1. Immediate corrections, in editing order
@@ -34,7 +34,7 @@ Table columns: **cohort/version; unique source groups; participant/day coverage;
 
 ### Methods and evaluation
 
-- Replace the MAD-only equation with `1.4826 × MAD + channel floor`, the clip/sigmoid and the decision-level 549-tick history definition from the [audit](../EVIDENCE_AUDIT.md#normalisation-correction).
+- Replace the MAD-only equation with `1.4826 × MAD + channel floor`, the clip/sigmoid and the decision-level 549-tick history definition from the [audit](../../EVIDENCE_AUDIT.md#normalisation-correction).
 - Describe peak-trigger emission at the **first decline after reaching threshold**, with cooldown after the active detection ends. Do not backdate event latency to a local maximum.
 - Specify event-matching tolerance, warm-up, quality/gap rejection, exclusions and the false-activation denominator. Report per-label counts, negative hours, repeats/late errors and actual emitted-event latency.
 - Distinguish the training-selected threshold in the hand-labelled manifest from the curriculum experiment whose reserved pair selected the threshold and supplied the validation result.
@@ -48,13 +48,13 @@ Retain the old fusion study only as historical motivation. A historical 0.789 �
 
 ### Highest priority: real annotation/telemetry example
 
-![Saved telemetry and annotation correction](../revision-assets/annotation-telemetry.png)
+![Saved telemetry and annotation correction](../../revision-assets/annotation-telemetry.png)
 
 Proposed caption:
 
 > Saved PPG and gyroscope data aligned to the watch clock, with original and effective annotations for one manually revised recording. Each PPG channel is centred and divided by its unscaled MAD over the displayed interval for visualisation only; gyroscope magnitude is in rad/s. Effective labels apply nonempty manual overrides. No model prediction or physical contact-time verification is implied.
 
-Place this near data/label production; use full width only if the bands are unreadable at a single column. Do not shrink labels until illegible. Name the session in the accompanying text or artifact supplement; exact provenance is in [figure-provenance.json](../revision-assets/figure-provenance.json).
+Place this near data/label production; use full width only if the bands are unreadable at a single column. Do not shrink labels until illegible. Name the session in the accompanying text or artifact supplement; exact provenance is in [figure-provenance.json](../../revision-assets/figure-provenance.json).
 
 ```tex
 \begin{figure*}[t]
@@ -71,7 +71,7 @@ The relative asset path works in this repository. Before an Overleaf upload, cop
 
 ### Historical transfer figure, if keeping historical results
 
-![Historical transfer by day](../revision-assets/historical-day-transfer.png)
+![Historical transfer by day](../../revision-assets/historical-day-transfer.png)
 
 Use the precise caption in the audit. This figure exposes the variability hidden by the two-thirds phrase. It is more informative than another architecture diagram; trade it against a table if the page budget is tight. Its data are old explored camera-label results, not a manual-label rerun.
 
@@ -94,7 +94,7 @@ Move the long history of unsuccessful preprocessing/architecture variations to a
 
 ## 4. Additional work that earns the stronger claim
 
-Minimum priority: recover current hand-labelled event logs and pinch-out provenance; independently review labels; run matched IMU-only/PPG-only/fusion and rolling/median comparisons; collect a frozen new-day/refit test; measure actual interaction outcomes and false actions. The [research plan](../Q2_RESEARCH_PLAN.md) defines how to do these without leakage.
+Minimum priority: recover current hand-labelled event logs and pinch-out provenance; independently review labels; run matched IMU-only/PPG-only/fusion and rolling/median comparisons; collect a frozen new-day/refit test; measure actual interaction outcomes and false actions. The [research plan](../../Q2_RESEARCH_PLAN.md) defines how to do these without leakage.
 
 For a later journal extension, add substantive new participants/days and a clear new analysis—not just this paper in an eight-page journal template. Check conference copyright and target journal extension policy; cite/disclose the earlier publication and avoid simultaneous duplicate submission.
 

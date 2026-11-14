@@ -1,0 +1,21 @@
+% Shared section: used by paper-ieee.tex, paper-lncs.tex and report.tex.
+% Use \sect / \subsect for headings (see README), never \section directly.
+
+\sect{Limitations and Reproducibility}\label{limitations-and-reproducibility}
+
+\iffull
+The main limitation is that all data come from a single participant, and we have not yet run a confirmatory usability or population study. The latest model's event result was reproduced by replay, but its training configuration had to be reconstructed, and its threshold-selection log and label-version hashes are missing. Some older cohorts cannot be checked because their UUIDs do not map to the stored recordings. Exact stream hashing misses partial overlaps, and we have not measured the reliability of the manual boundaries between annotators.
+\else
+All data come from one participant, and no confirmatory or usability study has been run. The current model's training configuration was reconstructed rather than recovered, its threshold-selection log and label-version hashes are missing, exact hashing misses partial overlaps, and the manual labels have not been checked by a second annotator.
+\fi
+
+\iffull
+The input pipeline can be rebuilt from source, but the full training history of the current model cannot. A good manifest score and a matching hash do not show the system is ready for live use. The negative recordings cover a limited range of activities, and synthetic splices cannot tell us about battery life, drift, all-day false activations or safety in real use.
+\fi
+
+\iffull
+Source code, audit scripts, the export inventory and figure sources are kept as project artifacts; \todo{state availability for the venue: public link after review, anonymised link for double-blind review, or on request}. The analysis refers to source snapshot \nolinkurl{6709b2a}, and the inventory describes the models and data stored at that point, not a newly trained release. A complete reproduction package would also need label-version hashes tied to the original training run and its per-recording event outcomes. Sharing the physiological recordings depends on access and privacy decisions that are still to be made.
+
+\else
+Source code, audit scripts and the export inventory are kept as project artifacts; \todo{state availability for the venue}.
+\fi

@@ -1,0 +1,20 @@
+% Packages and macros shared by every build (paper-ieee, paper-lncs, report).
+% Each wrapper defines \sect, \subsect and the widefigure environment before \input-ing sections.
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx,booktabs,tabularx,array}
+\usepackage{url,xurl}
+\usepackage{xcolor}
+\usepackage{microtype}
+\setlength{\emergencystretch}{2em}
+% Visible placeholder for text still to be written. Shows in red in the PDF.
+% Build with \def\final{} before \documentclass... or just search for \todo before submitting.
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+% Full vs conference text. In sections/, write
+%   \iffull <long text, report only> \else <short text, papers only> \fi
+% or \iffull <report-only text> \fi. report.tex sets \fulltrue; the papers leave it false.
+\newif\iffull
+\newcommand{\paperTitle}{Look, Pinch, Turn: A Hands-Free Way to Interact with Computers, from the Desktop to AR/VR}
+\newcommand{\paperShortTitle}{Look, Pinch, Turn}
+\newcommand{\authorName}{Vaibhav Bisht}

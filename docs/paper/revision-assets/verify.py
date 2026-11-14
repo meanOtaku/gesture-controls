@@ -12,7 +12,7 @@ from audit_evidence import ROOT, OUT, effective
 def main():
     paper=ROOT/'docs/paper'
     docs=[paper/'README.md',paper/'EVIDENCE_AUDIT.md',paper/'Q2_RESEARCH_PLAN.md',OUT/'README.md']
-    docs += [paper/x/'IMPROVEMENTS.md' for x in ('ieee','springer','ieee-journal','springer-journal')]
+    docs += [paper/'archive'/x/'IMPROVEMENTS.md' for x in ('ieee','springer','ieee-journal','springer-journal')]
     checked_links=0
     for doc in docs:
         assert doc.is_file(), doc
@@ -24,16 +24,16 @@ def main():
             assert (doc.parent/target).exists(), (doc,destination)
             checked_links += 1
     for first,second in [('ieee','springer'),('ieee-journal','springer-journal')]:
-        assert (paper/first/'body.tex').read_bytes()==(paper/second/'body.tex').read_bytes()
+        assert (paper/'archive'/first/'body.tex').read_bytes()==(paper/'archive'/second/'body.tex').read_bytes()
     audit=json.loads((OUT/'evidence-audit.json').read_text())
     import subprocess
     for folder in ('ieee','springer','ieee-journal','springer-journal'):
         # main.tex, body.tex and main.pdf were intentionally revised on 8 Nov 2026 (evidence corrections and the replayed
         # hand-labelled result, see revision-assets/HAND_LABELLED_REPLAY.md); only the bibliography is still pinned.
         for name in ('refs.bib',):
-            relative=f'docs/paper/{folder}/{name}'
+            relative=f'docs/paper/{folder}/{name}'  # path at the audited commit; now under archive/
             original=subprocess.check_output(['git','show',f'{audit["audited_commit"]}:{relative}'],cwd=ROOT)
-            assert (ROOT/relative).read_bytes()==original, relative
+            assert (paper/'archive'/folder/name).read_bytes()==original, relative
     assert len(audit['records'])==37
     assert audit['unique_sensor_pairs']==28
     assert len(audit['duplicate_sensor_groups'])==9

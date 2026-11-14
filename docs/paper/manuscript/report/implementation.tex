@@ -1,0 +1,25 @@
+% Report-only chapter: implementation detail the paper has no room for.
+\chapter{Implementation}\label{ch:implementation}
+\section{Overall Architecture}
+\todo{Component and deployment view. Source: docs/architecture/components-and-deployment.md.}
+
+\section{Watch Application}
+\todo{Sensor capture, batching, timestamps, foreground service (Samsung freezer issue), theme sync. Source: apps/watch.}
+
+\section{Watch--Desktop Transport}
+\todo{BLE protocol, Wi-Fi/WebSocket path, ordering, loss handling, reconnects. Source: docs/protocols/watch-ble-transport.md, docs/protocols/watch-websocket-protocol.md, crates/watch-bridge.}
+
+\section{Head Tracking}
+\todo{Sony head tracker integration, calibration, dwell. Source: crates/head-tracking, crates/native-head-tracking, third\_party/sony-head-tracker.}
+
+\section{Desktop Application}
+\todo{Tauri app structure, Off/Monitor/Live modes, readiness indicator, gesture library, labelling UI. Source: apps/desktop.}
+
+\section{Recording and Labelling Tool}
+\todo{Dataset export format, camera landmarks, manual\_label overrides, Labelling interface. Source: docs/architecture/camera-landmarks.md, apps/desktop/src/features/labelling.}
+
+\section{Model Training Pipeline}
+\todo{label-trainer: windowing, median/rolling normalisation, CNN and ExtraTrees, threshold selection, bundle export with hashes. Source: tools/label-trainer, docs/architecture/pinch-models.md.}
+
+\section{Desktop Inference and Interaction Engine}
+\todo{label-inference / pinch-inference crates, temporal detector, interaction engine, volume writer. Source: crates/label-inference, crates/interaction-engine, crates/volume-control.}

@@ -1,5 +1,10 @@
 # Papers
 
+**Edit the paper and the report in [`manuscript/`](manuscript/README.md).** It is the single source:
+one set of section files builds the IEEE conference paper, the Springer LNCS paper and the
+project report. Everything under [`archive/`](archive/) is an earlier variant, kept for reference
+and no longer edited.
+
 ## Evidence audit and revision guides
 
 The manuscripts currently mix historical cue/camera-labelled experiments and later model variants.
@@ -9,8 +14,8 @@ replace old table values with new manifest percentages without matching cohort a
 - [Evidence audit: old versus hand-labelled data, source aliases and claim corrections](EVIDENCE_AUDIT.md)
 - [Q2-target research plan: implemented capabilities, related work and proposed studies](Q2_RESEARCH_PLAN.md)
 - Format-specific improvements and suggested manuscript text:
-  [IEEE conference](ieee/IMPROVEMENTS.md), [Springer LNCS](springer/IMPROVEMENTS.md),
-  [IEEE journal](ieee-journal/IMPROVEMENTS.md), [Springer Nature journal](springer-journal/IMPROVEMENTS.md)
+  [IEEE conference](archive/ieee/IMPROVEMENTS.md), [Springer LNCS](archive/springer/IMPROVEMENTS.md),
+  [IEEE journal](archive/ieee-journal/IMPROVEMENTS.md), [Springer Nature journal](archive/springer-journal/IMPROVEMENTS.md)
 - [Reproducible figures, inventory, provenance and verification](revision-assets/README.md)
 - [Journal companion: every claim, term, number, equation, table and figure of the journal version explained](JOURNAL_COMPANION.md)
 
@@ -20,18 +25,18 @@ self-contained LaTeX folders: copy selected figures into a paper folder before s
 
 ## New evidence-qualified Codex manuscript
 
-The new [IEEE Codex](ieee%20codex/README.md) and [Springer Codex](springer%20codex/README.md)
+The new [IEEE Codex](archive/ieee%20codex/README.md) and [Springer Codex](archive/springer%20codex/README.md)
 folders contain a complete rewritten paper using the audit: current hand-labelled development evidence,
 separately identified historical results, corrected causal methods and explicitly proposed future studies.
 The scientific body is identical across the two formats. Both compile locally; PDFs remain local rather
 than being committed. Full Markdown, embedded figures, downloadable Markdown and both PDFs are saved
 in Joplin's **Conference Papers** notebook as **Failure-Aware Spatial Interaction — Codex manuscript
 (IEEE + Springer)**. The note and all seven resources were read back after successful server sync.
-See [generation, provenance and checks](codex-tools/README.md).
+See [generation, provenance and checks](archive/codex-tools/README.md).
 
 The four original variants below are preserved alongside the two new Codex journal formats.
 
-| Folder | Format | Pages |
+| Folder (under `archive/`) | Format | Pages |
 | --- | --- | --- |
 | `ieee/` | IEEE conference (`IEEEtran` conference mode) | 6 |
 | `springer/` | Springer LNCS conference proceedings (`llncs`, `splncs04`) | 11 |

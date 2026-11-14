@@ -1,0 +1,38 @@
+% Shared section: used by paper-ieee.tex, paper-lncs.tex and report.tex.
+% Use \sect / \subsect for headings (see README), never \section directly.
+
+\sect{Introduction}\label{introduction}
+
+\iffull
+Someone listening to music while they work may want to turn the volume down without reaching for the keyboard, the mouse or a tiny watch screen. Wearables make another option possible: look at a volume control on the screen, pinch to grab it, rotate the wrist to change the level, and release. Selection and manipulation are split between the head and the hand. Every part of this uses hardware people already own. The difficulty is that a smartwatch sees finger movement only indirectly. The motion of a pinch has to be picked out from everyday arm movement, the optical signal shifts with strap fit and placement, and a single false detection can change the volume when nobody asked it to.
+\else
+Someone listening to music while they work may want to turn the volume down without reaching for the keyboard or mouse. Wearables offer another option: look at a volume control on the screen, pinch to grab it, rotate the wrist to set the level, and release. All of this uses hardware people already own. The difficulty is that a smartwatch sees finger movement only indirectly: a pinch has to be picked out from everyday arm movement, the optical signal shifts with strap fit, and one false detection can change the volume unasked.
+\fi
+
+\iffull
+This makes the problem one of continuous interaction rather than gesture classification. Scoring a model on pre-cut gesture windows says little about how often it will fire by mistake during an hour of typing, how late its events arrive, or what happens when the sensor stream drops out. A high window-level ROC AUC does not guarantee a low command error rate. We therefore score whole recordings and count misses, late events, repeats and false activations against the actual time spent not gesturing.
+\else
+The problem is therefore continuous interaction, not gesture classification. A high window-level ROC AUC says little about how often a detector fires during an hour of typing or how late its events arrive, so we score whole recordings and count misses, late events, repeats and false activations per hour of no-gesture time.
+\fi
+
+\iffull
+We built and tested the technique on a laptop, but we see the desktop as a first test-bed rather than the final target. Augmented and virtual reality (AR/VR) headsets already combine looking with pinching, and they usually detect the pinch with cameras on the headset. Those cameras need the hand in view and in reasonable light. A pinch sensed at the wrist does not: it could keep working with the hand resting at the user's side, under a desk or behind an object. This paper evaluates the desktop system only; using it in a headset is a prospect we discuss, not a result we report.
+\else
+We see the laptop as a first test-bed. AR/VR headsets already combine looking with pinching, but they detect the pinch with cameras that need the hand in view and in reasonable light; a pinch sensed at the wrist does not. We evaluate the desktop system only and discuss headsets as a prospect.
+\fi
+
+\iffull
+While preparing this evaluation we also found that the dataset was less independent than it looked. Some recordings had been exported more than once under different names, and the project's labels had changed over time, from cue-based and automatic camera labels to manually corrected ones. We report these findings because they directly affect which results can be trusted. All recordings come from one participant, the author, so the results describe a working prototype and its development history, not performance across a population.
+\else
+We also found that the dataset was less independent than it looked: some recordings had been exported twice under different names, and labels changed over time from camera-based to manually corrected. All recordings come from one participant, the author, so the results describe a working prototype, not performance across a population.
+\fi
+
+This paper makes three contributions:
+\begin{itemize}
+\item a sensing-to-action design that combines consumer head tracking, smartwatch PPG and inertial sensing, and a paired grab/release policy with bounded output and explicit cancellation;
+\item a continuous, event-level evaluation of the pinch detector, including exposure-normalised false activations and a reproduction of the stored result by replay;
+\item a dataset audit showing how duplicate exports and changing label versions can distort results, together with a protocol for the confirmatory study that should follow.
+\end{itemize}
+We do not claim that multimodal smartwatch sensing or convolutional classification is new in itself.
+
+We address three questions. \textbf{RQ1:} how can the system keep a brief gesture event separate from sustained control and cancellation? \textbf{RQ2:} what does the recorded evidence show about the manually relabelled detector, and where are its gaps? \textbf{RQ3:} which failure modes and evaluation choices limit stronger claims about transfer across days and everyday reliability?

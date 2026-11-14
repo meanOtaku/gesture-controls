@@ -1,0 +1,24 @@
+% Springer LNCS conference paper (llncs + splncs04).
+% Build: latexmk -pdf paper-lncs.tex
+\documentclass[runningheads]{llncs}
+\input{preamble-common}
+\usepackage[hidelinks]{hyperref}
+\let\sect\section
+\let\subsect\subsection
+\newenvironment{widefigure}{\begin{figure}[t]}{\end{figure}}
+\begin{document}
+\title{\paperTitle}
+\titlerunning{\paperShortTitle}
+\author{\authorName}
+\authorrunning{V. Bisht}
+\institute{\todo{affiliation} \\ \email{\todo{email}}}
+\maketitle
+\begin{abstract}
+\input{abstract}
+\keywords{Smartwatch \and Photoplethysmography \and Inertial sensing \and Head-directed selection \and Pinch gestures \and Augmented and virtual reality}
+\end{abstract}
+\input{sections/00-all}
+\input{sections/11-declarations}
+\bibliographystyle{splncs04}
+\bibliography{refs}
+\end{document}

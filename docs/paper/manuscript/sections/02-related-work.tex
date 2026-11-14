@@ -1,0 +1,45 @@
+% Shared section: used by paper-ieee.tex, paper-lncs.tex and report.tex.
+% Use \sect / \subsect for headings (see README), never \section directly.
+
+\sect{Related Work and Evaluation Context}\label{related-work-and-evaluation-context}
+
+\subsect{Wrist-based finger recognition}\label{wrist-based-finger-recognition}
+
+Sensing finger input at the wrist has a long history. Serendipity recognised fine finger gestures such as pinches and taps from the inertial sensors of an off-the-shelf smartwatch \cite{serendipity}, and ViBand sampled the watch accelerometer at a high rate to pick up bio-acoustic signals \cite{viband}. Optical sensing followed: FinDroidHR used the watch's heart-rate sensor for gesture input \cite{findroidhr}, PPG has been applied to finger-level and sign-language gestures \cite{zhao2018ppg,zhao2021sign} and to force levels \cite{buddhika2019fsense,li2023force}, and recent systems combine PPG with inertial or other wrist sensors \cite{wang2022wristband,eddy2024multimodal,hauptmann2026mudpad}. Two reviews cover this landscape in more depth \cite{tchantchane2023review,charlton2023roadmap}.
+
+\iffull
+Two results from this work matter for our evaluation. Principal component analysis of multi-wavelength PPG improves gesture recognition across several activity states \cite{ruan2022pca}, and shifting the sensor on the wrist degrades PPG gesture models unless it is corrected, for example by transfer learning \cite{fang2023shift}. Given this body of work, we make no claim to have introduced wrist optical gesture sensing. Our interest is in deploying it continuously and accounting honestly for its errors.
+\else
+Principal component analysis of multi-wavelength PPG improves recognition across activity states \cite{ruan2022pca}, and sensor shift degrades PPG models unless corrected \cite{fang2023shift}. We therefore claim no novelty for wrist optical sensing itself; our focus is continuous deployment and honest error accounting.
+\fi
+
+\iffull
+ViWatch makes finger interaction on commercial smartwatches robust through unsupervised Siamese adaptation \cite{viwatch}. It is a useful reminder that a fixed model, a per-user calibrated model and an adapted model answer different questions. If a system calibrates on a new session, the cost of that calibration should be reported and the calibration data kept apart from the test data. ViWatch's recognition rates also cannot be compared directly with continuous event recall at a fixed operating point.
+\else
+ViWatch adapts finger-gesture models to new sessions through unsupervised Siamese adaptation \cite{viwatch}, and Tsunoda, Choi and Shizuki report 94.7\% accuracy for four thumb-to-finger gestures from accelerometers alone under leave-one-participant-out evaluation with 12 participants \cite{tsunoda}. Neither reports a false-activation rate for uninterrupted use, and their recognition rates are not directly comparable with continuous event recall.
+\fi
+
+\iffull
+Tsunoda, Choi and Shizuki recognise thumb-to-finger gestures from commercial smartwatch accelerometers \cite{tsunoda}. With 12 participants, they report 94.7\% accuracy for four gestures under leave-one-participant-out evaluation and 90.2\% for 11 gestures under participant-specific leave-one-session-out evaluation. Their results argue for an IMU-only baseline and for explicit participant- and session-level generalisation targets. They do not, however, report a false-activation rate for uninterrupted use.
+\fi
+
+\subsect{Look-then-act interaction}\label{look-then-act-interaction}
+
+\iffull
+Separating where a user looks from when they act is an old idea. Jacob described the ``Midas touch'' problem: if looking alone triggers commands, everything the user looks at gets activated \cite{jacob1990wysiwyg,jacob1991eyemovements}. Gaze + pinch interaction in virtual reality solves this by letting gaze choose the target and a pinch of the hand confirm and manipulate it \cite{pfeuffer2017gazepinch}. The same look-then-pinch pattern is now standard in commercial mixed-reality headsets; in Apple's visionOS, for example, people look at an element to target it and tap their fingers together to act on it \cite{applevisionos}. Our design follows the same split, with head orientation standing in for eye gaze and a wrist-sensed pinch replacing camera hand tracking, which is what makes it a candidate for headsets as well as desktops. On the watch itself, Kim, Son and Oakley compared crossing, dwell and pinch as selection methods for unmodified smartwatches \cite{kim2025pinch}.
+\else
+Jacob described the ``Midas touch'' problem: if looking alone triggers commands, everything the user looks at is activated \cite{jacob1990wysiwyg,jacob1991eyemovements}. Gaze + pinch interaction lets gaze choose a target and a pinch confirm and manipulate it \cite{pfeuffer2017gazepinch}, and the pattern is now standard in commercial headsets such as Apple's visionOS \cite{applevisionos}. We replace eye gaze with head orientation and camera hand tracking with a wrist-sensed pinch. Kim, Son and Oakley compared crossing, dwell and pinch for selection on unmodified smartwatches \cite{kim2025pinch}.
+\fi
+
+\subsect{Multimodal learning and the remaining gap}\label{multimodal-learning-and-the-remaining-gap}
+
+\iffull
+OpenWatch is a multimodal smartwatch benchmark with more than ten hours of data from 50 participants, 59 labelled gesture sequences and subject-independent evaluation \cite{openwatch}. The preprint reports that adding PPG raises F1 by 12.5 points for smartwatch foundation models. That gain belongs to a particular architecture and protocol and will not automatically carry over to other models. Whether PPG helps our detector has to be shown with a matched ablation on our own data.
+\else
+OpenWatch, a benchmark with 50 participants, reports that adding PPG raises F1 by 12.5 points for smartwatch foundation models \cite{openwatch}; whether PPG helps our detector needs a matched ablation on our own data. Because these studies use different endpoints, we use them to choose baselines rather than to rank results.
+\fi
+
+\iffull
+These studies use different endpoints: accuracy, sequence F1, adaptation performance and continuous activation recall. A fair comparison would need the same gesture definitions, annotation procedure, sensors, data splits, calibration allowance and temporal post-processing. We therefore use the literature to position the problem and to choose baselines, and we do not rank our numbers against theirs.
+
+\fi

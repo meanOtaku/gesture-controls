@@ -2,7 +2,7 @@
 
 **Applies to:** this folder's `main.tex`, `body.tex`, `refs.bib` and `architecture.png`. The committed PDF is 11 pages. LNCS is a proceedings format, not a journal quartile or an acceptance standard. The actual conference's limits override this observed length.
 
-**Evidence base:** [full audit](../EVIDENCE_AUDIT.md), [Q2 research/study plan](../Q2_RESEARCH_PLAN.md), [IEEE conference editing checklist](../ieee/IMPROVEMENTS.md). This guide adds format-specific revision and proposed text; original manuscript files are unchanged by the documentation audit.
+**Evidence base:** [full audit](../../EVIDENCE_AUDIT.md), [Q2 research/study plan](../../Q2_RESEARCH_PLAN.md), [IEEE conference editing checklist](../ieee/IMPROVEMENTS.md). This guide adds format-specific revision and proposed text; original manuscript files are unchanged by the documentation audit.
 
 ## 1. Scientific changes that must be shared with the IEEE conference version
 
@@ -39,7 +39,7 @@ Until new results exist, retain an honest development-study framing rather than 
 
 ### Reference annotation figure
 
-![Real saved labels and signals](../revision-assets/annotation-telemetry.png)
+![Real saved labels and signals](../../revision-assets/annotation-telemetry.png)
 
 Place after the reference-annotation subsection. Use a full-text-width `figure`, not an IEEE-style `figure*`, because LNCS is single column.
 
@@ -55,17 +55,17 @@ Place after the reference-annotation subsection. Use a full-text-width `figure`,
 \end{figure}
 ```
 
-Use the full session/clock/normalisation provenance from [the audit](../EVIDENCE_AUDIT.md). Keep text readable after scaling and do not reduce captions to hide required evidence qualifications. For standalone Overleaf uploads, copy the selected PDF into this folder and adjust the path.
+Use the full session/clock/normalisation provenance from [the audit](../../EVIDENCE_AUDIT.md). Keep text readable after scaling and do not reduce captions to hide required evidence qualifications. For standalone Overleaf uploads, copy the selected PDF into this folder and adjust the path.
 
 ### Historical day-transfer figure
 
-![Historical day variation](../revision-assets/historical-day-transfer.png)
+![Historical day variation](../../revision-assets/historical-day-transfer.png)
 
 Place with the historical LODO result if retained. It documents 21/171, 37/52, 67/92 and 36/57 catches, with distinct pinch/noise FAR values. It is not a comparison of the current manual-label model with older models.
 
 ### Source-role schematic
 
-![Evidence roles](../revision-assets/evidence-lineage.png)
+![Evidence roles](../../revision-assets/evidence-lineage.png)
 
 The schematic is useful for revision review or supplementary material. For the final paper, consider replacing it with a compact dataset-role table to avoid spending a page explaining editorial history. The future-confirmatory box must remain visibly proposed.
 
@@ -85,7 +85,7 @@ The schematic is useful for revision review or supplementary material. For the f
 
 ## 5. What more to do for the journal-level research goal
 
-Follow the [shared plan](../Q2_RESEARCH_PLAN.md), prioritising:
+Follow the [shared plan](../../Q2_RESEARCH_PLAN.md), prioritising:
 
 - Reviewer-audited boundaries and paired old-versus-reviewed annotation analysis.
 - Matched IMU-only, PPG-only and fused models using the same source-group splits, budget and operating-point policy.

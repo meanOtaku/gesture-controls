@@ -8,7 +8,7 @@ Nov 8, 2026 · Vaibhav Bisht
 
 This guide explains, in plain language, everything that appears in the journal version of the paper *Spatial Gesture Control: Controlling a Laptop with Head Orientation and Smartwatch Pinch Gestures*: every claim, term, number, equation, table and figure. The text explained is the revision of 8 November 2026.
 
-**Which files.** The IEEE journal version (`docs/paper/ieee-journal/`) and the Springer Nature journal version (`docs/paper/springer-journal/`) share an identical `body.tex`; only the title block, abstract wrapper and back matter differ. Section numbers below follow the IEEE PDF (Roman numerals there, Arabic in Springer).
+**Which files.** The IEEE journal version (`docs/paper/archive/ieee-journal/`) and the Springer Nature journal version (`docs/paper/archive/springer-journal/`) share an identical `body.tex`; only the title block, abstract wrapper and back matter differ. Section numbers below follow the IEEE PDF (Roman numerals there, Arabic in Springer).
 
 | This guide | Paper section |
 | --- | --- |
@@ -627,4 +627,4 @@ Each figure in the paper traces to a file in the `gesture-controls` repository. 
 | System performance (452 µs → 0.1 µs, 17.5 → 12.0 MB, etc.) | VII-G | `docs/performance.md` |
 | 12–18% on 14 October vs 63–75% on 3–4 November | IX | `docs/architecture/pinch-models.md` |
 
-**Checks to keep the paper honest.** `docs/paper/revision-assets/verify.py` and `docs/paper/codex-tools/verify.py` re-check links, model hashes and the paired LaTeX bodies; `replay_hand_labelled.py` recomputes Table VIII from the checked-in model and recordings.
+**Checks to keep the paper honest.** `docs/paper/revision-assets/verify.py` and `docs/paper/archive/codex-tools/verify.py` re-check links, model hashes and the paired LaTeX bodies; `replay_hand_labelled.py` recomputes Table VIII from the checked-in model and recordings.

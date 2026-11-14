@@ -25,10 +25,10 @@ PDF outputs stay local/ignored and are attached to Joplin rather than committed.
 
 ## Evidence and figure provenance
 
-- Source snapshot for scientific claims: repository commit `6709b2a`, especially [the evidence audit](../EVIDENCE_AUDIT.md), [research plan](../Q2_RESEARCH_PLAN.md) and `revision-assets/evidence-audit.json`.
+- Source snapshot for scientific claims: repository commit `6709b2a`, especially [the evidence audit](../../EVIDENCE_AUDIT.md), [research plan](../../Q2_RESEARCH_PLAN.md) and `revision-assets/evidence-audit.json`.
 - The manuscript does not reassign the historical 161/372 result to manual labels or infer missing current event counts/exposure/latency from a rounded rate.
 - `system_figure.py` generates a new **schematic**, grounded in `docs/architecture/components-and-deployment.md`, `safety-and-fail-closed-behavior.md`, the paired gesture policy and desktop volume-writer design. It is not a measured performance chart.
-- `annotation-telemetry.png`, `historical-day-transfer.png`, `prospective-protocol.png` are byte-identical copies from `revision-assets/`. Their exact session, display scaling, historical source/configuration and proposed-study boundaries are in [figure-provenance.json](../revision-assets/figure-provenance.json). Their captions carry those limitations into the paper.
+- `annotation-telemetry.png`, `historical-day-transfer.png`, `prospective-protocol.png` are byte-identical copies from `revision-assets/`. Their exact session, display scaling, historical source/configuration and proposed-study boundaries are in [figure-provenance.json](../../revision-assets/figure-provenance.json). Their captions carry those limitations into the paper.
 - Optional schematic regeneration:
 
 ```bash

@@ -1,0 +1,42 @@
+% Project report. Reuses the paper's shared sections as chapters and adds
+% report-only chapters from report/. Shared files use \sect/\subsect, which
+% become \chapter/\section here.
+% Build: latexmk -pdf report.tex
+\documentclass[12pt,a4paper,oneside]{report}
+\input{preamble-common}
+\fulltrue
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage[numbers]{natbib}
+\usepackage[hidelinks]{hyperref}
+\let\sect\chapter
+\let\subsect\section
+\newenvironment{widefigure}{\begin{figure}[htbp]}{\end{figure}}
+\begin{document}
+\pagenumbering{roman}
+\input{report/front-matter}
+\clearpage
+\pagenumbering{arabic}
+
+\input{sections/01-introduction}
+\input{report/intro-extra}
+\input{sections/02-related-work}
+\input{report/requirements}
+\input{sections/03-system-design}
+\input{report/implementation}
+\input{sections/04-annotation-audit}
+\input{sections/05-detection-method}
+\input{sections/06-results}
+\input{report/testing}
+\input{sections/07-discussion}
+\input{sections/09-limitations}
+\input{sections/08-prospective-protocol}
+\input{sections/10-conclusion}
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\appendix
+\input{report/appendices}
+\end{document}
