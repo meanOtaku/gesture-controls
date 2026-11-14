@@ -74,6 +74,14 @@ Figure~\ref{fig:score-timeline} shows how this looks over time for one evaluatio
 \includegraphics[width=0.85\linewidth]{figures/latency-histogram.pdf}
 \caption[Latency of caught pinches]{Latency from the annotated start to the emitted event for the 47 caught pinch-in starts in the eight evaluation recordings (25\,ms bins). The shaded region is the 300--900\,ms match window.}\label{fig:latency}
 \end{figure}
+\else
+Fig.~\ref{fig:score-timeline} shows one evaluation recording over time. Of its 21 annotated starts, 17 were caught. The four misses failed in different ways: one produced no response, one raised the score to 0.906, short of the threshold, and two fired about 280\,ms after the start, just before the match window opens, and were counted as late. Between pinches the score stays close to zero.
+
+\begin{pagewidefigure}
+\centering
+\includegraphics[width=\linewidth]{figures/score-timeline-compact.pdf}
+\caption{Score of the hand-labelled pinch-in model over one evaluation recording (pinch-hold session, 4 November), replayed with the trainer's detection rule. Shaded bands are annotated pinches; markers below the axis are annotated starts and markers above are emitted events. The grey region of the top panel is shown in detail below.}\label{fig:score-timeline}
+\end{pagewidefigure}
 \fi
 
 \iffull

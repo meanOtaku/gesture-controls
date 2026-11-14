@@ -36,12 +36,12 @@ plt.rcParams.update({
 
 
 def save(fig, name):
-    fig.savefig(FIG / f"{name}.pdf")
+    fig.savefig(FIG / f"{name}.pdf", metadata={"CreationDate": None})  # no timestamp: reruns give identical files
     plt.close(fig)
     print(f"wrote {name}.pdf")
 
 
-def score_timeline(tl):
+def score_timeline(tl, name="score-timeline", size=(6.3, 4.4), hspace=0.6, ncol=3, legend_y=0.0):
     t, s = np.array(tl["t_s"]), np.array(tl["score"])
     starts, events = tl["starts"], tl["events"]
     missed = [x["t_s"] for x in starts if not x["caught"]]
@@ -49,7 +49,7 @@ def score_timeline(tl):
     centre = missed[len(missed) // 2] if missed else t[len(t) // 2]
     lo, hi = centre - 9, centre + 9
 
-    fig, axes = plt.subplots(2, 1, figsize=(6.3, 4.4), gridspec_kw={"height_ratios": [1, 1.15], "hspace": 0.6})
+    fig, axes = plt.subplots(2, 1, figsize=size, gridspec_kw={"height_ratios": [1, 1.15], "hspace": hspace})
     for ax, (a, b), title in ((axes[0], (t[0], t[-1]), "Whole recording"),
                               (axes[1], (lo, hi), "Detail around an undetected pinch")):
         m = (t >= a) & (t <= b)
@@ -79,8 +79,8 @@ def score_timeline(tl):
     axes[1].set_xlabel("Time from first decision (s)")
     axes[0].axvspan(lo, hi, color=MUTED, alpha=0.10, lw=0)
     handles, labels = axes[1].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", ncol=3, bbox_to_anchor=(0.5, 0.0))
-    save(fig, "score-timeline")
+    fig.legend(handles, labels, loc="upper center", ncol=ncol, bbox_to_anchor=(0.5, legend_y))
+    save(fig, name)
 
 
 def latency_histogram(replay):
@@ -163,6 +163,8 @@ def main():
     data = json.loads((HERE / "report-figure-data.json").read_text())
     replay = json.loads((HERE / "hand-labelled-replay.json").read_text())
     score_timeline(data["timeline"])
+    # Compact variant for the conference papers (spans both IEEE columns).
+    score_timeline(data["timeline"], "score-timeline-compact", size=(7.1, 3.3), hspace=0.75, ncol=4, legend_y=-0.05)
     lat = latency_histogram(replay)
     print(f"latencies: n={lat.size} median={np.median(lat):.1f} IQR={np.percentile(lat,25):.0f}-{np.percentile(lat,75):.0f} p95={np.percentile(lat,95):.0f}")
     sensor_timing(data["timing"])

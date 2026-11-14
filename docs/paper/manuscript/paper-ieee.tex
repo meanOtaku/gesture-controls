@@ -8,6 +8,8 @@
 \let\subsect\subsection
 % Single-column figures keep the conference version within its page budget.
 \newenvironment{widefigure}{\begin{figure}[t]}{\end{figure}}
+% Spans both columns, for figures that need the full page width.
+\newenvironment{pagewidefigure}{\begin{figure*}[t]}{\end{figure*}}
 \begin{document}
 \title{\paperTitle}
 \author{\IEEEauthorblockN{\authorName}
