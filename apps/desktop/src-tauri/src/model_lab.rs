@@ -13,7 +13,9 @@ use crate::dataset_files::{self, GapReport, Meta, Pair};
 const DATASETS_DIR_NAME: &str = "datasets";
 pub(crate) const MODEL_LAB_DIR_NAME: &str = "model-lab";
 const INDEX_FILE_NAME: &str = "index.json";
-const MAX_DATASET_CSV_BYTES: usize = 20 * 1024 * 1024;
+/// Room for a 3 h wear recording: motion at 100 Hz is about 240 bytes a row, so 3 h of `imu.csv` is about 260 MB. The old
+/// 20 MB limit (set at 50 Hz) turned away anything over about 14 minutes.
+const MAX_DATASET_CSV_BYTES: usize = 512 * 1024 * 1024;
 const MAX_FILENAME_LEN: usize = 255;
 const METADATA_COMMENT_PREFIX: char = '#';
 

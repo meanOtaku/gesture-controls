@@ -59,7 +59,7 @@ const LANDMARKS_PER_HAND: usize = 21;
 /// Matches `model_lab::MAX_DATASET_CSV_BYTES`; kept as its own constant since
 /// the two csv contracts (legacy fused dataset vs. new immutable raw capture)
 /// are intentionally independent.
-const MAX_RAW_CSV_BYTES: usize = 20 * 1024 * 1024;
+const MAX_RAW_CSV_BYTES: usize = 512 * 1024 * 1024;
 /// Stable `RecordingSource.source_id` for every bundle created by
 /// `import_recording_from_raw_csv`, so imported bundles are always
 /// identifiable by source rather than by a browser-supplied label.
