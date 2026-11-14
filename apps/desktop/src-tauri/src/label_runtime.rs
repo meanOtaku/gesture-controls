@@ -36,6 +36,75 @@ pub const LABEL_SHADOW_EVENT: &str = "label-shadow-detections";
 pub const LABEL_MODELS_EVENT: &str = "label-models-changed";
 /// Sent when the hand goes from still to moving or back (see [`HandSteadinessView`]).
 pub const HAND_STEADINESS_EVENT: &str = "hand-steadiness";
+/// Whether each running model can catch a gesture now (`label_inference::readiness`): sent when a state changes or its
+/// countdown moves, never on every sample.
+pub const LABEL_READINESS_EVENT: &str = "label-readiness";
+
+/// One running model's readiness, for the UI: `state` is `ready`, `moving`, `settling`, `waiting`, `stale`, `warmingUp`,
+/// `gap` or `offWrist`, and `readyInMs` how long until ready when that is known (the UI counts it down itself).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadinessView {
+    pub label: String,
+    pub state: String,
+    pub ready_in_ms: Option<u64>,
+}
+
+/// A wait for readiness shorter than this ends without a buzz: only a wait the user noticed is worth one.
+const READY_BUZZ_AFTER_NS: u64 = 1_500_000_000;
+/// At most one ready buzz this often.
+const READY_BUZZ_GAP_NS: u64 = 3_000_000_000;
+/// The ready buzz: short, unlike a guided session's cues.
+pub const READY_BUZZ_MS: u32 = 40;
+/// A countdown that moved less than this is not sent again.
+const READINESS_RESEND_NS: u64 = 150_000_000;
+
+/// What was last sent to the UI about readiness, and when a wait began, to send only changes and buzz once a wait ends.
+#[derive(Debug, Default)]
+struct ReadinessTracker {
+    shown: Vec<ReadinessView>,
+    /// When each shown model's countdown ends, on the host's clock.
+    deadlines: Vec<Option<u64>>,
+    /// Since when not every model has been ready.
+    waiting_since: Option<u64>,
+    last_buzz: Option<u64>,
+}
+
+impl ReadinessTracker {
+    /// Takes the readiness now; says whether to send it, and whether to buzz (every model ready again after a wait long
+    /// enough to notice, and no buzz just before).
+    fn update(&mut self, views: Vec<ReadinessView>, now_ns: u64) -> (bool, bool) {
+        let deadlines: Vec<Option<u64>> = views
+            .iter()
+            .map(|v| v.ready_in_ms.map(|ms| now_ns + ms * 1_000_000))
+            .collect();
+        let moved = views.len() != self.shown.len()
+            || views.iter().zip(&self.shown).any(|(a, b)| a.label != b.label || a.state != b.state)
+            || deadlines.iter().zip(&self.deadlines).any(|(a, b)| match (a, b) {
+                (Some(a), Some(b)) => a.abs_diff(*b) > READINESS_RESEND_NS,
+                (a, b) => a.is_some() != b.is_some(),
+            });
+        let ready = views.iter().all(|v| v.state == "ready");
+        let mut buzz = false;
+        if ready {
+            if let Some(since) = self.waiting_since.take() {
+                buzz = !views.is_empty()
+                    && now_ns.saturating_sub(since) >= READY_BUZZ_AFTER_NS
+                    && self.last_buzz.is_none_or(|at| now_ns.saturating_sub(at) >= READY_BUZZ_GAP_NS);
+                if buzz {
+                    self.last_buzz = Some(now_ns);
+                }
+            }
+        } else if self.waiting_since.is_none() {
+            self.waiting_since = Some(now_ns);
+        }
+        if moved {
+            self.shown = views;
+            self.deadlines = deadlines;
+        }
+        (moved, buzz)
+    }
+}
 const TICK_INTERVAL: Duration = Duration::from_millis(100);
 
 /// Whether the hand is still right now, from the last second of the watch's motion (`label_inference::steadiness`). A
@@ -484,6 +553,8 @@ pub struct LabelRuntimeHost {
     started_at: Instant,
     /// The hand's state last sent to the UI, so it is only sent when it changes.
     steadiness_shown: Mutex<Option<String>>,
+    /// The models' readiness last sent to the UI, and the wait the ready buzz ends.
+    readiness: Mutex<ReadinessTracker>,
     /// Whether a gesture may only start from a still hand (the `steadyStartsOnly` setting).
     steady_starts: std::sync::atomic::AtomicBool,
 }
@@ -497,6 +568,7 @@ impl Default for LabelRuntimeHost {
             state: Mutex::new(HostState::default()),
             started_at: Instant::now(),
             steadiness_shown: Mutex::new(None),
+            readiness: Mutex::new(ReadinessTracker::default()),
             steady_starts: std::sync::atomic::AtomicBool::new(false),
         }
     }
@@ -1010,6 +1082,46 @@ impl LabelRuntimeHost {
             *shown = Some(view.state.clone());
             let _ = app.emit(HAND_STEADINESS_EVENT, view);
         }
+        let views = self.readiness(now);
+        let (send, buzz) = self
+            .readiness
+            .lock()
+            .map(|mut tracker| tracker.update(views.clone(), now))
+            .unwrap_or((false, false));
+        if send {
+            let _ = app.emit(LABEL_READINESS_EVENT, &views);
+        }
+        let wanted = app
+            .try_state::<crate::settings::SettingsRuntime>()
+            .and_then(|settings| settings.get().ok())
+            .is_some_and(|settings| settings.buzz_when_ready);
+        if buzz
+            && wanted
+            && let Some(server) = app.try_state::<std::sync::Arc<watch_bridge::WatchBridgeServer>>()
+            && let Err(error) = server.send_haptic_command(watch_bridge::HapticCommand { duration_ms: READY_BUZZ_MS })
+        {
+            tracing::debug!(%error, "the ready buzz was not sent");
+        }
+    }
+
+    /// Whether each running model can catch a gesture now, or that the watch is off the wrist. None while the runtime is
+    /// off or has no models.
+    pub fn readiness(&self, now_ns: u64) -> Vec<ReadinessView> {
+        self.runtime
+            .lock()
+            .map(|runtime| {
+                let off_wrist = runtime.is_off_wrist();
+                runtime
+                    .readiness(now_ns)
+                    .into_iter()
+                    .map(|(label, readiness)| ReadinessView {
+                        label: label.to_string(),
+                        state: if off_wrist { "offWrist".into() } else { readiness.name().into() },
+                        ready_in_ms: if off_wrist { None } else { readiness.ready_in_ms() },
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// Requires (or stops requiring) the hand to have been still before a gesture starts, for the active models and the
@@ -1547,6 +1659,12 @@ pub fn inspect_label_model(
     host.inspect_model(&app, &id)
 }
 
+/// Whether each running model can catch a gesture now (see [`LabelRuntimeHost::readiness`]).
+#[tauri::command]
+pub fn get_label_readiness(host: State<'_, LabelRuntimeHost>) -> Vec<ReadinessView> {
+    host.readiness(host.now_ns())
+}
+
 #[tauri::command]
 pub fn get_hand_steadiness(host: State<'_, LabelRuntimeHost>) -> HandSteadinessView {
     host.hand_steadiness()
@@ -1905,6 +2023,34 @@ mod tests {
     }
 
     use super::*;
+
+    fn view(label: &str, state: &str, ready_in_ms: Option<u64>) -> ReadinessView {
+        ReadinessView { label: label.into(), state: state.into(), ready_in_ms }
+    }
+
+    const SEC: u64 = 1_000_000_000;
+
+    #[test]
+    fn readiness_is_sent_when_it_changes_and_a_long_wait_ends_with_one_buzz() {
+        let mut t = ReadinessTracker::default();
+        assert_eq!(t.update(vec![view("pinch_in", "ready", None)], 0), (true, false));
+        assert_eq!(t.update(vec![view("pinch_in", "ready", None)], SEC / 10), (false, false), "nothing changed");
+        // The wrist moves, then settles: sent as it changes; a countdown that keeps its deadline is not sent again.
+        assert_eq!(t.update(vec![view("pinch_in", "moving", Some(900))], SEC).0, true);
+        assert_eq!(t.update(vec![view("pinch_in", "settling", Some(1_000))], 2 * SEC).0, true);
+        assert_eq!(t.update(vec![view("pinch_in", "settling", Some(900))], 2 * SEC + SEC / 10).0, false);
+        // Ready again after 2 s of waiting: one buzz.
+        assert_eq!(t.update(vec![view("pinch_in", "ready", None)], 3 * SEC), (true, true));
+        // A quick wobble ends too soon to buzz, and so does one right after a buzz.
+        t.update(vec![view("pinch_in", "moving", Some(900))], 3 * SEC + SEC / 2);
+        assert_eq!(t.update(vec![view("pinch_in", "ready", None)], 4 * SEC), (true, false));
+        t.update(vec![view("pinch_in", "gap", Some(9_000))], 4 * SEC + SEC / 10);
+        assert_eq!(t.update(vec![view("pinch_in", "ready", None)], 5 * SEC + SEC / 2), (true, false), "within 3 s of the last buzz");
+        // While one model is not ready, nothing is ready.
+        t.update(vec![view("pinch_in", "ready", None), view("pinch_out", "warmingUp", Some(4_000))], 20 * SEC);
+        assert_eq!(t.update(vec![view("pinch_in", "ready", None), view("pinch_out", "ready", None)], 24 * SEC), (true, true));
+    }
+
 
     #[test]
     fn the_status_shows_the_models_given_unfamiliar_inputs_and_forgets_them_when_they_stop() {

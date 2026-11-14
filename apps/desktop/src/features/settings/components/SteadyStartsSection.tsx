@@ -6,10 +6,13 @@ import { Switch } from "../../../components/ui/switch";
 type SteadyStartsSectionProps = {
   enabled: boolean;
   onToggle: () => void;
+  /** The watch buzzes when the models can catch a gesture again after the wrist moved (or a stream dropped). */
+  buzzWhenReady: boolean;
+  onToggleBuzz: () => void;
 };
 
 /** The switch for only starting a trained model's gesture from a still hand. */
-export function SteadyStartsSection({ enabled, onToggle }: SteadyStartsSectionProps) {
+export function SteadyStartsSection({ enabled, onToggle, buzzWhenReady, onToggleBuzz }: SteadyStartsSectionProps) {
   return (
     <Card role="region" aria-label="Still hand">
       <CardHeader>
@@ -31,6 +34,16 @@ export function SteadyStartsSection({ enabled, onToggle }: SteadyStartsSectionPr
           </span>
           <span className="text-xs text-muted-foreground"><AnimatedWord>{enabled ? "On" : "Off"}</AnimatedWord></span>
           <Switch aria-label={`Only start gestures from a still hand ${enabled ? "on" : "off"}`} checked={enabled} onCheckedChange={onToggle} />
+        </div>
+        <div className="vector-row mt-2 flex items-center justify-between gap-3">
+          <span className="flex flex-col">
+            <span className="label">Buzz when ready after moving</span>
+            <small className="text-xs text-muted-foreground">
+              After the wrist moves, a pinch is caught reliably once it has been still for about a second. The sidebar shows when; this buzzes the watch too, for when the screen is out of view.
+            </small>
+          </span>
+          <span className="text-xs text-muted-foreground"><AnimatedWord>{buzzWhenReady ? "On" : "Off"}</AnimatedWord></span>
+          <Switch aria-label={`Buzz when ready after moving ${buzzWhenReady ? "on" : "off"}`} checked={buzzWhenReady} onCheckedChange={onToggleBuzz} />
         </div>
       </CardContent>
     </Card>

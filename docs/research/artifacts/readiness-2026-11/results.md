@@ -1,0 +1,31 @@
+# Catching a pinch after the wrist moved (100 Hz CNN, cut-off 0.99)
+
+Pinch-in starts of the 6 held-out pinch recordings, with real everyday motion spliced in before each. See
+`readiness.py`.
+
+## Caught, by how long the motion lasted and how long before the pinch it ended
+
+| motion | 0.25 s before | 0.5 s before | 1 s before | 2 s before | 4 s before |
+|---|---|---|---|---|---|
+| none | 95/106 | | | | |
+| 2 s | 78/106 | 94/106 | 94/106 | 93/106 | 95/106 |
+| 6 s | 78/106 | 90/106 | 89/106 | 94/106 | 93/106 |
+| 10 s | 65/106 | 83/106 | 86/106 | 91/106 | 92/106 |
+| 14 s | 44/106 | 73/106 | 90/106 | 91/106 | 94/106 |
+
+## Caught, by what a readiness light would have shown at the start
+
+| calm for | kept share | pinches | caught |
+|---|---|---:|---:|
+| 0-0.5 s | 0-0.25 | 460 | 245 (53%) |
+| 0-0.5 s | 0.25-0.5 | 240 | 170 (70%) |
+| 0-0.5 s | 0.5-1.01 | 208 | 161 (77%) |
+| 0.5-1 s | 0-0.25 | 225 | 189 (84%) |
+| 0.5-1 s | 0.25-0.5 | 109 | 95 (87%) |
+| 0.5-1 s | 0.5-1.01 | 90 | 84 (93%) |
+| 1-2 s | 0-0.25 | 226 | 214 (94%) |
+| 1-2 s | 0.25-0.5 | 102 | 98 (96%) |
+| 1-2 s | 0.5-1.01 | 83 | 80 (96%) |
+| 2-99 s | 0-0.25 | 170 | 163 (95%) |
+| 2-99 s | 0.25-0.5 | 145 | 139 (95%) |
+| 2-99 s | 0.5-1.01 | 168 | 164 (97%) |

@@ -635,3 +635,14 @@ number-flow-react {
 .session-badge[data-session="3"] { color: #7c3aed; }
 .session-badge[data-session="4"] { color: #be123c; }
 .session-badge[data-session="5"] { color: #4d7c0f; }
+
+/* Whether a pinch made now would be caught (`ReadinessLight`): a dot and a few words in the sidebar's footer. */
+.readiness-light { display: flex; align-items: center; gap: .5rem; padding: .35rem .5rem; font-size: .8rem; line-height: 1.25; border-radius: .375rem; }
+.readiness-dot { flex: none; width: .55rem; height: .55rem; border-radius: 999px; background: #16a34a; }
+.readiness-light[data-tone="wait"] .readiness-dot { background: #d97706; animation: readiness-pulse 1s ease-in-out infinite; }
+.readiness-light[data-tone="off"] .readiness-dot { background: #9ca3af; }
+.readiness-countdown { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted-foreground, inherit); }
+@keyframes readiness-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .readiness-light[data-tone="wait"] .readiness-dot { animation: none; } }
+/* The sidebar folded to icons: the dot alone. */
+[data-collapsible="icon"] .readiness-text { display: none; }

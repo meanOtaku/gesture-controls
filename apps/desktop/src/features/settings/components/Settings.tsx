@@ -130,7 +130,12 @@ export function Settings({
 
           <SettingsGroup id="gestures">
             <BuiltInGesturesSection gestures={current.heuristicGestures} onToggle={toggleBuiltInGesture} />
-            <SteadyStartsSection enabled={current.steadyStartsOnly} onToggle={() => onUpdate({ ...current, steadyStartsOnly: !current.steadyStartsOnly })} />
+            <SteadyStartsSection
+              enabled={current.steadyStartsOnly}
+              onToggle={() => onUpdate({ ...current, steadyStartsOnly: !current.steadyStartsOnly })}
+              buzzWhenReady={current.buzzWhenReady}
+              onToggleBuzz={() => onUpdate({ ...current, buzzWhenReady: !current.buzzWhenReady })}
+            />
             <ShakeSettings detections={shakeDetections} />
             <SwipeSettings lastSwipe={lastSwipe} />
             <TapSettings lastTap={lastTap} />

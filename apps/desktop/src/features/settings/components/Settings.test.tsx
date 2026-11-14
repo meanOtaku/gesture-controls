@@ -31,6 +31,7 @@ const settings: AppSettings = {
   watchSensorsEnabled: { orientation: true, acceleration: true, gyroscope: true },
   watchTransport: "bluetooth",
   steadyStartsOnly: false,
+  buzzWhenReady: false,
 };
 
 describe("Settings page layout", () => {

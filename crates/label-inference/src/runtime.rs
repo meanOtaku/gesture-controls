@@ -232,6 +232,18 @@ impl LabelRuntime {
         self.steadiness.now()
     }
 
+    /// Whether each model can catch a gesture now (see [`crate::readiness`]), for display. Nothing while the runtime is
+    /// off or has no models; the caller knows the watch is off the wrist.
+    pub fn readiness(&self, now_ns: u64) -> Vec<(LabelId, crate::readiness::Readiness)> {
+        if self.mode == RuntimeMode::Off {
+            return Vec::new();
+        }
+        self.models
+            .iter()
+            .map(|(label, model)| (label.clone(), self.pipeline.readiness(model, now_ns)))
+            .collect()
+    }
+
     fn release(&mut self, events: Vec<DetectionEvent>) -> RuntimeOutput {
         RuntimeOutput {
             reset_interactions: true,

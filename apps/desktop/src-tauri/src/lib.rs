@@ -194,6 +194,7 @@ pub fn run() {
             miss_recorder::mark_miss,
             model_lab::attach_miss_camera,
             label_runtime::get_hand_steadiness,
+            label_runtime::get_label_readiness,
             label_runtime::get_label_registry_usage,
             label_runtime::list_training_history,
             label_runtime::delete_label_history,

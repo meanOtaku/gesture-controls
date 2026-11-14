@@ -31,6 +31,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   watchSensorsEnabled: Object.fromEntries(CONTROLLABLE_SENSORS.map(({ id }) => [id, true])),
   watchTransport: "bluetooth",
   steadyStartsOnly: false,
+  buzzWhenReady: false,
 };
 
 export type NumericSettingKey =

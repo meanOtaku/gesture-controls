@@ -354,6 +354,88 @@ impl LabelPipeline {
         (scores, rejections)
     }
 
+    /// Whether `model` can catch a gesture now (see [`crate::readiness`]): it has its streams, its whole history without a
+    /// gap, and (if it reads motion) the wrist has been calm long enough.
+    pub fn readiness(&self, model: &LoadedModel, now_ns: u64) -> crate::readiness::Readiness {
+        use crate::readiness::{NoSignal, Readiness, from_calm};
+        use crate::inputs::ModelKind;
+        let no = |why, ready_in_ns: Option<u64>| Readiness::NoSignal {
+            why,
+            ready_in_ms: ready_in_ns.map(|ns| ns.div_ceil(NS_PER_MS)),
+        };
+        let stale = STREAM_STALE_MS * NS_PER_MS;
+        let reads_motion = model.kind.reads_motion();
+        let (Some(first_ppg), Some(newest_ppg)) = (self.ppg.front(), self.ppg.back()) else {
+            return no(NoSignal::Waiting, None);
+        };
+        if reads_motion && self.motion.is_empty() {
+            return no(NoSignal::Waiting, None);
+        }
+        if now_ns.saturating_sub(newest_ppg.at_ns) > stale
+            || (reads_motion && self.motion.back().is_some_and(|m| now_ns.saturating_sub(m.received_ns) > stale))
+        {
+            return no(NoSignal::Stale, None);
+        }
+        // How far back each stream must reach without a gap: the CNN's grid for both, the pulse window and the motion grid
+        // for the trees.
+        let pulse_ns = u64::from(model.input.window_ms) * NS_PER_MS;
+        let motion_ns = match model.kind {
+            ModelKind::Cnn | ModelKind::CnnMedian => model.cnn_grid.span_ns(),
+            ModelKind::PpgImu => model.motion_grid.span_ns(),
+            ModelKind::PpgOnly => 0,
+        };
+        let pulse_gap_ns = u64::from(model.input.max_gap_ms) * NS_PER_MS;
+        let mut wait: Option<(NoSignal, u64)> = None;
+        let mut later = |why: NoSignal, ns: u64| {
+            if wait.is_none_or(|(_, longest)| ns > longest) {
+                wait = Some((why, ns));
+            }
+        };
+        let covered = now_ns.saturating_sub(first_ppg.at_ns);
+        if covered < pulse_ns {
+            later(NoSignal::WarmingUp, pulse_ns - covered);
+        }
+        let mut previous: Option<u64> = None;
+        for at in self.ppg.iter().map(|s| s.at_ns).filter(|&at| at + pulse_ns > now_ns) {
+            if let Some(before) = previous
+                && at - before > pulse_gap_ns
+            {
+                later(NoSignal::Gap, at + pulse_ns - now_ns);
+            }
+            previous = Some(at);
+        }
+        let mut gyro = Vec::new();
+        if reads_motion {
+            let newest = self.motion.back().expect("not empty").sample.ts_ns;
+            let oldest = self.motion.front().expect("not empty").sample.ts_ns;
+            if newest - oldest < motion_ns {
+                later(NoSignal::WarmingUp, motion_ns - (newest - oldest));
+            }
+            let motion_gap_ns = pinch_inference::imu_onset::MAX_GAP_MS * NS_PER_MS;
+            let mut previous: Option<u64> = None;
+            let horizon = crate::readiness::MOVING_RMS_NS + crate::readiness::READY_CALM_MS * NS_PER_MS;
+            for m in self.motion.iter().filter(|m| m.sample.ts_ns + motion_ns > newest) {
+                let at = m.sample.ts_ns;
+                if let Some(before) = previous
+                    && at - before > motion_gap_ns
+                {
+                    later(NoSignal::Gap, at + motion_ns - newest);
+                }
+                previous = Some(at);
+                if at + horizon >= newest {
+                    gyro.push((at, m.sample.gyro));
+                }
+            }
+        }
+        if let Some((why, ns)) = wait {
+            return no(why, Some(ns));
+        }
+        if !reads_motion {
+            return Readiness::Ready;
+        }
+        from_calm(crate::readiness::calm_ns(&gyro, crate::readiness::READY_CALM_MS * NS_PER_MS))
+    }
+
     /// The scores of the pulse samples after `last_decided` (only the newest, the first time), oldest first, and the raw
     /// timestamp of the last one decided on, whether or not it had inputs. Nothing while the buffer does not yet hold the
     /// model's history (it is warming up). A PPG + IMU model stops at the first sample whose motion has not all arrived.
@@ -767,6 +849,83 @@ pub(crate) mod tests {
             rejected.extend(r);
         }
         (scores, rejected)
+    }
+
+    /// Feeds a fixture's streams as `replay_streams` does (motion 60 ms late), and the model's readiness after each arrival,
+    /// by seconds since the trace began.
+    fn readiness_over(
+        model: &LoadedModel,
+        trace: &[Sample],
+        motion: &[MotionSample],
+    ) -> Vec<(f64, crate::readiness::Readiness)> {
+        let mut p = LabelPipeline::default();
+        p.configure(&[model]);
+        let origin = trace[0].ts_ns;
+        let received = |ts: u64, delay_ms: u64| ts - origin + 10_000_000_000 + delay_ms * NS_PER_MS;
+        let mut arrivals: Vec<(u64, bool, usize)> =
+            (0..trace.len()).map(|i| (received(trace[i].ts_ns, 5), true, i)).collect();
+        arrivals.extend((0..motion.len()).map(|j| (received(motion[j].ts_ns, 60), false, j)));
+        arrivals.sort();
+        let mut out = Vec::new();
+        for (at, pulse, i) in arrivals {
+            if pulse {
+                let mut b = batch(trace, i, i + 1);
+                b.timestamp_ns = trace[i].ts_ns;
+                b.timestamps_ns = vec![trace[i].ts_ns - SDK_BEHIND_NS];
+                p.observe_ppg(&b, at).unwrap();
+            } else {
+                p.observe_orientation(&motion_sample(&motion[i], i as u64), at).unwrap();
+            }
+            out.push(((at - 10_000_000_000) as f64 / 1e9, p.readiness(model, at)));
+        }
+        out
+    }
+
+    fn at(states: &[(f64, crate::readiness::Readiness)], seconds: f64) -> crate::readiness::Readiness {
+        states.iter().find(|(t, _)| *t >= seconds).expect("the trace reaches that far").1
+    }
+
+    #[test]
+    fn a_cnn_is_ready_a_second_after_the_wrist_stops_turning() {
+        use crate::readiness::{NoSignal, Readiness};
+        let model = loaded_median_cnn_100hz();
+        let (trace, mut motion, _) = expected_median_cnn_100hz();
+        let origin = trace[0].ts_ns;
+        let since = |m: &MotionSample| (m.ts_ns - origin) as f64 / 1e9;
+        // The wrist turning fast from 14 to 15 s.
+        for m in motion.iter_mut().filter(|m| (14.0..15.0).contains(&since(m))) {
+            m.gyro = [3.0, 1.0, 0.5];
+        }
+        let states = readiness_over(&model, &trace, &motion);
+        // Until the buffer holds the CNN's 11 s, it cannot score, and says how long that takes.
+        match at(&states, 5.0) {
+            Readiness::NoSignal { why: NoSignal::WarmingUp, ready_in_ms: Some(ms) } => assert!((5_500..=6_500).contains(&ms), "{ms}"),
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(at(&states, 13.0), Readiness::Ready);
+        assert!(matches!(at(&states, 14.8), Readiness::Moving { .. }));
+        assert!(matches!(at(&states, 15.8), Readiness::Settling { .. }), "{:?}", at(&states, 15.8));
+        assert_eq!(at(&states, 16.6), Readiness::Ready);
+    }
+
+    #[test]
+    fn a_gap_in_the_motion_says_how_long_until_it_leaves_the_cnn_s_history() {
+        use crate::readiness::{NoSignal, Readiness};
+        let model = loaded_median_cnn_100hz();
+        let (trace, motion, _) = expected_median_cnn_100hz();
+        let origin = trace[0].ts_ns;
+        // Half a second without motion samples, from 15 s.
+        let motion: Vec<MotionSample> = motion
+            .into_iter()
+            .filter(|m| !(15.0..15.5).contains(&((m.ts_ns - origin) as f64 / 1e9)))
+            .collect();
+        let states = readiness_over(&model, &trace, &motion);
+        assert_eq!(at(&states, 14.0), Readiness::Ready);
+        match at(&states, 17.0) {
+            // The gap ends at 15.5 s and stays in the 10.98 s history until about 26.5 s.
+            Readiness::NoSignal { why: NoSignal::Gap, ready_in_ms: Some(ms) } => assert!((9_000..=10_000).contains(&ms), "{ms}"),
+            other => panic!("{other:?}"),
+        }
     }
 
     #[test]

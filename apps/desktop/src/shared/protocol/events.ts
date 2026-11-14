@@ -353,6 +353,8 @@ export interface AppSettings {
   watchTransport: WatchTransport;
   /** Only let a trained model's gesture start when the hand was still just before it, and train new models on such moments. Off by default. */
   steadyStartsOnly: boolean;
+  /** A short buzz on the watch when the models can catch a gesture again after a wait. */
+  buzzWhenReady: boolean;
 }
 
 /** Mirrors `watch_bridge::WatchTransport`. */

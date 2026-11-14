@@ -754,3 +754,11 @@ html[data-theme="nerv"] .nerv-hand-preview-slot canvas { width: 100% !important;
 html[data-theme="nerv"] .session-badge { color: var(--eva-cyan); border-color: var(--eva-cyan); }
 html[data-theme="nerv"] .session-badge[data-session="1"] { color: var(--eva-green); border-color: var(--eva-green); }
 html[data-theme="nerv"] .session-badge[data-session="2"] { color: var(--eva-amber); border-color: var(--eva-amber); }
+/* The readiness light: a terminal status line, green when a pinch would be caught, amber while it settles. */
+html[data-theme="nerv"] .readiness-light { border: 1px solid var(--eva-frame); border-radius: 0; font-family: var(--font-mono); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--eva-text-muted); }
+html[data-theme="nerv"] .readiness-dot { border-radius: 0; background: var(--eva-green); }
+html[data-theme="nerv"] .readiness-light[data-tone="ok"] { color: var(--eva-green); }
+html[data-theme="nerv"] .readiness-light[data-tone="wait"] { color: var(--eva-amber); border-color: var(--eva-amber); }
+html[data-theme="nerv"] .readiness-light[data-tone="wait"] .readiness-dot { background: var(--eva-amber); }
+html[data-theme="nerv"] .readiness-light[data-tone="off"] .readiness-dot { background: var(--eva-text-muted); }
+html[data-theme="nerv"] .readiness-countdown { color: inherit; }

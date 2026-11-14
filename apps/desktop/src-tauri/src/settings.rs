@@ -131,6 +131,10 @@ pub struct AppSettings {
     /// and train new models on such moments only. Off by default, and for settings files from before it existed.
     #[serde(default)]
     pub steady_starts_only: bool,
+    /// A short buzz on the watch when the models can catch a gesture again after a wait (the wrist moving, a stream gap):
+    /// for when the screen is not in view. Off by default.
+    #[serde(default)]
+    pub buzz_when_ready: bool,
 }
 
 impl Default for AppSettings {
@@ -167,6 +171,7 @@ impl Default for AppSettings {
             watch_sensors_enabled: default_watch_sensors_enabled(),
             watch_transport: WatchTransport::default(),
             steady_starts_only: false,
+            buzz_when_ready: false,
         }
     }
 }

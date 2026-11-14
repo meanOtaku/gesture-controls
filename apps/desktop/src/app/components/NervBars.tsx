@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore, memo } from "react";
 import { getCameraController } from "../../features/camera/cameraService";
 import { droneDevice, getDroneSnapshot, subscribeDrone } from "../../features/drone/droneStatus";
+import { useModelReadiness, type ReadinessState } from "../../features/model-lab/readiness";
 import { AnimatedText, AnimatedWord } from "../../components/app/AnimatedNumber";
 import { useThemeIs } from "../../shared/theme/useThemeIs";
 import { NAV_LABELS, NAV_ORDER, type AppTab, type NavStatusInput } from "./AppNav";
@@ -110,6 +111,19 @@ function Item({ label, tone, text }: { label: string; tone: Tone; text: string }
   );
 }
 
+/** Whether a pinch made now would be caught, while a model runs (see `ReadinessLight`). */
+const READINESS_WORDS: Record<ReadinessState, [Tone, string]> = {
+  ready: ["active", "READY"], settling: ["caution", "HOLD STILL"], moving: ["caution", "MOVING"], warmingUp: ["caution", "STARTING"],
+  gap: ["offline", "SIGNAL DROPPED"], stale: ["offline", "NO SIGNAL"], waiting: ["offline", "NO SIGNAL"], offWrist: ["offline", "OFF WRIST"],
+};
+
+function PinchReadiness() {
+  const { readiness } = useModelReadiness();
+  if (!readiness) return null;
+  const [tone, text] = READINESS_WORDS[readiness.state];
+  return <Item label="PINCH" tone={tone} text={text} />;
+}
+
 function FooterBar({ headphonesConnected, watchConnected, watchWorn, recordingState, cameraOn, drone, now }: NavStatusInput & { cameraOn: boolean; drone: DeviceTones["drone"]; now: Date }) {
   const recording = recordingState === "recording" || recordingState === "arming";
   return (
@@ -124,6 +138,7 @@ function FooterBar({ headphonesConnected, watchConnected, watchWorn, recordingSt
         <Item label="CAMERA" tone={cameraOn ? "active" : "offline"} text={cameraOn ? "ON" : "OFF"} />
         <Item label="DRONE" tone={drone.tone} text={drone.text} />
         <Item label="RECORDER" tone={recording ? "caution" : "offline"} text={recordingState === "arming" ? "ARMING" : recording ? "RECORDING" : "IDLE"} />
+        <PinchReadiness />
       </ul>
       <time className="nerv-footer-clock" dateTime={now.toISOString()}><AnimatedText>{clockText(now)}</AnimatedText></time>
     </footer>
