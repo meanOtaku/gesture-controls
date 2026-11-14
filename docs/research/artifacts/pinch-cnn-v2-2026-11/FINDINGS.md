@@ -113,3 +113,56 @@ where its three channels share one stack with everything else.
 2. Noise-overlay augmentation (recorded everyday wrist motion added to pinches), now possible with the raw-signal builder.
 3. Peak gating in front of the chosen model.
 4. More real-use sessions and everyday noise: still the largest lever, and the only way to widen the 20-pinch live test.
+
+## Round 3 (15 Nov): peak gating, a threshold rule without the test set, noise overlay
+
+**Peak gating** (`gate.py`): a decision may fire only if the raw accelerometer jerk reached a level in the last 600 ms.
+The level is the 10th percentile of the training pinch moments (157 m/s^3). On the 3-network branches + envelope model it
+removed **every** everyday false activation at every threshold from 0.9 to 0.5, and lost **no** test pinch; it passes about
+13% of moments, so the network would run far less often live.
+
+**Noise overlay** (`exp_final.py --copies 2`): each training pinch recording got two copies with wrist motion from the
+training everyday-noise recordings (never the test noise) added to its raw accelerometer and gyroscope.
+
+**Threshold rule** (`bench.choose_threshold_v2`): chosen out of fold on the training recordings only, the highest-catching
+threshold with at most 5 false activations an hour on the training no-gesture recordings (unlabelled time inside pinch
+recordings is not counted), gate applied.
+
+**The honest result: each model at the threshold it chose without seeing the test set**
+
+| Model | Threshold | Live (20) | Moving (102) | Resting (57) | Everyday FA |
+|---|---|---|---|---|---|
+| `ae0a22bf` (active) | 0.99 (its manifest) | 7 | 58 | 47 | 9 (14.8/h) |
+| Branches + warping + envelope, 3 networks, gate | 0.998 | 10 | 69 | 39 | 0 |
+| **+ noise overlay** | **0.995** | **13** | **80** | 44 | **0** |
+
+The candidate with noise overlay catches almost twice the live pinches and 22 more moving pinches than the active model,
+with no everyday false activation against 14.8 an hour; it catches 3 fewer resting pinches.
+
+**At lower thresholds the candidate does better still:**
+
+| Threshold | Live | Moving | Resting | Everyday FA |
+|---|---|---|---|---|
+| no overlay, 0.3 | 17 | 80 | 44 | 0 |
+| overlay, 0.9 | 16 | 81 | 47 | 0 |
+| overlay, 0.7 | 18 | 80 | 49 | 3 (4.9/h) |
+
+**The rule is too cautious, and why.** Out of fold, the held-out no-gesture recordings fire about 11–19 times an hour at
+0.9, where the test noise fires none. The training set has only 30 minutes of everyday noise in two recordings, so a fold
+that holds one out trains on a third to two thirds of it, and over-estimates the false activations the full model makes.
+More everyday-noise recordings would fix this directly; stratified folds that never hold out more than one everyday
+recording would help a little.
+
+**The noise overlay** improves moving (+11) and resting (+5) pinches at the chosen threshold, and live (+3); at the lowest
+thresholds it raises everyday false activations (4.9/h at 0.7), since the copies teach the network that pinches come with
+motion. The gate keeps that in check down to 0.9.
+
+## Phase 2 candidate
+
+Per-sensor branches (accelerometer with its jerk envelope, gyroscope, pulse), warping, noise-overlay augmentation, three
+networks averaged, behind the 600 ms peak gate, at a threshold chosen out of fold. What porting it needs in the app: the
+jerk-envelope channel and the gate in the Rust input code, the branch network in the model file and runtime, and the
+overlay and threshold rule in the trainer, all as a new model type beside the current CNN.
+
+Before porting: record more everyday noise (an hour or more) so the threshold rule stops being cautious, and another
+real-use session for a second live test.

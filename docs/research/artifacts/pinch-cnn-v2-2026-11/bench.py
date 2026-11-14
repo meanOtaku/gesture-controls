@@ -28,7 +28,7 @@ HERE = Path(__file__).resolve().parent
 HL = ROOT / "data/recordings/Hand labeled"
 CACHE = Path(os.environ.get("BENCH_CACHE", Path.home() / "Library/Caches/gesture-controls-pinch-bench"))
 NEGATIVES = ["pinch_hold", "pinch_out", "fist", "hand_open", "everyday_noise", "still", "supported"]
-THRESHOLDS = [0.999, 0.998, 0.995, 0.99, 0.98, 0.97, 0.95, 0.9, 0.85, 0.8, 0.7, 0.6, 0.5]
+THRESHOLDS = [0.999, 0.998, 0.995, 0.99, 0.98, 0.97, 0.95, 0.9, 0.85, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
 P = "gesture-dataset-"
 
 AE0A22BF_TRAIN = [P + n for n in (
@@ -81,6 +81,11 @@ def spec_for(ids: list[str], hz: int | None = None, seed: int = 17, evaluation: 
 
 
 _RECS: dict[str, object] = {}
+
+
+def register(rid: str, rec) -> None:
+    """Adds a recording made here (an augmented copy) under `rid`, so the input cache and `training_data` can use it."""
+    _RECS[rid] = rec
 
 
 def recording(rid: str):
@@ -239,3 +244,36 @@ def save(name: str, results: dict, chosen: float | None = None, extra: dict | No
         np.savez(SCORES / f"{name}.npz", **{f"{rid}|t": t for rid, (t, _) in LAST_TIMELINES.items()},
                  **{f"{rid}|s": s for rid, (_, s) in LAST_TIMELINES.items()})
     print(report(name, results, chosen, notes))
+
+
+def choose_threshold_v2(fit, data: Data, inputs: Inputs = trainer_inputs, name: str = "trainer", hz: int | None = None,
+                        gate=None, budget: float = 5.0, folds: int = 4, seed: int = 17) -> tuple[float, dict]:
+    """A threshold chosen without the test set, for the v2 models. Out of fold on the training recordings (each fold's
+    model never saw the recordings it scores, nor their augmented copies: `data.groups` names the source recording), the
+    highest-catching threshold whose false activations on the NO-GESTURE training recordings (noise, still, supported)
+    stay within `budget` per hour; ties go to the higher threshold. Unlabelled time inside pinch recordings is not
+    counted: it may hold unlabelled pinches, which pushed the trainer's own rule to 0.97-0.99. `gate(rec, times) -> bool`
+    is applied to the scores first, as it will be live."""
+    rng = np.random.default_rng(seed)
+    ids = list(SPLIT["train"]); rng.shuffle(ids)
+    per = {t: dict(caught=0, gestures=0, fa=0, neg_h=0.0) for t in THRESHOLDS}
+    for k in range(folds):
+        held = ids[k::folds]
+        keep = ~np.isin(data.groups, held)
+        predict = fit(Data(data.x[keep], data.y[keep], data.groups[keep]))
+        for rid in held:
+            spec = spec_for([rid], hz, evaluation=[rid])
+            rec = recording(rid)
+            t, s = timeline(spec, rec, rid, predict, inputs, name)
+            if gate is not None:
+                s = s * gate(rec, t)
+            pinch = any(lab == "pinch_in" for _, _, lab in ppg_onset.holds(rec.timestamps_ns, rec.raw_labels))
+            for th in THRESHOLDS:
+                r = label_train.detections(spec, rec, t, s, label_train.policy_for(th, spec.trigger))
+                a = per[th]
+                a["caught"] += r["caught"]; a["gestures"] += r["gestures"]
+                if not pinch:
+                    a["fa"] += r["falseActivations"]; a["neg_h"] += r["negativeNs"] / 3.6e12
+    within = [t for t in THRESHOLDS if per[t]["fa"] / max(per[t]["neg_h"], 1e-9) <= budget]
+    best = max(within, key=lambda t: (per[t]["caught"], t)) if within else max(THRESHOLDS)
+    return float(best), {str(t): v for t, v in per.items()}
