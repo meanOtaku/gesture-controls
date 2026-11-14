@@ -63,9 +63,9 @@ For the hand-labelled pinch-in model, the activation threshold is 0.99, the rele
 \fi
 
 \iffull
-We score each detector over whole recordings. An event that falls within the match window of an eligible annotated start is matched to it one-to-one. A second event during a gesture that was already caught is a repeat. An event during an uncaught gesture but outside its window is late. An event while no gesture is under way is a false activation. For the 500\,ms CNN delay, the match window runs from 300 to 900\,ms after the annotated start. Exclusions and event-merging rules are reported with each experiment.
+We score each detector over whole recordings. An event that falls within the match window of an eligible annotated start is matched to it one-to-one. A second event during a gesture that was already caught is a repeat. An event during an uncaught gesture but outside its match window, whether too early or too late, is counted as outside the match window. An event while no gesture is under way is a false activation. For the 500\,ms CNN delay, the match window runs from 300 to 900\,ms after the annotated start. Exclusions and event-merging rules are reported with each experiment.
 \else
-An event within 300--900\,ms after an eligible annotated start is matched to it one-to-one. A second event during a caught gesture is a repeat, an event during an uncaught gesture but outside its window is late, and any event while no gesture is under way is a false activation.
+An event within 300--900\,ms after an eligible annotated start is matched to it one-to-one. A second event during a caught gesture is a repeat, an event during an uncaught gesture but outside its window, early or late, is outside the match window, and any event while no gesture is under way is a false activation.
 \fi
 
 Event recall and false-activation rate are
@@ -73,7 +73,7 @@ Event recall and false-activation rate are
 R_e=\frac{N_{\mathrm{caught}}}{N_{\mathrm{eligible\ starts}}},\qquad
 \lambda_{\mathrm{FA}}=\frac{N_{\mathrm{false\ events}}}{T_{\mathrm{eligible\ no\ gesture}}/3600},
 \]
-with time in seconds. We also report misses, repeats, late events and latency. Window ROC AUC and window F1 are kept as diagnostics; they are not event-level measures.
+with time in seconds. We also report misses, repeats, events outside the match window, and latency. Window ROC AUC and window F1 are kept as diagnostics; they are not event-level measures.
 
 \iffull
 The exposure calculation needs care. The evaluator takes the span from the first to the last eligible decision and subtracts gesture and excluded intervals, but it does not subtract gaps inside that span where no decisions were made. Such gaps would inflate the no-gesture time. For the hand-labelled model we rebuilt the decision timeline: decisions arrive every 40\,ms in all eight evaluation recordings, with no gap longer than 250\,ms, so its exposure is not inflated. The evaluator should still report coverage directly.
