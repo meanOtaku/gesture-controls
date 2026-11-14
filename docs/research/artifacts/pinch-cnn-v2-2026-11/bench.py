@@ -148,9 +148,31 @@ def timeline(spec, rec, rid: str, predict, inputs: Inputs, name: str):
     return ts, np.asarray(predict(x), dtype=np.float64)
 
 
+SCORES = CACHE / "scores"
+LAST_TIMELINES: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+
+
+def score_timelines(timelines: dict[str, tuple[np.ndarray, np.ndarray]], hz: int | None = None):
+    """`score` for timelines already scored (rid -> (times, scores)), e.g. several models' scores averaged."""
+    out = {g: {t: dict(gestures=0, caught=0, fa=0, neg_h=0.0) for t in THRESHOLDS} for g in GROUPS}
+    for g in GROUPS:
+        for rid in SPLIT["test"][g]:
+            spec = spec_for([rid], hz, evaluation=[rid])
+            rec = recording(rid)
+            t, s = timelines[rid]
+            for th in THRESHOLDS:
+                r = label_train.detections(spec, rec, t, s, label_train.policy_for(th, spec.trigger))
+                a = out[g][th]
+                a["gestures"] += r["gestures"]; a["caught"] += r["caught"]
+                a["fa"] += r["falseActivations"]; a["neg_h"] += r["negativeNs"] / 3.6e12
+    return out
+
+
 def score(predict, inputs: Inputs = trainer_inputs, name: str = "trainer", hz: int | None = None,
           ids: list[str] | None = None) -> dict[str, dict[float, dict[str, float]]]:
-    """Per test group and threshold: gestures, caught, false activations and hours without the gesture."""
+    """Per test group and threshold: gestures, caught, false activations and hours without the gesture. The scored
+    timelines are kept in LAST_TIMELINES (and written by `save`) so that runs can be combined later (`ensemble.py`)."""
+    LAST_TIMELINES.clear()
     out = {g: {t: dict(gestures=0, caught=0, fa=0, neg_h=0.0) for t in THRESHOLDS} for g in GROUPS}
     for g in GROUPS:
         for rid in SPLIT["test"][g]:
@@ -159,6 +181,7 @@ def score(predict, inputs: Inputs = trainer_inputs, name: str = "trainer", hz: i
             spec = spec_for([rid], hz, evaluation=[rid])
             rec = recording(rid)
             t, s = timeline(spec, rec, rid, predict, inputs, name)
+            LAST_TIMELINES[rid] = (t, s)
             for th in THRESHOLDS:
                 r = label_train.detections(spec, rec, t, s, label_train.policy_for(th, spec.trigger))
                 a = out[g][th]
@@ -211,4 +234,8 @@ def save(name: str, results: dict, chosen: float | None = None, extra: dict | No
     (out / f"{name}.json").write_text(json.dumps({"name": name, "chosen": chosen, "results": {
         g: {str(t): v for t, v in r.items()} for g, r in results.items()}, **(extra or {})}, indent=1) + "\n")
     (out / f"{name}.md").write_text(report(name, results, chosen, notes))
+    if LAST_TIMELINES:
+        SCORES.mkdir(parents=True, exist_ok=True)
+        np.savez(SCORES / f"{name}.npz", **{f"{rid}|t": t for rid, (t, _) in LAST_TIMELINES.items()},
+                 **{f"{rid}|s": s for rid, (_, s) in LAST_TIMELINES.items()})
     print(report(name, results, chosen, notes))

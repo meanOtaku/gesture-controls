@@ -3,7 +3,8 @@ epochs, batch, optimiser, cosine schedule, positive weight, negative cap and per
 40 ms shift, pulse blanked), so that only the option under test changes.
 
 Options:
-  --arch trainer|branches  the trainer's network, or one branch per sensor (accelerometer, gyroscope, pulse) joined partway
+  --arch trainer|branches|inception  (inception: InceptionTime scaled to 1 s, nets_extra.py)
+                           the trainer's network, or one branch per sensor (accelerometer, gyroscope, pulse) joined partway
                            (a shared convolution over the branches' maps) and at the end (each branch's pooled features beside
                            the shared ones)
   --hz 100|50              the trainer's inputs at this rate
@@ -25,9 +26,11 @@ import torch
 from torch import nn
 
 import bench
+import inputs_v2
 from label_trainer import cnn
 
 PULSE = slice(6, 9)
+GROUPS = None   # per-sensor channel indices for the branch network (inputs_v2), None for the trainer's 9
 
 
 def with_jerk(w: np.ndarray) -> np.ndarray:
@@ -36,7 +39,7 @@ def with_jerk(w: np.ndarray) -> np.ndarray:
 
 
 def windows_of(x: np.ndarray, hz: int, jerk: bool) -> np.ndarray:
-    w = x.reshape(len(x), 9, hz).astype(np.float32)
+    w = x.reshape(len(x), x.shape[1] // hz, hz).astype(np.float32)
     return with_jerk(w).astype(np.float32) if jerk else w
 
 
@@ -69,10 +72,10 @@ class TrainerNet(nn.Module):
 class BranchNet(nn.Module):
     """One branch per sensor, joined partway and at the end."""
 
-    def __init__(self, channels, hz):
+    def __init__(self, channels, hz, groups=None):
         super().__init__()
-        accel = [0, 1, 2] + list(range(9, channels))      # jerk channels go with the accelerometer
-        self.groups = [accel, [3, 4, 5], [6, 7, 8]]
+        accel = [0, 1, 2] + list(range(9, channels))      # scaled-jerk channels go with the accelerometer
+        self.groups = groups or [accel, [3, 4, 5], [6, 7, 8]]
         d = dilations(hz)
         self.branches = nn.ModuleList([conv_stack(len(g), [16, 16], d[:2])[0] for g in self.groups])
         self.shared, c = conv_stack(16 * len(self.groups), [32, 64] if hz == 100 else [64], d[2:])
@@ -155,7 +158,11 @@ def make_fit(a):
             nets = []
             for m in range(a.members):
                 torch.manual_seed(a.seed + m)
-                net = (BranchNet if a.arch == "branches" else TrainerNet)(w.shape[1], a.hz)
+                if a.arch == "inception":
+                    from nets_extra import InceptionNet
+                    net = InceptionNet(w.shape[1], a.hz)
+                else:
+                    net = (BranchNet(w.shape[1], a.hz, GROUPS) if a.arch == "branches" else TrainerNet(w.shape[1], a.hz))
                 nets.append(train_one(net, w, y, a.seed + m, a.warp, keep=keep))
             return nets
 
@@ -187,11 +194,15 @@ def make_fit(a):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--arch", default="trainer", choices=["trainer", "branches"])
+    ap.add_argument("--arch", default="trainer", choices=["trainer", "branches", "inception"])
     ap.add_argument("--hz", type=int, default=100, choices=[50, 100])
     ap.add_argument("--jerk", action="store_true")
     ap.add_argument("--warp", action="store_true")
     ap.add_argument("--hard", action="store_true")
+    ap.add_argument("--rjerk", action="store_true", help="jerk from the raw accelerometer (inputs_v2)")
+    ap.add_argument("--env", action="store_true", help="the raw jerk's envelope (inputs_v2)")
+    ap.add_argument("--mag", action="store_true", help="|accelerometer| and |gyroscope| (inputs_v2)")
+    ap.add_argument("--smooth", type=int, default=1, help="causal moving average over this many ticks first (inputs_v2)")
     ap.add_argument("--members", type=int, default=1)
     ap.add_argument("--oof", action="store_true")
     ap.add_argument("--seed", type=int, default=17)
@@ -199,16 +210,25 @@ def main():
     name = (f"cnn-{a.arch}-{a.hz}hz" + ("-jerk" if a.jerk else "") + ("-warp" if a.warp else "") + ("-hard" if a.hard else "")
             + f"-m{a.members}" + (f"-s{a.seed}" if a.seed != 17 else "")
             + (f"-data-{os.environ['BENCH_TRAIN']}" if os.environ.get("BENCH_TRAIN") else ""))
-    data = bench.training_data(hz=a.hz)
+    global GROUPS
+    v2 = a.rjerk or a.env or a.mag or a.smooth > 1
+    if v2:
+        inputs, input_name = inputs_v2.make(a.rjerk, a.env, a.mag, a.smooth)
+        GROUPS = inputs_v2.channel_groups(a.rjerk, a.env, a.mag)[0]
+        name += input_name[2:]
+    else:
+        inputs, input_name = bench.trainer_inputs, "trainer"
+    data = bench.training_data(inputs, input_name, a.hz)
     print(f"{name}: {len(data.y)} training moments, {int(data.y.sum())} positive", flush=True)
     fit = make_fit(a)
     chosen = None
     if a.oof:
-        chosen, replay = bench.choose_threshold_oof(fit, data, hz=a.hz)
+        chosen, replay = bench.choose_threshold_oof(fit, data, inputs, input_name, a.hz)
         print(f"  threshold chosen out of fold: {chosen}", flush=True)
     predict = fit(data)
-    res = bench.score(predict, hz=a.hz)
-    bench.save(name, res, chosen, vars(a), notes=f"CNN `{a.arch}` at {a.hz} Hz" + (", jerk channels" if a.jerk else "")
+    res = bench.score(predict, inputs, input_name, a.hz)
+    bench.save(name, res, chosen, vars(a), notes=f"CNN `{a.arch}` at {a.hz} Hz" + (", scaled-jerk channels" if a.jerk else "")
+               + (f", raw-signal inputs `{input_name}`" if v2 else "")
                + (", time and magnitude warping" if a.warp else "") + f", {a.members} network(s), seed {a.seed}, "
                + ("retrained with hard negatives." if a.hard else "trained like the trainer (no hard-negative pass).") + ("" if a.oof else " No out-of-fold threshold: compare at matched rates."))
 

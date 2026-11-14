@@ -42,11 +42,12 @@ uv run --isolated --no-project --python 3.13 --with aeon --with torch --with sci
 ## Plan (fastest first)
 
 1. MiniRocket on the current inputs (minutes, no GPU).
-2. The current CNN with new inputs: jerk and jerk envelope, orientation-independent channels, smoothing before 100 Hz.
+2. The current CNN with new inputs from the raw signal (`inputs_v2.py`; `--rjerk --env --mag --smooth k`): jerk and jerk
+   envelope, orientation-independent channels, smoothing before 100 Hz.
 3. Augmentation: time and magnitude warping, small rotations, recorded everyday wrist motion overlaid on pinches.
-4. Per-sensor branches (accelerometer, gyroscope, pulse), joined partway and at the end.
-5. InceptionTime.
-6. Ensembles of the best (50 + 100 Hz, seeds); peak gating in front of the winner.
+4. Per-sensor branches (accelerometer, gyroscope, pulse), joined partway and at the end (`exp_cnn.py --arch branches`).
+5. InceptionTime (`--arch inception`, `nets_extra.py`).
+6. Ensembles of the best (`ensemble.py`, from the scores `bench.save` keeps in the cache); peak gating in front of the winner.
 
 ## Results
 
