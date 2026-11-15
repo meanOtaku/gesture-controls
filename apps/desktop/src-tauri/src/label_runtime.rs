@@ -2038,9 +2038,9 @@ mod tests {
         assert_eq!(t.update(vec![view("pinch_in", "ready", None)], 0), (true, false));
         assert_eq!(t.update(vec![view("pinch_in", "ready", None)], SEC / 10), (false, false), "nothing changed");
         // The wrist moves, then settles: sent as it changes; a countdown that keeps its deadline is not sent again.
-        assert_eq!(t.update(vec![view("pinch_in", "moving", Some(900))], SEC).0, true);
-        assert_eq!(t.update(vec![view("pinch_in", "settling", Some(1_000))], 2 * SEC).0, true);
-        assert_eq!(t.update(vec![view("pinch_in", "settling", Some(900))], 2 * SEC + SEC / 10).0, false);
+        assert!(t.update(vec![view("pinch_in", "moving", Some(900))], SEC).0);
+        assert!(t.update(vec![view("pinch_in", "settling", Some(1_000))], 2 * SEC).0);
+        assert!(!t.update(vec![view("pinch_in", "settling", Some(900))], 2 * SEC + SEC / 10).0);
         // Ready again after 2 s of waiting: one buzz.
         assert_eq!(t.update(vec![view("pinch_in", "ready", None)], 3 * SEC), (true, true));
         // A quick wobble ends too soon to buzz, and so does one right after a buzz.

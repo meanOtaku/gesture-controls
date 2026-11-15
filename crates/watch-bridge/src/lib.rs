@@ -981,7 +981,7 @@ async fn run_ble_sessions(
         // it notifies nothing. Reaching "connected" on a link that has never
         // carried an envelope would misreport an unapproved pairing as live.
         let trusted = tokio::select! {
-            trusted = await_watch_trust(&mut link, &shared) => trusted,
+            trusted = await_watch_trust(&mut link, shared) => trusted,
             _ = cancel.cancelled() => {
                 link.close().await;
                 break;
@@ -1029,7 +1029,7 @@ async fn run_ble_sessions(
         let outcome = tokio::select! {
             end = run_connection(
                 &mut link,
-                &shared,
+                shared,
                 commands,
                 sensor_commands,
                 sensor_rate_commands,
