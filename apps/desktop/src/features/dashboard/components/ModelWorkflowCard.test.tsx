@@ -19,7 +19,7 @@ describe("the making-a-model card", () => {
       command === "list_model_datasets" ? ["a", "b", "c", "d"].map((id) => ({ id, originalFilename: id, importedAt: "", label: "pinch", rowCount: 1, contentSha: id })) : [],
     );
     render(<ModelWorkflowCard />);
-    expect(await screen.findByText("Label (next)")).toBeInTheDocument();
+    expect(await screen.findByText("Next: Label.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Label the next →" }));
     expect(appNavigation.takeLabellingFocus()).toEqual({ datasetId: "a", atMs: 0 });
   });

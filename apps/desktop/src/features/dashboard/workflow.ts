@@ -25,7 +25,7 @@ export function workflowSteps(input: { recorderRecordings: number; datasets: Dat
     {
       key: "record",
       title: "Record",
-      status: `${input.recorderRecordings} from the Recorder, ${datasets.length} in Model Lab${datasets.length < ENOUGH_RECORDINGS ? `: record at least ${ENOUGH_RECORDINGS}, in different conditions` : ""}.`,
+      status: `${input.recorderRecordings} from the Recorder, ${datasets.length} in Recordings${datasets.length < ENOUGH_RECORDINGS ? `: record at least ${ENOUGH_RECORDINGS}, in different conditions` : ""}.`,
       complete: datasets.length >= ENOUGH_RECORDINGS,
       tab: "recorder",
       action: "Record →",

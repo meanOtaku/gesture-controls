@@ -1,4 +1,4 @@
-import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
@@ -11,8 +11,8 @@ import type { DatasetSummary } from "../../model-lab/types";
 import { workflowSteps, type WorkflowStep } from "../workflow";
 
 /**
- * Making a model, step by step: record, label, clean, train, and the final test, with where each stands and the way to
- * the next. Read from what the app already has; nothing here changes it.
+ * Making a model: record, label, clean, train, and the final test. Says only the next step, where it stands and the way
+ * to it, with how many are done. Read from what the app already has; nothing here changes it.
  */
 export function ModelWorkflowCard() {
   const [steps, setSteps] = useState<WorkflowStep[] | null>(null);
@@ -39,25 +39,25 @@ export function ModelWorkflowCard() {
     if (step.key === "label" && firstUnreviewed) appNavigation.openInLabelling({ datasetId: firstUnreviewed, atMs: 0 });
     else appNavigation.open(step.tab);
   };
+  const step = next === -1 ? null : steps[next];
   return (
     <Card role="region" aria-label="Making a model">
       <CardHeader>
         <SectionHeader
           title="Making a model"
           description="Record, label, clean, train, then test on a day the model has never seen."
-          status={<Badge variant="secondary">{<AnimatedNumber value={steps.filter((step) => step.complete).length} />} / {<AnimatedNumber value={steps.length} />}</Badge>}
+          status={<Badge variant="secondary">{<AnimatedNumber value={steps.filter((done) => done.complete).length} />} / {<AnimatedNumber value={steps.length} />}</Badge>}
         />
       </CardHeader>
-      <CardContent>
-        <ol className="setup-steps">
-          {steps.map((step, index) => (
-            <li key={step.key} data-complete={step.complete} aria-current={index === next ? "step" : undefined}>
-              <span className="step-number"><AnimatedText>{step.complete ? "✓" : String(index + 1)}</AnimatedText></span>
-              <div><strong>{step.title}{index === next ? " (next)" : ""}</strong><p>{step.status}</p></div>
-              <Button type="button" variant={index === next ? "default" : "outline"} onClick={() => go(step)}>{step.key === "label" && firstUnreviewed ? "Label the next →" : step.action}</Button>
-            </li>
-          ))}
-        </ol>
+      <CardContent className="flex flex-wrap items-center justify-between gap-3">
+        {step ? (
+          <>
+            <span className="text-sm"><strong>Next: {step.title}.</strong> {step.status}</span>
+            <Button type="button" onClick={() => go(step)}>{step.key === "label" && firstUnreviewed ? "Label the next →" : step.action}</Button>
+          </>
+        ) : (
+          <span className="text-sm">Every step is done.</span>
+        )}
       </CardContent>
     </Card>
   );

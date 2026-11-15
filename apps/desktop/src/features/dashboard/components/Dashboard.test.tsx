@@ -45,6 +45,14 @@ describe("Dashboard", () => {
     expect(screen.getByText(/the arrow or \+\/- keys also change the volume while the knob is visible/)).toBeInTheDocument();
   });
 
+  it("shrinks the setup checklist to a line once the watch is connected, with the steps folded beneath", () => {
+    const { container } = render(<Dashboard status={null} watchStatus={{ connected: true } as WatchStatus} />);
+    const checklist = within(within(container).getByRole("region", { name: "Setup checklist" }));
+    expect(checklist.getByText("The watch is ready.")).toBeInTheDocument();
+    expect(checklist.getByText(/Setup steps/)).toBeInTheDocument();
+    expect(checklist.queryByText("Get your devices ready")).toBeNull();
+  });
+
   it("keeps device errors visible on the overview and routes setup actions", () => {
     const routes: string[] = [];
     render(<Dashboard status={null} calibrationError="Volume backend unavailable" onNavigate={(view) => routes.push(view)} />);

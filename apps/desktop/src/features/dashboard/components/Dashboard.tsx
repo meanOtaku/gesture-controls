@@ -14,6 +14,7 @@ import { CalibrationPanel } from "./CalibrationPanel";
 import { RecipesCard } from "./RecipesCard";
 import { HeadphoneTelemetryPanel } from "./HeadphoneTelemetryPanel";
 import { ModelWorkflowCard } from "./ModelWorkflowCard";
+import { PinchControlCard } from "./PinchControlCard";
 import { WatchPowerCard } from "./WatchPowerCard";
 import { OverviewSection } from "./OverviewSection";
 import { WatchSensorsOffNote } from "./WatchSensorsOffNote";
@@ -109,6 +110,7 @@ export function Dashboard({
         />
       )}
 
+      {view === "main" && <PinchControlCard />}
       {view === "main" && <ModelWorkflowCard />}
 
       {view === "headphone" && !connected && headDiagnostic && (
