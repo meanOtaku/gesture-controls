@@ -54,9 +54,8 @@ export function GestureLibraryPage() {
       <main className="shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Gesture library</h1>
-          <p className="subtitle">Define gestures from your hand's shape, calibrate them by showing them to the camera, and see them recognised live.</p>
+          <p className="subtitle">Hand shapes the camera recognises. No watch needed.</p>
         </div>
       </header>
       <Card role="region" aria-label="Edit gesture">
@@ -88,9 +87,8 @@ export function GestureLibraryPage() {
     <main className="shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Gesture library</h1>
-          <p className="subtitle">Define gestures from your hand's shape, calibrate them by showing them to the camera, and see them recognised live.</p>
+          <p className="subtitle">Hand shapes the camera recognises. No watch needed.</p>
         </div>
       </header>
       <Card role="region" aria-label="Gesture library">

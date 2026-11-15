@@ -25,7 +25,6 @@ export function VirtualDevicesPage({ automation, onMakeRecipe }: VirtualDevicesP
     <main className="shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Virtual devices</h1>
           <p className="subtitle">The knobs and faders your wrist movements turn, and what they control.</p>
         </div>

@@ -79,9 +79,8 @@ export function Dashboard({
     <main className="shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">Spatial Gesture Control</p>
           <h1>{view === "main" ? "Control center" : view === "headphone" ? "Headphones" : "Galaxy Watch"}</h1>
-          <p className="subtitle">{view === "main" ? "Connection status and controls for your gesture-control devices." : view === "headphone" ? "Sony head-tracker telemetry and calibration." : "Watch connection, sensor streams, and button status."}</p>
+          <p className="subtitle">{view === "main" ? "Your devices and gestures at a glance." : view === "headphone" ? "Head tracking and calibration." : "Connection, battery and sensors."}</p>
         </div>
         <div className={`connection ${view === "watch" ? (watchConnected ? "online" : "offline") : (connected ? "online" : "offline")}`}>
           <span className="pulse" />

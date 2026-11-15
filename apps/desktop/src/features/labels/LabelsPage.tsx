@@ -14,9 +14,8 @@ export function LabelsPage({ onOpen }: { onOpen?: (tab: UsageTab) => void }) {
     <main className="shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Labels</h1>
-          <p className="subtitle">The names of the gestures and activities the app knows. Make them here once and use them in recordings, the Gesture library, Model Lab and recipes. Recording and training happen in their own tabs.</p>
+          <p className="subtitle">The gesture and activity names used by recordings, models and recipes.</p>
         </div>
       </header>
       {!catalogue.desktopAvailable && (

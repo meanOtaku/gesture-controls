@@ -33,10 +33,9 @@ export function ModelLab({ onInspectModel, onOpenNetworkLab }: { /** Opens the N
     <main className="shell model-lab-shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Model Lab</h1>
           <p className="subtitle">
-            Teach the app a gesture one label at a time. Each label has its own model; switch on the ones you want, and use them as steps in a recipe.
+            Train, activate and watch one model per label.
           </p>
         </div>
       </header>

@@ -88,9 +88,8 @@ export function NetworkLab({ modelId, onModelChange }: { modelId: string | null;
     <main className="shell model-lab-shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Network lab</h1>
-          <p className="subtitle">The two kinds of model the app trains, and a look inside each one you have.</p>
+          <p className="subtitle">How each kind of model works, and a look inside yours.</p>
         </div>
       </header>
 

@@ -86,7 +86,7 @@ export function LiveSignalsPage() {
 
   return <main className="shell telemetry-shell">
     <header className="hero">
-      <div><p className="eyebrow">Spatial Gesture Control</p><h1>Live signals</h1><p className="subtitle">Watch what your sensors are sending right now. To record a session, use the Recorder.</p></div>
+      <div><h1>Live signals</h1><p className="subtitle">What your sensors are sending right now.</p></div>
       <div className={`connection ${datasetRecording ? "online" : "offline"}`}><span className="pulse" /><AnimatedWord>{datasetRecording ? "Recording" : "Not recording"}</AnimatedWord></div>
     </header>
     <StreamStatus />

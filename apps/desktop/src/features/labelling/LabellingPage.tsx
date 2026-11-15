@@ -684,9 +684,8 @@ export function LabellingPage() {
     <main className="shell labelling-shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Labelling</h1>
-          <p className="subtitle">Mark gestures by hand on a recording's signals. Hand labels win over the recorder's and the camera's wherever you set them.</p>
+          <p className="subtitle">Mark gestures by hand. Hand labels win over the recorder's and the camera's.</p>
         </div>
       </header>
 

@@ -6,7 +6,7 @@ export function RecordingsPage() {
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
   return <main className="shell telemetry-shell">
     <header className="hero">
-      <div><p className="eyebrow">Spatial Gesture Control</p><h1>Recordings</h1><p className="subtitle">Look inside the sessions you have saved.</p></div>
+      <div><h1>Recordings</h1><p className="subtitle">Look inside the sessions you have saved.</p></div>
     </header>
     {desktopAvailable ? (
       <>

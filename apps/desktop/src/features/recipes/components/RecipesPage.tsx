@@ -60,7 +60,6 @@ export function RecipesPage({ automation, calibration, pendingRecipeIds, error, 
     <main className="shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Recipes</h1>
           <p className="subtitle">Chain gestures together to control your computer.</p>
         </div>

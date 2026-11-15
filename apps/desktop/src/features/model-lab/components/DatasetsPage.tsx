@@ -85,10 +85,9 @@ export function DatasetsPage() {
     <main className="shell model-lab-shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Datasets</h1>
           <p className="subtitle">
-            Every recording the app can label, train and test on. Name them, group them and seal a day for the final test here; every other tab shows them by the same name.
+            Every recording to label, train and test on: name, group and seal them here.
           </p>
         </div>
       </header>

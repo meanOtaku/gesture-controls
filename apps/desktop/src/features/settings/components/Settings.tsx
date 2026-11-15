@@ -96,9 +96,8 @@ export function Settings({
     <main className="shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Settings</h1>
-          <p className="subtitle">Grouped by what they affect. Typed values are applied together with Apply changes, without restarting; switches and choices take effect at once.</p>
+          <p className="subtitle">Typed values apply with Apply changes; switches apply at once.</p>
         </div>
       </header>
 

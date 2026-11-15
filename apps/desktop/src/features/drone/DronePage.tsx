@@ -328,9 +328,8 @@ export function DronePage() {
     <main className="shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Drone</h1>
-          <p className="subtitle">Tilt your wrist to move a Wi-Fi drone. Hold the watch button to steer, and let go to stop steering.</p>
+          <p className="subtitle">Hold the watch button and tilt your wrist to steer a Wi-Fi drone.</p>
         </div>
       </header>
 

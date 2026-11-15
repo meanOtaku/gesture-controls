@@ -121,9 +121,8 @@ export function GesturesPage({ heuristics, watchConnected, stemDown, shakeCount,
     <main className="shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">Spatial Gesture Control</p>
           <h1>Gestures</h1>
-          <p className="subtitle">Try what is working. Each gesture lights up when the app recognises it. Nothing here controls your computer; that is what recipes are for.</p>
+          <p className="subtitle">Try each gesture: it lights up when recognised. Nothing here controls your computer.</p>
         </div>
       </header>
 
