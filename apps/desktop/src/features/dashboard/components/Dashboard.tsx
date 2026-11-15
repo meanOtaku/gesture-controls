@@ -1,8 +1,6 @@
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { AnimatedWord } from "../../../components/app/AnimatedNumber";
 import { Card, CardContent } from "../../../components/ui/card";
-import { Input } from "../../../components/ui/input";
-import { Label } from "../../../components/ui/label";
 import type {
   AutomationState,
   CalibrationState,
@@ -17,7 +15,7 @@ import { HeadphoneTelemetryPanel } from "./HeadphoneTelemetryPanel";
 import { ModelWorkflowCard } from "./ModelWorkflowCard";
 import { WatchPowerCard } from "./WatchPowerCard";
 import { OverviewSection } from "./OverviewSection";
-import { WatchSensorControls } from "./WatchSensorControls";
+import { WatchSensorsOffNote } from "./WatchSensorsOffNote";
 import { LinkHealthCard } from "./LinkHealthCard";
 import { WatchTelemetryPanel } from "./WatchTelemetryPanel";
 import { WatchWellnessPanel } from "./WatchWellnessPanel";
@@ -41,7 +39,6 @@ interface DashboardProps {
   onRemoveLocation?: (target: CalibrationTarget) => void;
   automation?: AutomationState | null;
   onSetRecipeEnabled?: (id: string, enabled: boolean) => void;
-  onSetSensorEnabled?: (sensor: string, enabled: boolean) => void;
 }
 
 const DEFAULT_CALIBRATION: CalibrationState = {
@@ -71,7 +68,6 @@ export function Dashboard({
   onRemoveLocation = () => undefined,
   automation = null,
   onSetRecipeEnabled = () => undefined,
-  onSetSensorEnabled = () => undefined,
 }: DashboardProps) {
   const connected = status?.connected === true;
   const calibrationState = calibration ?? DEFAULT_CALIBRATION;
@@ -169,6 +165,7 @@ export function Dashboard({
         />
       )}
 
+      {view === "watch" && <WatchSensorsOffNote watchStatus={watchStatus ?? null} />}
       {view === "watch" && (
         <>
           <WatchTelemetryPanel watchStatus={watchStatus ?? null} />
@@ -177,26 +174,7 @@ export function Dashboard({
         </>
       )}
       {view === "watch" && <WatchWellnessPanel watchStatus={watchStatus ?? null} />}
-      {view === "watch" && (
-        <WatchSensorControls
-          watchStatus={watchStatus ?? null}
-          isPending={isPending}
-          onSetSensorEnabled={onSetSensorEnabled}
-        />
-      )}
 
-      {view === "main" && <details className="connection-details"><summary>Connection details</summary>
-        <Card><CardContent className="flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <p className="eyebrow">Settings</p>
-            <h2>Sony UDP input</h2>
-          </div>
-          <Label className="flex flex-col items-start gap-1 min-w-[150px] flex-1">Host<Input value="127.0.0.1" readOnly /></Label>
-          <Label className="flex flex-col items-start gap-1 min-w-[150px] flex-1">JSON port<Input value="4243" readOnly /></Label>
-          <Label className="flex flex-col items-start gap-1 min-w-[150px] flex-1">Watch WebSocket<Input value="0.0.0.0:8766/ws/watch" readOnly /></Label>
-          <p className="hint basis-full max-w-none">Sony tracking stays on this computer; Watch data arrives over your local network. On macOS, use the arrow or +/- keys to change system volume while the knob is visible.</p>
-        </CardContent></Card>
-      </details>}
     </main>
   );
 }

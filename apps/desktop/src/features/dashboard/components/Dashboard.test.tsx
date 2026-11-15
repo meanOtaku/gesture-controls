@@ -40,6 +40,11 @@ describe("Dashboard", () => {
     expect(screen.getByText("Connect the Watch to begin")).toBeInTheDocument();
   });
 
+  it("tells a connected user how to drive the knob, keys included", () => {
+    render(<Dashboard status={connected} calibration={calibrationFixture()} />);
+    expect(screen.getByText(/the arrow or \+\/- keys also change the volume while the knob is visible/)).toBeInTheDocument();
+  });
+
   it("keeps device errors visible on the overview and routes setup actions", () => {
     const routes: string[] = [];
     render(<Dashboard status={null} calibrationError="Volume backend unavailable" onNavigate={(view) => routes.push(view)} />);
@@ -112,7 +117,8 @@ describe("Dashboard", () => {
     const dashboard = within(container);
     expect(dashboard.getByText("Waiting for Sony bridge")).toBeInTheDocument();
     expect(dashboard.getByText("Sony bridge not detected")).toBeInTheDocument();
-    expect(dashboard.getByText(/on macos, use the arrow or \+\/- keys to change system volume/i)).toBeInTheDocument();
+    // The fixed host and port fields are gone from the home page.
+    expect(dashboard.queryByText("Connection details")).not.toBeInTheDocument();
   });
 
   it("surfaces a native-provider diagnostic instead of the generic waiting copy", () => {
@@ -274,22 +280,11 @@ describe("Dashboard", () => {
     sweatLossLast: null,
   };
 
-  it("shows pending feedback and prevents a duplicate sensor toggle while one is in flight", () => {
-    const toggles: Array<[string, boolean]> = [];
-    const { container } = render(
-      <Dashboard
-        view="watch"
-        status={null}
-        watchStatus={watchStatus}
-        isPending={(key) => key === "sensor:orientation"}
-        onSetSensorEnabled={(sensor, enabled) => toggles.push([sensor, enabled])}
-      />,
-    );
-    const dashboard = within(container);
-    expect(dashboard.getByText("Updating…")).toBeInTheDocument();
-    const orientationSwitch = dashboard.getByRole("switch", { name: /Orientation \(rotation vector\)/ });
-    expect(orientationSwitch).toBeDisabled();
-    fireEvent.click(orientationSwitch);
-    expect(toggles).toEqual([]);
+  it("leaves the sensor switches to Settings, and says which sensors are off", () => {
+    const { container, rerender } = render(<Dashboard view="watch" status={null} watchStatus={watchStatus} />);
+    expect(within(container).queryByRole("switch")).toBeNull();
+    rerender(<Dashboard view="watch" status={null} watchStatus={{ ...watchStatus, connected: true, ppgState: "idle" }} />);
+    expect(within(container).getByText(/Pulse \(PPG\)/)).toBeInTheDocument();
+    expect(within(container).getByRole("button", { name: "Change in Settings" })).toBeInTheDocument();
   });
 });

@@ -95,8 +95,6 @@ html.overlay-document,html.overlay-document body,html.overlay-document #root{wid
 .setup-steps p,.connection-help p,.connection-help li { color:var(--ink); font-size:.9rem; line-height:1.6; }
 .setup-steps p { margin:5px 0 0; }
 .interaction-guide { padding:16px; margin:12px 0 0; border-radius:12px; background:color-mix(in srgb,var(--cyan) 4%,transparent); color:var(--ink); line-height:1.7; font-size:.9rem; }
-.connection-details { margin-top:24px; color:var(--ink); }
-.connection-details summary { cursor:pointer; padding:14px 0; }
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible { outline:2px solid var(--cyan); outline-offset:4px; }
 @media(max-width:760px) {
   .setup-steps li { flex-wrap:wrap; align-items:flex-start; }

@@ -198,7 +198,6 @@ function MainApp() {
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<OverlayState>(emptyOverlay);
   const [volumeError, setVolumeError] = useState<string | null>(null);
-  const [sensorControlError, setSensorControlError] = useState<string | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
@@ -592,20 +591,6 @@ function MainApp() {
     });
   };
 
-  const setSensorEnabled = async (sensor: string, enabled: boolean) => {
-    if (!inTauri) return;
-    await run(`sensor:${sensor}`, async () => {
-      try {
-        setSensorControlError(null);
-        await invoke("set_sensor_enabled", { sensor, enabled });
-        OperationFeedback.success("Sensor control", `${sensor.replaceAll("_", " ")} ${enabled ? "enabled" : "disabled"}.`);
-      } catch (error) {
-        setSensorControlError(String(error));
-        OperationFeedback.error("Sensor control", String(error));
-      }
-    });
-  };
-
   // The camera follows the recording and adds its landmarks to each bundle, whichever tab is showing.
   useEffect(() => bindCameraToRecording(), []);
   useEffect(() => watchCameraDevices(), []);
@@ -633,7 +618,7 @@ function MainApp() {
   const pendingRecipeKey = (automation?.recipes ?? []).filter((recipe) => isPending(`recipe:${recipe.id}`)).map((recipe) => recipe.id).join(",");
   const pendingRecipeIds = useMemo(() => (pendingRecipeKey === "" ? [] : pendingRecipeKey.split(",")), [pendingRecipeKey]);
 
-  const applicationError = [calibrationError, volumeError, sensorControlError, actionError]
+  const applicationError = [calibrationError, volumeError, actionError]
     .filter((error): error is string => error !== null)
     .join(" · ") || null;
 
@@ -706,7 +691,6 @@ function MainApp() {
         onUpdateCalibration={(threshold, dwell) => { void updateCalibration(threshold, dwell); }}
         onAddLocation={(name) => { void addLocation(name); }}
         onRemoveLocation={(target) => { void removeLocation(target); }}
-        onSetSensorEnabled={(sensor, enabled) => { void setSensorEnabled(sensor, enabled); }}
       />
     )}
     {activeTab === "recipes" && (

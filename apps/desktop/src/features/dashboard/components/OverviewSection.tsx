@@ -92,7 +92,7 @@ export function OverviewSection({ connected, calibrated, watchConnected, gesture
           </ol>
           <p className="interaction-guide">
             {connected
-              ? "Look top-right to show the knob. Hold the Watch button, rotate your wrist, then release. Press Escape to hide the knob."
+              ? "Look top-right to show the knob. Hold the Watch button, rotate your wrist, then release. Press Escape to hide the knob. On macOS, the arrow or +/- keys also change the volume while the knob is visible."
               : "With the watch alone: make a recipe from a shake, a tap or a hammer on your palm under Recipes, and try each gesture under Gestures. A double tap can switch a volume dial on and off."}
           </p>
         </CardContent>
