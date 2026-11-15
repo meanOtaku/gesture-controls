@@ -25,7 +25,7 @@ export function shortcutGroups(mac: boolean): { title: string; keys: [string, st
         ["0", "Choose “Nothing here”"],
         ["L", "Choose “Leave out”"],
         ["Enter", "Label the selection"],
-        ["⌫ / Delete", "Erase your label on the selection"],
+        ["⌫ / Delete", "Delete the hand label you clicked, or erase your labels on the selection"],
         [`${cmd}Z`, "Undo"],
         [`${cmd}⇧Z or ${cmd}Y`, "Redo"],
       ],

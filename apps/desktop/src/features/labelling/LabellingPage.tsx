@@ -245,6 +245,13 @@ export function LabellingPage() {
     [selection],
   );
 
+  /** Deletes the selected hand label, exactly that one, as one undo step. */
+  const deleteSelectedLabel = useCallback(() => {
+    if (selectedIndex < 0) return;
+    setHistory((current) => commit(current, current.present.filter((_, index) => index !== selectedIndex)));
+    setSelection(null);
+  }, [selectedIndex]);
+
   const labelKeys = useMemo(() => catalogue.slice(0, 9).map((label) => label.id), [catalogue]);
 
   useEffect(() => {
@@ -268,6 +275,10 @@ export function LabellingPage() {
       } else if (event.key === "Enter" && selection) {
         event.preventDefault();
         applyLabel(chosen);
+      } else if ((event.key === "Backspace" || event.key === "Delete") && selectedIndex >= 0) {
+        // A hand label is selected (clicked on its rail): delete that label.
+        event.preventDefault();
+        deleteSelectedLabel();
       } else if ((event.key === "Backspace" || event.key === "Delete") && selection) {
         event.preventDefault();
         applyLabel(null);
@@ -282,7 +293,7 @@ export function LabellingPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [recording, selection, chosen, labelKeys, applyLabel, durationMs]);
+  }, [recording, selection, selectedIndex, chosen, labelKeys, applyLabel, deleteSelectedLabel, durationMs]);
 
   const msAt = (clientX: number) => {
     const box = area.current?.getBoundingClientRect();
@@ -870,11 +881,12 @@ export function LabellingPage() {
               <SpanRail title="Recorded" spans={recording.labelIntervals} view={view} colorOf={colorOf} nameOf={nameOf} />
               <EditableLabelRail spans={spans} view={view} duration={durationMs} colorOf={colorOf} nameOf={nameOf}
                 snap={snap} snapPoints={snapPoints.current} onPreview={setDragPreview} onCommit={(next) => setHistory((current) => commit(current, next))} onSelect={setSelection} />
-              <p className="hint">Drag a manual label to move it; drag its left or right handle to resize. Edits stop at neighbouring labels. Undo restores the previous position.</p>
+              <p className="hint">Click a manual label to select it, then Delete (⌫) removes it. Drag it to move it, or drag its left or right handle to resize. Edits stop at neighbouring labels; Undo takes any of them back.</p>
               {selectedIndex >= 0 && <LabelTimingEditor key={`${selectedIndex}-${spans[selectedIndex].startMs}-${spans[selectedIndex].endMs}`} span={spans[selectedIndex]}
                 min={selectedIndex === 0 ? 0 : spans[selectedIndex - 1].endMs + 1e-6}
                 max={selectedIndex === spans.length - 1 ? durationMs : spans[selectedIndex + 1].startMs - 1e-6}
-                onApply={(edited) => { setHistory((current) => commit(current, current.present.map((span, index) => index === selectedIndex ? edited : span))); setSelection(edited); }} />}
+                onApply={(edited) => { setHistory((current) => commit(current, current.present.map((span, index) => index === selectedIndex ? edited : span))); setSelection(edited); }}
+                onDelete={deleteSelectedLabel} />}
 
               {hazards.length > 0 && (
                 <SpanRail

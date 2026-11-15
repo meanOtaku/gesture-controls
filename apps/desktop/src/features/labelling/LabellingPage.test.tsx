@@ -140,6 +140,32 @@ describe("LabellingPage", () => {
     expect(byHand()).toHaveLength(0);
   });
 
+  it("deletes a hand label clicked on its rail, with the button or the Delete key, and Undo brings it back", async () => {
+    const lanes = await openRecording();
+    const byHand = () => within(screen.getByRole("list", { name: "By hand labels" })).queryAllByRole("listitem");
+    // Two labels, so deleting one is seen to leave the other.
+    drag(lanes, 100, 300);
+    fireEvent.keyDown(window, { key: "2" });
+    fireEvent.keyDown(window, { key: "Enter" });
+    drag(lanes, 500, 700);
+    fireEvent.keyDown(window, { key: "1" });
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(byHand()).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Move Fist" }));
+    fireEvent.click(screen.getByRole("button", { name: /Delete label/ }));
+    expect(byHand().map((item) => item.textContent)).not.toContain("Fist");
+    expect(byHand()).toHaveLength(1);
+    fireEvent.keyDown(window, { key: "z", metaKey: true });
+    expect(byHand()).toHaveLength(2);
+
+    // The Delete key removes the selected label only, not whatever else the selection touches.
+    fireEvent.click(screen.getByRole("button", { name: "Move Fist" }));
+    fireEvent.keyDown(window, { key: "Delete" });
+    expect(byHand()).toHaveLength(1);
+    expect(byHand().map((item) => item.textContent)).not.toContain("Fist");
+  });
+
   it("moves and resizes manual labels with one undo step per drag", async () => {
     const lanes = await openRecording();
     drag(lanes, 100, 300);
