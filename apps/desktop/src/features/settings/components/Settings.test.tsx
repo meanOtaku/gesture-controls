@@ -1,9 +1,12 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Settings } from "./Settings";
 import type { AppSettings } from "../../../shared/protocol/events";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+});
 
 const settings: AppSettings = {
   headphonesEnabled: true,
@@ -40,11 +43,36 @@ describe("Settings page layout", () => {
   it("groups the sections by what they affect, in a fixed order", () => {
     render(<Settings settings={settings} onUpdate={() => {}} onReset={() => {}} />);
     const groups = screen.getAllByRole("region").filter((region) => region.id.startsWith("settings-group-"));
-    expect(groups.map((group) => group.id)).toEqual(["settings-group-watch", "settings-group-gestures", "settings-group-headphones", "settings-group-recording", "settings-group-appearance"]);
+    expect(groups.map((group) => group.id)).toEqual(["settings-group-watch", "settings-group-gestures", "settings-group-headphones", "settings-group-appearance"]);
     const sectionsIn = (group: string) => within(screen.getByRole("region", { name: group })).getAllByRole("region").map((region) => region.getAttribute("aria-label"));
-    expect(sectionsIn("Watch")).toEqual(["Watch transport", "Watch orientation", "Watch sensor enable switches", "Watch sensor rates", "Samsung health delivery controls"]);
-    expect(sectionsIn("Gestures")).toEqual(["Built-in gestures", "Still hand", "Shake sensitivity", "Swipe sensitivity", "Tap sensitivity", "Wiggle and hammer sensitivity", "Roll sensitivity", "Pitch sensitivity", "Wrist rotation controls"]);
+    expect(sectionsIn("Watch")).toEqual(["Watch transport", "Watch orientation", "Watch sensor enable switches"]);
+    expect(sectionsIn("Gestures")).toEqual(["Built-in gestures", "Still hand", "Gesture sensitivity"]);
+    expect(sectionsIn("Headphones")).toEqual(["Headphones settings"]);
     expect(sectionsIn("Display")).toEqual(["Appearance"]);
+  });
+
+  it("folds the rarely changed rates and limits under Advanced, closed at first", async () => {
+    render(<Settings settings={settings} onUpdate={() => {}} onReset={() => {}} />);
+    expect(screen.queryByLabelText("Recording rate")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Max angular velocity")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Advanced", { selector: ".advanced-title" }));
+    await screen.findByRole("region", { name: "Watch sensor rates" });
+    for (const name of ["Watch sensor rates", "Samsung health delivery controls", "Recording and graph settings", "Wrist rotation controls"]) {
+      expect(screen.getByRole("region", { name })).toBeInTheDocument();
+    }
+    // A Galaxy Watch4 delivers at most 100 Hz, so the form stops there.
+    expect(screen.getByLabelText("Orientation")).toHaveAccessibleDescription(/Allowed: 1–100 Hz/);
+  });
+
+  it("opens Advanced to show an invalid field that was folded away when applying", async () => {
+    render(<Settings settings={settings} onUpdate={() => {}} onReset={() => {}} />);
+    const summary = screen.getByText("Advanced", { selector: ".advanced-title" });
+    fireEvent.click(summary);
+    fireEvent.change(await screen.findByLabelText("Recording rate"), { target: { value: "0" } });
+    fireEvent.click(summary);
+    await waitFor(() => expect(screen.queryByLabelText("Recording rate")).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    await waitFor(() => expect(screen.getByLabelText("Recording rate")).toHaveFocus());
   });
 
   it("has an index that scrolls to a group and marks it as the current one", () => {
@@ -61,13 +89,16 @@ describe("Settings page layout", () => {
 });
 
 describe("Settings", () => {
+  // Most of these use the rates under Advanced; it is remembered open, as after a first visit.
+  beforeEach(() => window.localStorage.setItem("advanced.settings", "open"));
+
   it("renders every numeric control with its current value, unit and allowed range", () => {
     render(<Settings settings={settings} onUpdate={() => {}} onReset={() => {}} />);
-    expect(screen.getByLabelText("Headphones rate")).toHaveValue(60);
+    expect(screen.getByLabelText("Headphone sample rate")).toHaveValue(60);
     expect(screen.getByLabelText("Max angular velocity")).toHaveValue(360);
     expect(screen.getByLabelText("Raw PPG flush")).toHaveValue(10);
     // The range and default are stated up front, not discovered by failing.
-    expect(screen.getByLabelText("Headphones rate")).toHaveAccessibleDescription(/Allowed: 1–200 Hz.*default 60 Hz/);
+    expect(screen.getByLabelText("Headphone sample rate")).toHaveAccessibleDescription(/Allowed: 1–200 Hz.*default 60 Hz/);
   });
 
   it("shows the settings error near the affected controls", () => {
@@ -86,7 +117,7 @@ describe("Settings", () => {
     const updates: AppSettings[] = [];
     render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
 
-    fireEvent.change(screen.getByLabelText("Headphones rate"), { target: { value: "90" } });
+    fireEvent.change(screen.getByLabelText("Headphone sample rate"), { target: { value: "90" } });
     fireEvent.change(screen.getByLabelText("Max angular velocity"), { target: { value: "500" } });
     expect(screen.getByText("2 changes not applied yet.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
@@ -102,12 +133,12 @@ describe("Settings", () => {
     const updates: AppSettings[] = [];
     render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
 
-    fireEvent.change(screen.getByLabelText("Headphones rate"), { target: { value: "999" } });
+    fireEvent.change(screen.getByLabelText("Headphone sample rate"), { target: { value: "999" } });
     fireEvent.change(screen.getByLabelText("Max angular velocity"), { target: { value: "500" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
 
     expect(updates).toHaveLength(0); // the old behaviour silently applied 60 for the bad field
-    const input = screen.getByLabelText("Headphones rate");
+    const input = screen.getByLabelText("Headphone sample rate");
     expect(input).toHaveAttribute("aria-invalid", "true");
     expect(input).toHaveAccessibleDescription("Too high: the maximum is 200 Hz.");
     expect(screen.getByText("1 field needs attention before it can be applied.")).toBeInTheDocument();
@@ -119,14 +150,14 @@ describe("Settings", () => {
 
   it("moves focus to the first invalid field when applying fails", () => {
     render(<Settings settings={settings} onUpdate={() => {}} onReset={() => {}} />);
-    fireEvent.change(screen.getByLabelText("Headphones rate"), { target: { value: "0" } });
+    fireEvent.change(screen.getByLabelText("Headphone sample rate"), { target: { value: "0" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
-    expect(screen.getByLabelText("Headphones rate")).toHaveFocus();
+    expect(screen.getByLabelText("Headphone sample rate")).toHaveFocus();
   });
 
   it("holds back an error until the field is left, so typing is not scolded mid-word", () => {
     render(<Settings settings={settings} onUpdate={() => {}} onReset={() => {}} />);
-    const input = screen.getByLabelText("Headphones rate");
+    const input = screen.getByLabelText("Headphone sample rate");
     fireEvent.change(input, { target: { value: "" } });
     expect(input).toHaveAttribute("aria-invalid", "false");
     fireEvent.blur(input);
@@ -144,26 +175,26 @@ describe("Settings", () => {
 
   it("discards edits and their errors", () => {
     render(<Settings settings={settings} onUpdate={() => {}} onReset={() => {}} />);
-    fireEvent.change(screen.getByLabelText("Headphones rate"), { target: { value: "999" } });
+    fireEvent.change(screen.getByLabelText("Headphone sample rate"), { target: { value: "999" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
     fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
-    expect(screen.getByLabelText("Headphones rate")).toHaveValue(60);
-    expect(screen.getByLabelText("Headphones rate")).toHaveAttribute("aria-invalid", "false");
+    expect(screen.getByLabelText("Headphone sample rate")).toHaveValue(60);
+    expect(screen.getByLabelText("Headphone sample rate")).toHaveAttribute("aria-invalid", "false");
     expect(screen.getByText("All changes are applied.")).toBeInTheDocument();
   });
 
   it("marks an edited field, and resets a field to its default as a pending edit", () => {
     render(<Settings settings={{ ...settings, headphonesRateHz: 120 }} onUpdate={() => {}} onReset={() => {}} />);
     expect(screen.queryByText("Edited")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Reset Headphones rate to its default, 60 Hz" }));
-    expect(screen.getByLabelText("Headphones rate")).toHaveValue(60);
+    fireEvent.click(screen.getByRole("button", { name: "Reset Headphone sample rate to its default, 60 Hz" }));
+    expect(screen.getByLabelText("Headphone sample rate")).toHaveValue(60);
     expect(screen.getByText("Edited")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Apply changes" })).toBeEnabled();
   });
 
   it("keeps a half-typed value when a switch elsewhere changes the saved settings", () => {
     const { rerender } = render(<Settings settings={settings} onUpdate={() => {}} onReset={() => {}} />);
-    fireEvent.change(screen.getByLabelText("Headphones rate"), { target: { value: "75" } });
+    fireEvent.change(screen.getByLabelText("Headphone sample rate"), { target: { value: "75" } });
     rerender(
       <Settings
         settings={{ ...settings, watchSensorsEnabled: { ...settings.watchSensorsEnabled, orientation: false } }}
@@ -171,12 +202,12 @@ describe("Settings", () => {
         onReset={() => {}}
       />,
     );
-    expect(screen.getByLabelText("Headphones rate")).toHaveValue(75);
+    expect(screen.getByLabelText("Headphone sample rate")).toHaveValue(75);
   });
 
-  it("shows the shake sensitivity with its range, applies a change, and counts recognised shakes", () => {
+  it("shows the shake sensitivity with its range and applies a change", () => {
     const updates: AppSettings[] = [];
-    const { rerender } = render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
+    render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
     expect(screen.getByLabelText("Shake strength")).toHaveValue(6);
     expect(screen.getByLabelText("Shake strokes")).toHaveValue(4);
     expect(screen.getByLabelText("Shake strength")).toHaveAccessibleDescription(/Allowed: 2–30 m\/s²/);
@@ -191,16 +222,12 @@ describe("Settings", () => {
     fireEvent.blur(screen.getByLabelText("Shake strokes"));
     expect(screen.getByLabelText("Shake strokes")).toHaveAttribute("aria-invalid", "true");
 
-    expect(screen.getByText(/Shakes recognised since you opened the app/)).toHaveTextContent("0");
-    rerender(<Settings settings={settings} shakeDetections={3} onUpdate={() => {}} onReset={() => {}} />);
-    expect(screen.getByText(/Shakes recognised since you opened the app/)).toHaveTextContent(": 3");
   });
 
-  it("sets the crown side and the wrist, tunes swipe strength, and shows the last swipe", () => {
+  it("sets the crown side and the wrist, and tunes swipe strength", () => {
     const updates: AppSettings[] = [];
-    const { rerender } = render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
+    render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
     expect(screen.getByLabelText("Swipe strength")).toHaveValue(8);
-    expect(screen.getByText(/No swipe recognised yet/)).toBeInTheDocument();
 
     const orientation = within(screen.getByRole("region", { name: "Watch orientation" }));
     expect(orientation.getByRole("radio", { name: /Crown on the right/ })).toBeChecked();
@@ -212,25 +239,18 @@ describe("Settings", () => {
     fireEvent.change(screen.getByLabelText("Swipe strength"), { target: { value: "5" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
     expect(updates[2]).toMatchObject({ swipePeakThreshold: 5 });
-
-    rerender(<Settings settings={settings} lastSwipe={{ direction: "left", count: 2 }} onUpdate={() => {}} onReset={() => {}} />);
-    expect(screen.getByText(/Last swipe recognised/)).toHaveTextContent("left");
-    expect(screen.getByText(/Last swipe recognised/)).toHaveTextContent("2 so far");
   });
 
-  it("tunes the pitch angle and shows the last pitch", () => {
+  it("tunes the pitch angle", () => {
     const updates: AppSettings[] = [];
-    const { rerender } = render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
+    render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
     expect(screen.getByLabelText("Pitch angle")).toHaveValue(40);
-    expect(screen.getByText(/No pitch recognised yet/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Pitch angle"), { target: { value: "30" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
     expect(updates[0]).toMatchObject({ pitchAngleDegrees: 30 });
     fireEvent.change(screen.getByLabelText("Pitch angle"), { target: { value: "10" } });
     fireEvent.blur(screen.getByLabelText("Pitch angle"));
     expect(screen.getByLabelText("Pitch angle")).toHaveAttribute("aria-invalid", "true");
-    rerender(<Settings settings={settings} lastPitch={{ direction: "up", count: 5 }} onUpdate={() => {}} onReset={() => {}} />);
-    expect(screen.getByText(/Last pitch recognised/)).toHaveTextContent("up (5 so far)");
   });
 
   it("switches a built-in gesture off and on without touching the others", () => {
@@ -244,31 +264,25 @@ describe("Settings", () => {
     expect(updates).toEqual([{ ...settings, heuristicGestures: { ...settings.heuristicGestures, swipe: false } }]);
   });
 
-  it("tunes tap strength and shows the last tap", () => {
+  it("tunes tap strength", () => {
     const updates: AppSettings[] = [];
-    const { rerender } = render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
+    render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
     expect(screen.getByLabelText("Tap strength")).toHaveValue(12);
-    expect(screen.getByText(/No tap recognised yet/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Tap strength"), { target: { value: "9" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
     expect(updates[0]).toMatchObject({ tapPeakThreshold: 9 });
-    rerender(<Settings settings={settings} lastTap={{ kind: "double", count: 4 }} onUpdate={() => {}} onReset={() => {}} />);
-    expect(screen.getByText(/Last tap recognised/)).toHaveTextContent("double tap (4 so far)");
   });
 
-  it("tunes the roll angle, refuses a fraction, and shows the last roll", () => {
+  it("tunes the roll angle and refuses one out of range", () => {
     const updates: AppSettings[] = [];
-    const { rerender } = render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
+    render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
     expect(screen.getByLabelText("Roll angle")).toHaveValue(60);
-    expect(screen.getByText(/No roll recognised yet/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Roll angle"), { target: { value: "45" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
     expect(updates[0]).toMatchObject({ rollAngleDegrees: 45 });
     fireEvent.change(screen.getByLabelText("Roll angle"), { target: { value: "20" } });
     fireEvent.blur(screen.getByLabelText("Roll angle"));
     expect(screen.getByLabelText("Roll angle")).toHaveAttribute("aria-invalid", "true");
-    rerender(<Settings settings={settings} lastRoll={{ direction: "counterClockwise", count: 3 }} onUpdate={() => {}} onReset={() => {}} />);
-    expect(screen.getByText(/Last roll recognised/)).toHaveTextContent("counter-clockwise (3 so far)");
   });
 
   it("toggles a watch sensor switch immediately without a confirmation dialog", () => {
@@ -327,5 +341,12 @@ describe("Settings", () => {
     render(<Settings settings={{ ...settings, steadyStartsOnly: true }} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
     fireEvent.click(screen.getByRole("switch", { name: "Only start gestures from a still hand on" }));
     expect(updates.at(-1)?.steadyStartsOnly).toBe(false);
+  });
+
+  it("switches the head pose display and recording at once", () => {
+    const updates: AppSettings[] = [];
+    render(<Settings settings={settings} onUpdate={(next) => updates.push(next)} onReset={() => {}} />);
+    fireEvent.click(screen.getByRole("switch", { name: "Show and record head pose on" }));
+    expect(updates).toEqual([{ ...settings, headphonesEnabled: false }]);
   });
 });

@@ -746,13 +746,6 @@ function MainApp() {
         settings={settings}
         error={settingsError}
         isPending={isPending}
-        overlay={overlay}
-        watchStatus={watchStatus}
-        shakeDetections={shakeDetections}
-        lastSwipe={lastSwipe}
-        lastTap={lastTap}
-        lastRoll={lastRoll}
-        lastPitch={lastPitch}
         onUpdate={(next) => { void updateSettings(next); }}
         onReset={() => { void resetSettings(); }}
       />

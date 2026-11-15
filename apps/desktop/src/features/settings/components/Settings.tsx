@@ -1,20 +1,16 @@
 import type { FormEvent } from "react";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { useNumberDrafts } from "../../../shared/forms/useNumberDrafts";
-import type { AppSettings, HeuristicGesture, OverlayState, PitchDirection, RollDirection, SwipeDirection, TapKind, WatchStatus } from "../../../shared/protocol/events";
+import type { AppSettings, HeuristicGesture } from "../../../shared/protocol/events";
+import { AdvancedSection } from "../../../components/app/AdvancedSection";
 import { ApplySettingsFooter } from "./ApplySettingsFooter";
 import { AppearanceSection } from "./AppearanceSection";
 import { BuiltInGesturesSection } from "./BuiltInGesturesSection";
 import { SteadyStartsSection } from "./SteadyStartsSection";
 import { HeadphonesSettingsSection } from "./HeadphonesSettingsSection";
 import { RecordingGraphSettingsSection } from "./RecordingGraphSettingsSection";
+import { SensitivitySection } from "./SensitivitySection";
 import { SettingsGroup, SettingsNav } from "./SettingsGroups";
-import { PitchSettings } from "./PitchSettings";
-import { RollSettings } from "./RollSettings";
-import { ShakeSettings } from "./ShakeSettings";
-import { SwipeSettings } from "./SwipeSettings";
-import { TapSettings } from "./TapSettings";
-import { WiggleHammerSettings } from "./WiggleHammerSettings";
 import { WatchHealthDeliverySettingsSection } from "./WatchHealthDeliverySettingsSection";
 import { WatchRateSettingsSection } from "./WatchRateSettingsSection";
 import { WatchSensorSwitchSection } from "./WatchSensorSwitchSection";
@@ -24,44 +20,22 @@ import { WristRotationSettings } from "./WristRotationSettings";
 import { DEFAULT_SETTINGS, SETTINGS_FIELDS, numericValues } from "../settingsFields";
 import { SettingsFormProvider, settingInputId } from "../settingsForm";
 
-const EMPTY_OVERLAY_STATE: OverlayState = {
-  visible: false,
-  grabbed: false,
-  volume: 50,
-  rotationAngle: 0,
-  screenX: 0,
-  screenY: 0,
-  lastNativeVolumeError: null,
-};
-
 interface SettingsProps {
   settings: AppSettings | null;
   error?: string | null;
   /** Reports whether the operation for the given key (`settings:apply`, `settings:reset`) is in flight. */
   isPending?: (key: string) => boolean;
-  overlay?: OverlayState;
-  watchStatus?: WatchStatus | null;
-  /** How many shakes have been recognised since the app opened, to show beside the sensitivity. */
-  shakeDetections?: number;
-  lastSwipe?: { direction: SwipeDirection; count: number } | null;
-  lastTap?: { kind: TapKind; count: number } | null;
-  lastRoll?: { direction: RollDirection; count: number } | null;
-  lastPitch?: { direction: PitchDirection; count: number } | null;
   onUpdate: (settings: AppSettings) => void;
   onReset: () => void;
 }
+
+/** The folded section of rarely changed rates and limits. */
+const ADVANCED_ID = "settings-advanced";
 
 export function Settings({
   settings,
   error,
   isPending = () => false,
-  overlay = EMPTY_OVERLAY_STATE,
-  watchStatus = null,
-  shakeDetections = 0,
-  lastSwipe = null,
-  lastTap = null,
-  lastRoll = null,
-  lastPitch = null,
   onUpdate,
   onReset,
 }: SettingsProps) {
@@ -74,7 +48,15 @@ export function Settings({
     event.preventDefault();
     const result = drafts.submit();
     if (result.values === null) {
-      document.getElementById(settingInputId(result.firstInvalid))?.focus();
+      const id = settingInputId(result.firstInvalid);
+      const field = document.getElementById(id);
+      if (field) field.focus();
+      else {
+        // The field is folded away under Advanced: open it, then focus the field once it is drawn.
+        const advanced = document.getElementById(ADVANCED_ID);
+        if (advanced instanceof HTMLDetailsElement) advanced.open = true;
+        window.setTimeout(() => document.getElementById(id)?.focus(), 50);
+      }
       return;
     }
     onUpdate({ ...current, ...result.values });
@@ -123,8 +105,6 @@ export function Settings({
               onWristChange={(watchWrist) => onUpdate({ ...current, watchWrist })}
             />
             <WatchSensorSwitchSection watchSensorsEnabled={current.watchSensorsEnabled} onToggle={toggleWatchSensor} />
-            <WatchRateSettingsSection />
-            <WatchHealthDeliverySettingsSection />
           </SettingsGroup>
 
           <SettingsGroup id="gestures">
@@ -135,22 +115,19 @@ export function Settings({
               buzzWhenReady={current.buzzWhenReady}
               onToggleBuzz={() => onUpdate({ ...current, buzzWhenReady: !current.buzzWhenReady })}
             />
-            <ShakeSettings detections={shakeDetections} />
-            <SwipeSettings lastSwipe={lastSwipe} />
-            <TapSettings lastTap={lastTap} />
-            <WiggleHammerSettings />
-            <RollSettings lastRoll={lastRoll} />
-            <PitchSettings lastPitch={lastPitch} />
-            <WristRotationSettings />
+            <SensitivitySection />
           </SettingsGroup>
 
           <SettingsGroup id="headphones">
             <HeadphonesSettingsSection enabled={current.headphonesEnabled} onToggleEnabled={toggleHeadphonesEnabled} />
           </SettingsGroup>
 
-          <SettingsGroup id="recording">
+          <AdvancedSection id={ADVANCED_ID} storageKey="settings" summary="Sensor, recording and graph rates, and wrist rotation limits">
+            <WatchRateSettingsSection />
+            <WatchHealthDeliverySettingsSection />
             <RecordingGraphSettingsSection />
-          </SettingsGroup>
+            <WristRotationSettings />
+          </AdvancedSection>
 
           <ApplySettingsFooter
             dirtyCount={drafts.dirtyCount}

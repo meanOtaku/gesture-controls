@@ -62,11 +62,12 @@ const d = DEFAULT_SETTINGS;
  * Every numeric setting once: its label, unit, allowed range, step and default. The input's
  * attributes, its validation, its hint text and its reset button all come from here. The ranges
  * are the ones `AppSettings::validate()` enforces in `settings.rs`, so a value this form accepts is
- * one the backend accepts.
+ * one the backend accepts. The watch motion rates stop at 100 Hz here although the backend takes up to 200: a Galaxy
+ * Watch4 delivers at most 100 Hz, so more would change nothing.
  */
 export const SETTINGS_FIELDS: Record<NumericSettingKey, NumberSpec> = {
   headphonesRateHz: {
-    label: "Headphones rate", unit: "Hz", min: 1, max: 200, step: 1, integer: true, defaultValue: d.headphonesRateHz,
+    label: "Headphone sample rate", unit: "Hz", min: 1, max: 200, step: 1, integer: true, defaultValue: d.headphonesRateHz,
     description: "How many headphone samples per second are shown and recorded",
   },
   recordingRateHz: {
@@ -78,16 +79,16 @@ export const SETTINGS_FIELDS: Record<NumericSettingKey, NumberSpec> = {
     description: "How often the live charts redraw; does not change what is saved",
   },
   watchOrientationRateHz: {
-    label: "Orientation", unit: "Hz", min: 1, max: 200, step: 1, integer: true, defaultValue: d.watchOrientationRateHz,
-    description: "Watch rotation sensor rate; higher is smoother but costs battery. A Galaxy Watch4 delivers at most 100 Hz, so a higher setting changes nothing",
+    label: "Orientation", unit: "Hz", min: 1, max: 100, step: 1, integer: true, defaultValue: d.watchOrientationRateHz,
+    description: "Watch rotation sensor rate; higher is smoother but costs battery",
   },
   watchAccelerationRateHz: {
-    label: "Acceleration", unit: "Hz", min: 1, max: 200, step: 1, integer: true, defaultValue: d.watchAccelerationRateHz,
-    description: "Watch acceleration sensor rate. A Galaxy Watch4 delivers at most 100 Hz",
+    label: "Acceleration", unit: "Hz", min: 1, max: 100, step: 1, integer: true, defaultValue: d.watchAccelerationRateHz,
+    description: "Watch acceleration sensor rate",
   },
   watchGyroscopeRateHz: {
-    label: "Gyroscope", unit: "Hz", min: 1, max: 200, step: 1, integer: true, defaultValue: d.watchGyroscopeRateHz,
-    description: "Watch gyroscope sensor rate. A Galaxy Watch4 delivers at most 100 Hz",
+    label: "Gyroscope", unit: "Hz", min: 1, max: 100, step: 1, integer: true, defaultValue: d.watchGyroscopeRateHz,
+    description: "Watch gyroscope sensor rate",
   },
   watchPpgFlushRateHz: {
     label: "Raw PPG flush", unit: "Hz", min: 0.1, max: 10, step: 0.1, defaultValue: d.watchPpgFlushRateHz,

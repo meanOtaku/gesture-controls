@@ -1,37 +1,34 @@
 import { SectionHeader } from "../../../components/app/SectionHeader";
-import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
-import { SettingsNumberField } from "../settingsForm";
+import { Switch } from "../../../components/ui/switch";
 
 type HeadphonesSettingsSectionProps = {
   enabled: boolean;
   onToggleEnabled: () => void;
 };
 
-/** Sony headphone acceptance: whether incoming packets are processed, and at what display/recording rate. */
+/**
+ * Whether the headphones' head pose reaches the screen and recordings. Their sample rate is under Advanced, with the
+ * other rates.
+ */
 export function HeadphonesSettingsSection({ enabled, onToggleEnabled }: HeadphonesSettingsSectionProps) {
   return (
     <Card role="region" aria-label="Headphones settings">
       <CardHeader>
         <SectionHeader
-          title="Acceptance rate"
-          description="Headphones"
+          title="Head pose"
+          description="Takes effect at once."
           help={{
-            label: "About the headphones acceptance rate",
-            content: "Every incoming Sony packet still updates calibration and connection state; this only throttles what's displayed and recorded.",
+            label: "About head pose",
+            content: "Off, the head pose is neither shown nor recorded. Every incoming Sony packet still updates calibration and the connection, so recipes that start by looking somewhere keep working. The sample rate under Advanced throttles what is shown and recorded in the same way.",
           }}
         />
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" variant="outline" aria-pressed={enabled} onClick={onToggleEnabled}>
-            {enabled ? "Enabled" : "Disabled"}
-          </Button>
-          <span className="text-xs text-muted-foreground">Click to {enabled ? "disable" : "enable"}; takes effect immediately</span>
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <SettingsNumberField name="headphonesRateHz" />
-        </div>
+      <CardContent>
+        <label className="flex items-center justify-between gap-3">
+          <span className="label">Show and record head pose</span>
+          <Switch aria-label={`Show and record head pose ${enabled ? "on" : "off"}`} checked={enabled} onCheckedChange={onToggleEnabled} />
+        </label>
       </CardContent>
     </Card>
   );

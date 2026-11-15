@@ -1,13 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 
-export type SettingsGroupId = "watch" | "gestures" | "headphones" | "recording" | "appearance";
+export type SettingsGroupId = "watch" | "gestures" | "headphones" | "appearance";
 
 /** The page's groups, in the order they appear. */
 export const SETTINGS_GROUPS: { id: SettingsGroupId; title: string; summary: string }[] = [
-  { id: "watch", title: "Watch", summary: "How the watch connects, how it is worn, and which of its sensors stream at what rate." },
+  { id: "watch", title: "Watch", summary: "How the watch connects, how it is worn, and which sensors stream." },
   { id: "gestures", title: "Gestures", summary: "Which built-in wrist gestures are recognised, and how strong each has to be." },
   { id: "headphones", title: "Headphones", summary: "Head tracking from the headphones." },
-  { id: "recording", title: "Recording & graphs", summary: "What is recorded and how the live graphs are drawn." },
   { id: "appearance", title: "Display", summary: "How the app looks. Applies at once." },
 ];
 
