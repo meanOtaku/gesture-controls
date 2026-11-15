@@ -720,8 +720,13 @@ export function LabellingPage() {
               </SelectContent>
             </Select>
           </div>
-          <Button variant="outline" onClick={() => void chooseFile(false)} disabled={busy}>Open CSV…</Button>
-          <Button variant="outline" onClick={() => void chooseFile(true)} disabled={busy}>Open folder…</Button>
+          <details className="inline-menu">
+            <summary>Open a file…</summary>
+            <div className="inline-menu-body">
+              <Button variant="outline" onClick={() => void chooseFile(false)} disabled={busy}>Open CSV…</Button>
+              <Button variant="outline" onClick={() => void chooseFile(true)} disabled={busy}>Open folder…</Button>
+            </div>
+          </details>
           {recording && (
             <span className="hint">
               Open: <strong>{recording.name}</strong> · <AnimatedText>{formatSeconds(recording.durationMs)}</AnimatedText>
@@ -987,34 +992,39 @@ export function LabellingPage() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="hint">Graph height</span>
-              {(Object.keys(LANE_HEIGHTS) as LaneSize[]).map((size) => (
-                <Button key={size} size="sm" variant={laneSize === size ? "default" : "outline"} onClick={() => setLaneSize(size)} aria-pressed={laneSize === size}>
-                  {size === "compact" ? "Compact" : size === "normal" ? "Normal" : "Tall"}
-                </Button>
-              ))}
-              <span className="mx-2 h-6 w-px bg-border" aria-hidden="true" />
-              <label className="flex items-center gap-1">
-                <Checkbox checked={snap} onCheckedChange={(on) => setSnap(Boolean(on))} aria-label="Snap the selection" />
-                Snap the selection to contacts, sharp moves and label edges (hold Alt not to)
-              </label>
-              <span className="mx-2 h-6 w-px bg-border" aria-hidden="true" />
-              <span className="hint">Scale</span>
-              <Button size="sm" variant={!fitToView ? "default" : "outline"} onClick={() => setFitToView(false)} aria-pressed={!fitToView} title="Each graph keeps the range of the whole recording as you zoom">Fixed</Button>
-              <Button size="sm" variant={fitToView ? "default" : "outline"} onClick={() => setFitToView(true)} aria-pressed={fitToView} title="Each graph stretches to what is in view">Fit to view</Button>
-            </div>
-            <fieldset className="flex flex-wrap gap-x-4 gap-y-1" aria-label="Columns shown">
-              {lanes.map(({ column }) => (
-                <label key={column.name} className="flex items-center gap-1 text-sm">
-                  <Checkbox
-                    checked={!hidden.includes(column.name)}
-                    onCheckedChange={(on) => setHidden((current) => (on ? current.filter((name) => name !== column.name) : [...current, column.name]))}
-                  />
-                  {COLUMN_TITLES[column.name] ?? column.name}
+            <details className="inline-menu">
+              <summary>View: graph height, snapping, scale and columns</summary>
+              <div className="inline-menu-body flex-col items-start">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="hint">Graph height</span>
+                {(Object.keys(LANE_HEIGHTS) as LaneSize[]).map((size) => (
+                  <Button key={size} size="sm" variant={laneSize === size ? "default" : "outline"} onClick={() => setLaneSize(size)} aria-pressed={laneSize === size}>
+                    {size === "compact" ? "Compact" : size === "normal" ? "Normal" : "Tall"}
+                  </Button>
+                ))}
+                <span className="mx-2 h-6 w-px bg-border" aria-hidden="true" />
+                <label className="flex items-center gap-1">
+                  <Checkbox checked={snap} onCheckedChange={(on) => setSnap(Boolean(on))} aria-label="Snap the selection" />
+                  Snap the selection to contacts, sharp moves and label edges (hold Alt not to)
                 </label>
-              ))}
-            </fieldset>
+                <span className="mx-2 h-6 w-px bg-border" aria-hidden="true" />
+                <span className="hint">Scale</span>
+                <Button size="sm" variant={!fitToView ? "default" : "outline"} onClick={() => setFitToView(false)} aria-pressed={!fitToView} title="Each graph keeps the range of the whole recording as you zoom">Fixed</Button>
+                <Button size="sm" variant={fitToView ? "default" : "outline"} onClick={() => setFitToView(true)} aria-pressed={fitToView} title="Each graph stretches to what is in view">Fit to view</Button>
+              </div>
+              <fieldset className="flex flex-wrap gap-x-4 gap-y-1" aria-label="Columns shown">
+                {lanes.map(({ column }) => (
+                  <label key={column.name} className="flex items-center gap-1 text-sm">
+                    <Checkbox
+                      checked={!hidden.includes(column.name)}
+                      onCheckedChange={(on) => setHidden((current) => (on ? current.filter((name) => name !== column.name) : [...current, column.name]))}
+                    />
+                    {COLUMN_TITLES[column.name] ?? column.name}
+                  </label>
+                ))}
+              </fieldset>
+              </div>
+            </details>
           </CardContent>
         </Card>
       )}
@@ -1117,13 +1127,18 @@ export function LabellingPage() {
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-4">
             <Button onClick={() => void saveOriginal()} disabled={busy || !dirty}>Save to original</Button>
-            <Button variant="outline" onClick={() => void saveVersion()} disabled={busy || !dirty}>Save as a new recording</Button>
-            <Button variant="outline" onClick={() => void exportIt()} disabled={busy}>Export</Button>
-            <Button variant="outline" onClick={() => void exportIt(true)} disabled={busy}>Export to a folder…</Button>
-            <div className="basis-full">
-              <ExportSettingsCard compact />
-              <p className="hint">The same export setting as the Recorder&apos;s: change it here or there.</p>
-            </div>
+            <details className="inline-menu">
+              <summary>Save a copy or export…</summary>
+              <div className="inline-menu-body flex-col items-start">
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={() => void saveVersion()} disabled={busy || !dirty}>Save as a new recording</Button>
+                  <Button variant="outline" onClick={() => void exportIt()} disabled={busy}>Export</Button>
+                  <Button variant="outline" onClick={() => void exportIt(true)} disabled={busy}>Export to a folder…</Button>
+                </div>
+                <ExportSettingsCard compact />
+                <p className="hint">The same export setting as the Recorder&apos;s: change it here or there.</p>
+              </div>
+            </details>
           </CardContent>
         </Card>
       )}

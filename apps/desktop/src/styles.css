@@ -653,3 +653,11 @@ number-flow-react {
 :root .runtime-switch .segmented .segment { padding: 0 .4rem; font-size: .72rem; letter-spacing: .04em; white-space: nowrap; overflow-wrap: normal; }
 .runtime-switch-sidebar .segmented[data-slot="radio-group"] { height: calc(var(--control-h) * .8); }
 .runtime-switch-sidebar .segment { min-height: calc(var(--control-h) * .8 - 2px); }
+/* A small disclosure for rarely used controls beside the everyday ones (Labelling's file, view and export choices). */
+.inline-menu { position: relative; }
+.inline-menu > summary { display: inline-flex; align-items: center; gap: .35rem; min-height: var(--control-h); padding: 0 .75rem; border: 1px solid var(--line); cursor: pointer; list-style: none; font-size: .875rem; color: var(--ink); background: var(--surface, transparent); }
+.inline-menu > summary::-webkit-details-marker { display: none; }
+.inline-menu > summary::after { content: "▾"; font-size: .75em; }
+.inline-menu[open] > summary::after { content: "▴"; }
+.inline-menu > summary:focus-visible { outline: 2px solid var(--ring, currentColor); outline-offset: 2px; }
+.inline-menu-body { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
