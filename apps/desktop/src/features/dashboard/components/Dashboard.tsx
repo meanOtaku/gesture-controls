@@ -1,4 +1,5 @@
 import { Alert, AlertDescription } from "../../../components/ui/alert";
+import { AdvancedSection } from "../../../components/app/AdvancedSection";
 import { AnimatedWord } from "../../../components/app/AnimatedNumber";
 import { Card, CardContent } from "../../../components/ui/card";
 import type {
@@ -165,14 +166,14 @@ export function Dashboard({
       )}
 
       {view === "watch" && <WatchSensorsOffNote watchStatus={watchStatus ?? null} />}
+      {view === "watch" && <WatchTelemetryPanel watchStatus={watchStatus ?? null} />}
       {view === "watch" && (
-        <>
-          <WatchTelemetryPanel watchStatus={watchStatus ?? null} />
+        <AdvancedSection storageKey="watch" title="Diagnostics" summary="Link health, power measurement, and the pulse and health sensors">
           <LinkHealthCard />
           <WatchPowerCard />
-        </>
+          <WatchWellnessPanel watchStatus={watchStatus ?? null} />
+        </AdvancedSection>
       )}
-      {view === "watch" && <WatchWellnessPanel watchStatus={watchStatus ?? null} />}
 
     </main>
   );

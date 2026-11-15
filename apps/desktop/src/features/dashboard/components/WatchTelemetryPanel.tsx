@@ -2,20 +2,16 @@ import { Badge } from "../../../components/ui/badge";
 import { AnimatedWord } from "../../../components/app/AnimatedNumber";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { SectionHeader } from "../../../components/app/SectionHeader";
-import { quaternionToEulerDegrees, type WatchStatus } from "../../../shared/protocol/events";
-import { number, vector } from "../format";
-import { Metric, VectorRow } from "./MetricRow";
+import type { WatchStatus } from "../../../shared/protocol/events";
+import { number } from "../format";
+import { Metric } from "./MetricRow";
 
 type WatchTelemetryPanelProps = {
   watchStatus: WatchStatus | null;
 };
 
-/** Galaxy Watch connection state, clock sync, STEM button, and raw IMU telemetry. */
+/** Galaxy Watch connection, battery, wear and clock sync, and the STEM button. The motion itself is on the live graphs. */
 export function WatchTelemetryPanel({ watchStatus }: WatchTelemetryPanelProps) {
-  const watchEuler = watchStatus?.lastOrientation
-    ? quaternionToEulerDegrees(watchStatus.lastOrientation.quaternion)
-    : null;
-
   return (
     <Card role="region" aria-label="Watch connection">
       <CardHeader>
@@ -30,10 +26,6 @@ export function WatchTelemetryPanel({ watchStatus }: WatchTelemetryPanelProps) {
           <Metric
             label="Battery"
             value={watchStatus?.lastHeartbeat?.batteryPercent != null ? `${number(watchStatus.lastHeartbeat.batteryPercent, 0)}%` : "—"}
-          />
-          <Metric
-            label="Sequence"
-            value={watchStatus?.lastOrientation ? String(watchStatus.lastOrientation.sequence) : "—"}
           />
           <Metric
             label="Clock offset"
@@ -56,12 +48,6 @@ export function WatchTelemetryPanel({ watchStatus }: WatchTelemetryPanelProps) {
             }
           />
         </section>
-        <div className="vectors">
-          <VectorRow label="Quaternion" value={vector(watchStatus?.lastOrientation?.quaternion ?? null)} />
-          <VectorRow label="Yaw / pitch / roll" value={vector(watchEuler, 1)} />
-          <VectorRow label="Accelerometer" value={vector(watchStatus?.lastOrientation?.accelerometer ?? null)} />
-          <VectorRow label="Gyroscope" value={vector(watchStatus?.lastOrientation?.gyroscope ?? null)} />
-        </div>
       </CardContent>
     </Card>
   );

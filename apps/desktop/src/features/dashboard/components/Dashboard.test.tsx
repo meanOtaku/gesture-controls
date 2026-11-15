@@ -280,6 +280,15 @@ describe("Dashboard", () => {
     sweatLossLast: null,
   };
 
+  it("shows the watch's status first and folds the diagnostics away", () => {
+    const { container } = render(<Dashboard view="watch" status={null} watchStatus={watchStatus} />);
+    const page = within(container);
+    expect(page.getByRole("region", { name: "Watch connection" })).toBeInTheDocument();
+    expect(page.queryByText("Quaternion")).toBeNull();
+    expect(page.getByText("Diagnostics", { selector: ".advanced-title" })).toBeInTheDocument();
+    expect(page.queryByText("Link health")).toBeNull();
+  });
+
   it("leaves the sensor switches to Settings, and says which sensors are off", () => {
     const { container, rerender } = render(<Dashboard view="watch" status={null} watchStatus={watchStatus} />);
     expect(within(container).queryByRole("switch")).toBeNull();
