@@ -1000,8 +1000,8 @@ export function LabellingPage() {
               </label>
               <span className="mx-2 h-6 w-px bg-border" aria-hidden="true" />
               <span className="hint">Scale</span>
-              <Button size="sm" variant={!fitToView ? "default" : "outline"} onClick={() => setFitToView(false)} aria-pressed={!fitToView}>Whole recording</Button>
-              <Button size="sm" variant={fitToView ? "default" : "outline"} onClick={() => setFitToView(true)} aria-pressed={fitToView}>Fit to view</Button>
+              <Button size="sm" variant={!fitToView ? "default" : "outline"} onClick={() => setFitToView(false)} aria-pressed={!fitToView} title="Each graph keeps the range of the whole recording as you zoom">Fixed</Button>
+              <Button size="sm" variant={fitToView ? "default" : "outline"} onClick={() => setFitToView(true)} aria-pressed={fitToView} title="Each graph stretches to what is in view">Fit to view</Button>
             </div>
             <fieldset className="flex flex-wrap gap-x-4 gap-y-1" aria-label="Columns shown">
               {lanes.map(({ column }) => (
