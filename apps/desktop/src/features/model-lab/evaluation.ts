@@ -29,8 +29,11 @@ export function confusionAt(probabilities: number[], labels: number[], threshold
   let tn = 0;
   probabilities.forEach((p, i) => {
     const called = p >= threshold;
-    if (labels[i] === 1) called ? (tp += 1) : (fn += 1);
-    else called ? (fp += 1) : (tn += 1);
+    if (labels[i] === 1) {
+      if (called) tp += 1;
+      else fn += 1;
+    } else if (called) fp += 1;
+    else tn += 1;
   });
   const precision = tp + fp > 0 ? tp / (tp + fp) : 0;
   const recall = tp + fn > 0 ? tp / (tp + fn) : 0;

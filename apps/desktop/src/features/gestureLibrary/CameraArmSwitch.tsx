@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useState, useSyncExternalStore } from "react";
 import { Alert, AlertDescription } from "../../components/ui/alert";
-import { Button } from "../../components/ui/button";
 import { Switch } from "../../components/ui/switch";
 import { CameraQuickControl } from "../camera/components/CameraQuickControl";
 import { getCameraController } from "../camera/cameraService";

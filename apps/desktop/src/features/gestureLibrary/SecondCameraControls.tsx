@@ -16,7 +16,7 @@ type Props = {
  * a gesture counts as seen when either camera sees it (or only when both do). Nothing is lined up between the two. Its
  * picture and camera choice are in `CameraPair`, beside the first camera's.
  */
-export function SecondCameraControls({ primary, primaryState, secondary, secondaryState }: Props) {
+export function SecondCameraControls({ primaryState, secondary, secondaryState }: Props) {
   const on = secondaryState.status === "on";
   const starting = secondaryState.status === "starting";
   const others = primaryState.devices.filter((device) => device.deviceId !== primaryState.deviceId);

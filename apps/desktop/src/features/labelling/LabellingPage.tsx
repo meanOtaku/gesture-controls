@@ -119,6 +119,8 @@ export function LabellingPage() {
   const dragFrom = useRef<number | null>(null);
 
   const spans = history.present;
+  /** Whether a recording is open: the graph area exists only then, so its size and wheel are watched from then on. */
+  const hasRecording = recording !== null;
   const dirty = recording !== null && !sameSpans(spans, saved);
   const durationMs = Math.max(1, recording?.durationMs ?? 1);
   const selectedIndex = selection ? spans.findIndex((span) => span.startMs === selection.startMs && span.endMs === selection.endMs) : -1;
@@ -174,7 +176,7 @@ export function LabellingPage() {
     const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
     observer.observe(element);
     return () => observer.disconnect();
-  }, [recording !== null]);
+  }, [hasRecording]);
 
   const labelColors = useMemo(() => {
     const palette = ["#22d3ee", "#fb923c", "#c084fc", "#4ade80", "#f472b6", "#facc15", "#60a5fa", "#f87171"];
@@ -358,7 +360,7 @@ export function LabellingPage() {
     };
     element.addEventListener("wheel", onWheel, { passive: false });
     return () => element.removeEventListener("wheel", onWheel);
-  }, [recording !== null]);
+  }, [hasRecording]);
 
   const saveOriginal = async () => {
     if (!recording) return;

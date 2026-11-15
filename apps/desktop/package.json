@@ -9,7 +9,8 @@
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
     "tauri": "tauri",
-    "test:performance": "vitest run --config vite.performance.config.ts"
+    "test:performance": "vitest run --config vite.performance.config.ts",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.1.0",
@@ -34,14 +35,19 @@
     "vaul": "^1.1.2"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@tauri-apps/cli": "^2.0.0",
     "@testing-library/jest-dom": "^6.0.0",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^15.15.0",
     "jsdom": "^26.0.0",
     "typescript": "^5.7.0",
+    "typescript-eslint": "^8.72.2",
     "vite": "^7.0.0",
     "vitest": "^3.0.0"
   }

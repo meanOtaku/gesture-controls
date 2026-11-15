@@ -11,7 +11,7 @@ import type {
   WatchSkinTemperatureBatch,
   WatchStatus,
 } from "../../../shared/protocol/events";
-import type { AnnotationInterval, RecordingBundlePayload, RecordingEvidence, StopReason } from "../../../shared/tauri/recordingBundle";
+import type { RecordingBundlePayload, RecordingEvidence, StopReason } from "../../../shared/tauri/recordingBundle";
 import { clockSync } from "../../camera/clockSync";
 import {
   hasOverlap,

@@ -63,7 +63,7 @@ export function LineChart({
   const ys = all.map((p) => p.y);
   const xLow = xRange ? xRange[0] : Math.min(...xs);
   const xHigh = xRange ? xRange[1] : Math.max(...xs);
-  let yLow = yRange ? yRange[0] : Math.min(0, ...ys);
+  const yLow = yRange ? yRange[0] : Math.min(0, ...ys);
   let yHigh = yRange ? yRange[1] : Math.max(...ys);
   if (!(yHigh > yLow)) yHigh = yLow + 1;
   if (!yRange) yHigh += (yHigh - yLow) * 0.05;

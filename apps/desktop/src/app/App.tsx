@@ -192,7 +192,6 @@ function MainApp() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [automation, setAutomation] = useState<AutomationState | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
-  const [overlay, setOverlay] = useState<OverlayState>(emptyOverlay);
   const [volumeError, setVolumeError] = useState<string | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
@@ -244,7 +243,7 @@ function MainApp() {
       listen<OverlayState>(OVERLAY_STATE_EVENT, ({ payload }) => {
         if (cancelled) return;
         overlayEventVersion.current += 1;
-        setOverlay(payload);
+        // The main window keeps only whether the knob is up; the knob's own window draws it.
         if (payload.visible && overlayDesiredVisible.current === false) return;
         overlayVisible.current = payload.visible;
       }),
@@ -306,7 +305,6 @@ function MainApp() {
       void invoke<OverlayState>("get_overlay_state")
         .then((state) => {
           if (cancelled || overlayEventVersion.current !== requestedOverlayVersion) return;
-          setOverlay(state);
           if (!(state.visible && overlayDesiredVisible.current === false)) {
             overlayVisible.current = state.visible;
           }
@@ -594,9 +592,9 @@ function MainApp() {
   const stableSaveRecipe = useStableCallback(saveRecipe);
   const stableDeleteRecipe = useStableCallback((id: string) => { void deleteRecipe(id); });
   // Another page asking to send you somewhere (the Labelling page, from a model's mistakes).
-  useEffect(() => appNavigation.onOpen((tab) => setActiveTab(tab as AppTab)), []);
-  const openModelLab = useCallback(() => setActiveTab("modelLab"), []);
-  const openSettings = useCallback(() => setActiveTab("settings"), []);
+  useEffect(() => appNavigation.onOpen((tab) => setActiveTab(tab as AppTab)), [setActiveTab]);
+  const openModelLab = useCallback(() => setActiveTab("modelLab"), [setActiveTab]);
+  const openSettings = useCallback(() => setActiveTab("settings"), [setActiveTab]);
   // Which recipes have a change in flight. The pending set lives in a ref, so a memoised Recipes page is told about it
   // through this value instead of reading the ref itself.
   const pendingRecipeKey = (automation?.recipes ?? []).filter((recipe) => isPending(`recipe:${recipe.id}`)).map((recipe) => recipe.id).join(",");

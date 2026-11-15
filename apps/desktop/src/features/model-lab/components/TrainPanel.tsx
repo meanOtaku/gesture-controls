@@ -98,7 +98,7 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
-    }), []);
+    }), [setSelected]);
 
   const chooseTarget = (label: string) => {
     setTarget(label);

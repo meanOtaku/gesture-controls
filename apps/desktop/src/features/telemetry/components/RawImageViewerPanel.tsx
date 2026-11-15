@@ -1,5 +1,5 @@
 import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ImageIcon } from "lucide-react";
 import { SegmentedControl } from "../../../components/app/SegmentedControl";
 import {

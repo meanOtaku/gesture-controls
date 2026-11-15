@@ -35,6 +35,8 @@ export function CameraPreview({ camera, state, hidden }: { camera: CameraControl
     };
     draw(camera.getSnapshot?.().frame ?? state.frame);
     return camera.subscribeFrames?.(draw);
+    // Subscribed once per camera and status; the frames themselves arrive through the subscription, not the render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera, state.status]);
 
   return (

@@ -13,6 +13,7 @@
     "test:tauri-config": "node --test scripts/tauri-config.test.mjs",
     "typecheck": "npm run typecheck --workspace @spatial-gesture/desktop",
     "tauri": "npm run tauri --workspace @spatial-gesture/desktop --",
-    "test:performance": "npm run test:performance --workspace @spatial-gesture/desktop"
+    "test:performance": "npm run test:performance --workspace @spatial-gesture/desktop",
+    "lint": "npm run lint --workspace @spatial-gesture/desktop"
   }
 }

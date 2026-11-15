@@ -184,10 +184,14 @@ function NervSelectMenuView() {
       ...(flip ? { bottom: window.innerHeight - rect.top + GAP } : { top: rect.bottom + GAP }),
       maxHeight: Math.max(80, Math.min(MAX_HEIGHT, flip ? above : below)),
     });
+    // Placed once per open select: moving through its options must not move the menu.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [menu?.select]);
 
   useEffect(() => {
     if (menu) document.getElementById(optionId(menu.active))?.scrollIntoView({ block: "nearest" });
+    // Only when the highlighted option changes: the rest of the menu's state is not a reason to scroll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [menu?.active]);
 
   if (!nerv || !menu || !place) return null;

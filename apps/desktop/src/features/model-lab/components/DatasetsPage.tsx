@@ -40,7 +40,7 @@ export function DatasetsPage() {
         setImporting(false);
       }
     },
-    [refreshDatasets],
+    [refreshDatasets, setError],
   );
 
   const handleImportFolder = useCallback(async () => {
@@ -60,7 +60,7 @@ export function DatasetsPage() {
     } finally {
       setImporting(false);
     }
-  }, [refreshDatasets]);
+  }, [refreshDatasets, setError]);
 
   const handleDelete = useCallback(
     async (id: string) => {
@@ -82,7 +82,7 @@ export function DatasetsPage() {
         });
       }
     },
-    [refreshDatasets],
+    [refreshDatasets, setError],
   );
 
 
