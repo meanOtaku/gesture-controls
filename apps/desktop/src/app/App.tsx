@@ -8,7 +8,8 @@ import { appNavigation } from "../shared/navigation/appNavigation";
 import { CommandPalette } from "./components/CommandPalette";
 import { ShortcutsSheet } from "./components/ShortcutsSheet";
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { AppNav, navStatuses, type AppTab } from "./components/AppNav";
+import { AppNav, NAV_LABELS, navStatuses, type AppTab } from "./components/AppNav";
+import { PageErrorBoundary } from "../components/app/PageErrorBoundary";
 import { useCameraOn } from "../features/camera/useCameraOn";
 import { OperationFeedback } from "../components/app/OperationFeedback";
 import { Skeleton } from "../components/ui/skeleton";
@@ -622,6 +623,8 @@ function MainApp() {
       })}
     />
     <SidebarInset>
+    {/* Keyed by page: a fault in one page stays in it, and moving to another page starts clean. */}
+    <PageErrorBoundary key={activeTab} page={NAV_LABELS[activeTab] ?? "This page"}>
     <Suspense fallback={<TabFallback />}>
     {activeTab === "main" && (
       <Dashboard
@@ -723,6 +726,7 @@ function MainApp() {
       />
     )}
     </Suspense>
+    </PageErrorBoundary>
     </SidebarInset>
     <NervTelemetryPanel headStatus={status} watchStatus={watchStatus} handPreviewRef={activeTab === "labelling" ? setHandPreviewTarget : undefined} />
     <NervSelectMenu />

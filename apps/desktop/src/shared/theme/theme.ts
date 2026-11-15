@@ -1,18 +1,18 @@
 /**
- * The app's look. "neo" is neo-brutalism (cream, thick black outlines, hard shadows) and the default; "nerv" is a command
- * terminal after the Evangelion interfaces. Both are a mark on top of the page's own styling (the original deep-blue look,
+ * The app's look. "nerv" is a command terminal after the Evangelion interfaces, and the default; "neo" is neo-brutalism
+ * (cream, thick black outlines, hard shadows). Both are a mark on top of the page's own styling (the original deep-blue look,
  * which is no longer offered on its own). A saved theme that no longer exists (the removed "halftone" and "electric")
  * reads as the default.
  */
 export type AppTheme = "neo" | "nerv";
 
 export const THEMES: ReadonlyArray<{ value: AppTheme; label: string; summary: string }> = [
-  { value: "neo", label: "Neo-brutalism", summary: "Cream paper, thick black outlines, hard offset shadows and vibrant colours." },
   { value: "nerv", label: "NERV", summary: "A command terminal after the Evangelion interfaces: black panels in orange frames with corner brackets, hazard stripes, device hexagons, white Mincho title cards, green for normal state, cyan data, monospace numbers, and optional CRT scanlines." },
+  { value: "neo", label: "Neo-brutalism", summary: "Cream paper, thick black outlines, hard offset shadows and vibrant colours." },
 ];
 
 export const THEME_STORAGE_KEY = "appTheme";
-export const DEFAULT_THEME: AppTheme = "neo";
+export const DEFAULT_THEME: AppTheme = "nerv";
 
 export function isTheme(value: unknown): value is AppTheme {
   return value === "neo" || value === "nerv";

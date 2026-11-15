@@ -13,13 +13,15 @@ afterEach(() => {
 });
 
 describe("theme", () => {
-  it("is neo-brutalism until another is chosen, and ignores anything it does not know", () => {
+  it("is NERV until another is chosen, keeps a saved neo-brutalism, and ignores anything it does not know", () => {
+    expect(readTheme()).toBe("nerv");
+    window.localStorage.setItem(THEME_STORAGE_KEY, "neo");
     expect(readTheme()).toBe("neo");
     window.localStorage.setItem(THEME_STORAGE_KEY, "rainbow");
-    expect(readTheme()).toBe("neo");
+    expect(readTheme()).toBe("nerv");
     // Electric is no longer offered: a saved choice of it reads as the default.
     window.localStorage.setItem(THEME_STORAGE_KEY, "electric");
-    expect(readTheme()).toBe("neo");
+    expect(readTheme()).toBe("nerv");
   });
 
   it("marks the page for the chosen theme", () => {
@@ -50,7 +52,7 @@ describe("theme", () => {
   it("still works when the browser will not remember", () => {
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked"); });
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
-    expect(readTheme()).toBe("neo");
+    expect(readTheme()).toBe("nerv");
     expect(() => saveTheme("nerv")).not.toThrow();
     expect(document.documentElement.getAttribute("data-theme")).toBe("nerv");
   });
@@ -59,7 +61,7 @@ describe("theme", () => {
 describe("the removed halftone theme", () => {
   it("reads as the default when it is still saved", () => {
     window.localStorage.setItem(THEME_STORAGE_KEY, "halftone");
-    expect(readTheme()).toBe("neo");
+    expect(readTheme()).toBe("nerv");
   });
 });
 

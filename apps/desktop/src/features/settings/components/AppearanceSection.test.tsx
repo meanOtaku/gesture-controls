@@ -14,18 +14,18 @@ afterEach(() => {
 });
 
 describe("AppearanceSection", () => {
-  it("starts on neo-brutalism, offers only it and NERV, and switches at once, remembering it", () => {
+  it("starts on NERV, offers only it and neo-brutalism, and switches at once, remembering it", () => {
     render(<AppearanceSection />);
     const group = within(screen.getByRole("radiogroup"));
-    expect(group.getByRole("radio", { name: /Neo-brutalism/ })).toHaveAttribute("aria-checked", "true");
+    expect(group.getByRole("radio", { name: /NERV/ })).toHaveAttribute("aria-checked", "true");
     expect(group.getAllByRole("radio")).toHaveLength(2);
     expect(group.queryByRole("radio", { name: /Electric/ })).toBeNull();
-    fireEvent.click(group.getByRole("radio", { name: /NERV/ }));
-    expect(document.documentElement.getAttribute("data-theme")).toBe("nerv");
-    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("nerv");
     fireEvent.click(group.getByRole("radio", { name: /Neo-brutalism/ }));
     expect(document.documentElement.getAttribute("data-theme")).toBe("neo");
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("neo");
+    fireEvent.click(group.getByRole("radio", { name: /NERV/ }));
+    expect(document.documentElement.getAttribute("data-theme")).toBe("nerv");
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("nerv");
   });
 
   it("shows the saved theme when it opens", () => {
@@ -39,7 +39,8 @@ describe("AppearanceSection", () => {
     expect(within(screen.getByRole("radiogroup")).queryByRole("radio", { name: /Halftone/ })).toBeNull();
   });
 
-  it("offers NERV, and only then a switch for the CRT effects, which is remembered", () => {
+  it("offers a switch for the CRT effects only under NERV, which is remembered", () => {
+    window.localStorage.setItem(THEME_STORAGE_KEY, "neo");
     render(<AppearanceSection />);
     expect(screen.queryByRole("switch", { name: "CRT effects" })).toBeNull();
     fireEvent.click(within(screen.getByRole("radiogroup")).getByRole("radio", { name: /NERV/ }));
