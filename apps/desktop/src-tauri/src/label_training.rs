@@ -192,9 +192,26 @@ fn spec_stages(stages: &[StageRequest], train: &BTreeSet<String>) -> Vec<serde_j
 /// rate. The trainer is told it, its manifest says it, and the runtime reads the same (`preprocessing.motionHz`).
 pub const MOTION_HZ: u32 = 100;
 
+/// Every trainer backend this app trains with. The start-up purge in `label_runtime` keeps the runs and models whose inputs
+/// are what one of these reads, so a backend added to `method_named` without being listed here would have its models
+/// deleted at the next start (the CNN v2's were, until it was listed; a test there checks every entry).
+pub(crate) const TRAINED_BACKENDS: [&str; 3] = [BACKEND, CNN_BACKEND, CNN_V2_BACKEND];
+
+/// What a model trained with `backend` reads, or None for a backend this app does not train with.
+pub(crate) fn trained_contract(backend: &str) -> Option<InputContract> {
+    method_named(Some(backend))
+        .ok()
+        .map(|(_, contract)| contract)
+}
+
 /// The trainer backend a request asks for, and what its model reads.
 fn method_of(request: &TrainRequest) -> Result<(&'static str, InputContract), String> {
-    match request.method.as_deref() {
+    method_named(request.method.as_deref())
+}
+
+/// The trainer backend named (the trees when none is), and what its model reads.
+fn method_named(method: Option<&str>) -> Result<(&'static str, InputContract), String> {
+    match method {
         // The trees' motion features keep their names at 100 Hz, so their contract is the same.
         None | Some(BACKEND) => Ok((BACKEND, pinch_start_contract())),
         Some(CNN_BACKEND) => Ok((CNN_BACKEND, cnn_contract_100())),

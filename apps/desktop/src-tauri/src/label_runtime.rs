@@ -283,14 +283,25 @@ const OLD_STORE_FILES: [&str; 2] = ["network-designs.json", "fine-tune-plans.jso
 /// disk: a version whose bundle is not the PPG pinch-start trees, a run sealed with other inputs, the legacy quarantined
 /// models, and the old network-design and fine-tune stores. Recordings and labels are never touched. Does nothing when there
 /// is nothing old, so it runs at every start.
-fn purge_old_models(store: &mut RegistryStore<FileStore>, dir: &Path) -> Result<(), String> {
-    let contracts = [
+/// The inputs of every model this app can still run: whatever its trainer backends make (see
+/// `label_training::TRAINED_BACKENDS`), and the older kinds it still loads. A run or model reading anything else is old.
+fn kept_contracts() -> Vec<model_lab_core::InputContract> {
+    let mut contracts: Vec<_> = crate::label_training::TRAINED_BACKENDS
+        .iter()
+        .filter_map(|backend| crate::label_training::trained_contract(backend))
+        .collect();
+    contracts.extend([
         label_inference::pinch_start_contract(),
         label_inference::ppg_onset_contract(),
+        // The CNN at its first 25 Hz grid, which the runtime still loads.
         label_inference::cnn_contract(),
-        // The 100 Hz CNN the trainer now makes: without it here, its runs would be taken for an old kind and removed.
         label_inference::cnn_contract_100(),
-    ];
+    ]);
+    contracts
+}
+
+fn purge_old_models(store: &mut RegistryStore<FileStore>, dir: &Path) -> Result<(), String> {
+    let contracts = kept_contracts();
     let purged = store
         .mutate(|registry| {
             Ok(registry.purge(
@@ -325,11 +336,9 @@ fn purge_old_models(store: &mut RegistryStore<FileStore>, dir: &Path) -> Result<
                 .ok()
                 .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
                 .and_then(|spec| spec["backend"].as_str().map(str::to_string));
-            if backend.is_some_and(|b| {
-                b != crate::label_training::BACKEND
-                    && b != crate::label_training::CNN_BACKEND
-                    && b != crate::label_training::CNN_V2_BACKEND
-            }) {
+            if backend
+                .is_some_and(|b| !crate::label_training::TRAINED_BACKENDS.contains(&b.as_str()))
+            {
                 let _ = std::fs::remove_dir_all(entry.path());
                 leftovers += 1;
             }
@@ -1931,6 +1940,22 @@ mod tests {
             dir.join("datasets").is_dir() && dir.join("labels.json").is_file(),
             "recordings and labels are kept"
         );
+    }
+
+    #[test]
+    fn every_kind_of_model_this_app_trains_survives_the_start_up_purge() {
+        // The CNN v2's contract was missing from the purge's list, so every CNN v2 trained here (and its run) was deleted
+        // at the next start of the app.
+        let kept = kept_contracts();
+        for backend in crate::label_training::TRAINED_BACKENDS {
+            let contract = crate::label_training::trained_contract(backend)
+                .unwrap_or_else(|| panic!("{backend} is listed as trained but has no contract"));
+            assert!(
+                kept.contains(&contract),
+                "models trained with {backend} would be purged at start"
+            );
+        }
+        assert!(kept.contains(&label_inference::cnn_v2_contract()));
     }
 
     #[test]
