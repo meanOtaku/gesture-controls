@@ -58,8 +58,23 @@ SPEC_VERSION = 1
 BACKEND = "ppg-onset-trees"
 # The CNN (`cnn.py`): the last second of motion and pulse into a small convolutional network. It needs PyTorch.
 CNN_BACKEND = "ppg-imu-cnn"
-BACKENDS = (BACKEND, CNN_BACKEND)
+# The v2 CNN (`cnn_v2.py`): one branch per sensor, the accelerometer's jerk envelope as a tenth channel, warping and
+# noise-overlay augmentation, a peak gate, and a cut-off chosen on the no-gesture recordings
+# (docs/research/artifacts/pinch-cnn-v2-2026-11). It needs PyTorch, and reads motion at 100 Hz.
+CNN_V2_BACKEND = "ppg-imu-cnn-v2"
+BACKENDS = (BACKEND, CNN_BACKEND, CNN_V2_BACKEND)
 CNN_PREPROCESSING = "ppg_imu_cnn_median"
+CNN_V2_PREPROCESSING = "ppg_imu_cnn_v2"
+# The v2 gate's level: this quantile of `cnn_input.spike` at the training recordings' pinch moments (those the CNN learns
+# as starts), so that 90% of them pass. On the research test set it removed every everyday false activation and no pinch.
+GATE_QUANTILE = 0.10
+# The v2 cut-off candidates: its gated scores stay useful far below the first CNN's.
+V2_THRESHOLD_CANDIDATES = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 0.97, 0.98, 0.99, 0.995, 0.998, 0.999)
+# Noise overlay (`overlay_copies`): each training recording with a start of the target gets this many copies whose raw
+# accelerometer and gyroscope carry a random stretch of a training everyday-noise recording's motion (less its mean),
+# scaled by a factor in OVERLAY_SCALE. So the model sees its pinches made with the arm moving.
+OVERLAY_COPIES = 2
+OVERLAY_SCALE = (0.5, 1.0)
 CNN_WINDOW_MS = 11_000
 PPG_SOURCES = ("watchPpg",)
 MOTION_SOURCES = ("watchPpg", "watchOrientation")
@@ -157,6 +172,8 @@ class Spec:
     # The rate of the grid a motion model reads (`imu_onset.GRIDS` for the trees, `cnn_input.GRIDS` for the CNN); the bundle
     # says it, so the runtime reads the same. 100 unless the spec asks for 50 (to train again as the first models were).
     motion_hz: int = imu_onset.MOTION_HZ
+    # The v2 CNN's gate level (m/s^3, `cnn_input.spike`), set by `run` from the training recordings; None: no gate.
+    gate_min_jerk: float | None = None
 
     def session_of(self, rid: str) -> str:
         """The session a recording belongs to: its own id unless it shares one with others."""
@@ -169,8 +186,13 @@ class Spec:
 
     @property
     def cnn(self) -> bool:
-        """Whether this is the CNN rather than the trees."""
-        return self.backend == CNN_BACKEND
+        """Whether this is a CNN (the first or v2) rather than the trees."""
+        return self.backend in (CNN_BACKEND, CNN_V2_BACKEND)
+
+    @property
+    def cnn_v2(self) -> bool:
+        """Whether this is the v2 CNN."""
+        return self.backend == CNN_V2_BACKEND
 
     @property
     def motion(self) -> bool:
@@ -187,7 +209,7 @@ class Spec:
     @property
     def feature_names(self) -> tuple[str, ...]:
         if self.cnn:
-            return cnn_input.feature_names(self.motion_hz)
+            return cnn_input.feature_names(self.motion_hz, envelope=self.cnn_v2)
         return ppg_onset.FEATURE_NAMES + imu_onset.FEATURE_NAMES if self.motion else ppg_onset.FEATURE_NAMES
 
     @property
@@ -204,7 +226,7 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
     sources = tuple(raw.get("sources", SOURCES))
     if sources not in PREPROCESSING:
         raise TrainingRefused(f"the model reads the pulse sensor and motion {list(MOTION_SOURCES)}, or the pulse sensor alone {list(PPG_SOURCES)}, not {list(sources)}")
-    if backend == CNN_BACKEND and sources != MOTION_SOURCES:
+    if backend in (CNN_BACKEND, CNN_V2_BACKEND) and sources != MOTION_SOURCES:
         raise TrainingRefused(f"the CNN reads the pulse sensor and motion {list(MOTION_SOURCES)}, not {list(sources)}")
     recordings = {rid: Path(path) for rid, path in raw.get("recordings", {}).items()}
     train, evaluation = list(raw.get("train", [])), list(raw.get("evaluation", []))
@@ -238,6 +260,8 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
     motion_hz = raw.get("motionHz", imu_onset.MOTION_HZ)
     if isinstance(motion_hz, bool) or motion_hz not in imu_onset.GRIDS:
         raise TrainingRefused(f"motionHz must be one of {sorted(imu_onset.GRIDS)}, got {motion_hz!r}")
+    if backend == CNN_V2_BACKEND and motion_hz != 100:
+        raise TrainingRefused("the v2 CNN reads motion at 100 Hz")
     decide_from_ns = raw.get("decideFromNs", {}) or {}
     if not isinstance(decide_from_ns, dict) or any(rid not in recordings or isinstance(t, bool) or not isinstance(t, int) for rid, t in decide_from_ns.items()):
         raise TrainingRefused("decideFromNs must give recordings of the spec a whole number of nanoseconds")
@@ -340,7 +364,7 @@ def inputs(spec: Spec, recording: Recording, decisions_ns: np.ndarray) -> np.nda
     ts, values = pulse_of(recording)
     if spec.cnn:
         motion_ts, axes = motion_of(recording)
-        return cnn_input.inputs(motion_ts, axes, ts, values, decisions_ns, hz=spec.motion_hz)
+        return cnn_input.inputs(motion_ts, axes, ts, values, decisions_ns, hz=spec.motion_hz, envelope=spec.cnn_v2)
     x = ppg_onset.features(ts, values, decisions_ns)
     if not spec.motion:
         return x
@@ -416,6 +440,67 @@ def examples(spec: Spec, recordings: dict[str, Recording], ids: list[str]) -> Ex
     )
 
 
+def gate_level(spec: Spec, recordings: dict[str, Recording]) -> float | None:
+    """The v2 gate's level: GATE_QUANTILE of `cnn_input.spike` at the training recordings' start moments (the CNN's
+    positives); None when they have none."""
+    spikes = []
+    for rid in spec.train:
+        d, y, _ = cnn_examples(spec, recordings[rid])
+        if (y == 1).any():
+            motion_ts, axes = motion_of(recordings[rid])
+            spikes.append(cnn_input.spike(motion_ts, axes, d[y == 1]))
+    return float(np.quantile(np.concatenate(spikes), GATE_QUANTILE)) if spikes else None
+
+
+def _overlaid(recording: Recording, noise: list[Recording], rng: np.random.Generator) -> Recording | None:
+    """A copy of `recording` whose raw accelerometer and gyroscope carry a random stretch of one of `noise`'s motion, less
+    its mean, times a factor in OVERLAY_SCALE (interpolated onto the recording's rows). None when no noise is long enough."""
+    ts = recording.timestamps_ns
+    span = int(ts[-1] - ts[0])
+    long_enough = [n for n in noise if int(n.timestamps_ns[-1] - n.timestamps_ns[0]) > span]
+    if not long_enough:
+        return None
+    source = long_enough[rng.integers(len(long_enough))]
+    nts, motion = motion_of(source)
+    start = int(nts[0]) + int(rng.integers(0, int(nts[-1] - nts[0]) - span))
+    pick = (nts >= start) & (nts <= start + span)
+    stretch = (motion[pick] - motion[pick].mean(axis=0)) * rng.uniform(*OVERLAY_SCALE)
+    channels = dict(recording.channels)
+    for i, axis in enumerate(imu_onset.AXES):
+        channels[axis] = recording.channels[axis] + np.interp(ts - ts[0], nts[pick] - start, stretch[:, i])
+    return replace(recording, channels=channels)
+
+
+def overlay_copies(spec: Spec, recordings: dict[str, Recording], train: Examples, say=lambda _: None) -> Examples:
+    """The v2 CNN's training examples with OVERLAY_COPIES noise-overlay copies of each training recording that has a start
+    of the target. The motion comes from the training recordings labelled everyday_noise only (never a held-out one). A
+    copy's examples belong to its recording (`groups`), so a fold that leaves a recording out leaves its copies out."""
+    noise = [recordings[rid] for rid in spec.train if "everyday_noise" in set(recordings[rid].raw_labels.tolist())
+             and not any(label == spec.target for _, _, label in ppg_onset.holds(recordings[rid].timestamps_ns, recordings[rid].raw_labels))]
+    if not noise:
+        say("No everyday-noise recording to train on, so no noise-overlay copies")
+        return train
+    rng = np.random.default_rng(spec.seed)
+    xs, ys, groups, kinds, decisions = [train.x], [train.y], [train.groups], list(train.kinds), [train.decisions]
+    copies = 0
+    for rid in spec.train:
+        recording = recordings[rid]
+        if not any(label == spec.target for _, _, label in ppg_onset.holds(recording.timestamps_ns, recording.raw_labels)):
+            continue
+        for _ in range(OVERLAY_COPIES):
+            copy = _overlaid(recording, noise, rng)
+            if copy is None:
+                continue
+            d, y, k = cnn_examples(spec, copy)
+            x = inputs(spec, copy, d)
+            ok = np.isfinite(x).all(axis=1) & spec.decided(rid, d)
+            xs.append(x[ok]); ys.append(y[ok]); groups.append(np.array([rid] * int(ok.sum())))
+            kinds += [kind for kind, keep in zip(k, ok.tolist()) if keep]; decisions.append(d[ok])
+            copies += 1
+    say(f"Added {copies} noise-overlay copies of the training gesture recordings, with motion from {len(noise)} everyday-noise recordings")
+    return Examples(np.concatenate(xs), np.concatenate(ys), np.concatenate(groups), kinds, np.concatenate(decisions))
+
+
 def check_enough(train: Examples, held_out: Examples, steady_starts: bool = False) -> None:
     still = " made with the hand still (only those count)" if steady_starts else ""
     if int(train.y.sum()) < MIN_POSITIVE_TRAIN:
@@ -445,6 +530,10 @@ def fit(x: np.ndarray, y: np.ndarray, seed: int, n_trees: int = TREES, backend: 
     """The model trained on `x` and `y`. For the CNN, `keep` marks rows it must train on whatever it leaves out to stay
     within its number of negatives (the false activations `reinforce` adds); the trees train on every row. With `stages`
     (and each row's recording in `groups`), the CNN trains through them in order (`stage_rows`)."""
+    if backend == CNN_V2_BACKEND:
+        from . import cnn_v2
+
+        return cnn_v2.fit(x, y, seed)
     if backend == CNN_BACKEND:
         from . import cnn
 
@@ -522,7 +611,7 @@ def reinforce(spec: Spec, model, train: Examples, recordings: dict[str, Recordin
     most this way. They are found at the lowest cut-off the threshold may then be chosen at, so every mistake it could make
     at any of them is learnt from (at a fixed 0.5, a model whose scores stay lower found none and was trained the same
     again). Returns the model (the same one without them) and how many were added."""
-    if not spec.hard_negatives:
+    if not spec.hard_negatives or spec.cnn_v2:      # the v2 CNN learned nothing more from them in the research
         return model, 0
     predict = lambda x: model.predict_proba(x)[:, 1]  # noqa: E731
     lowest = min(CNN_THRESHOLD_CANDIDATES if spec.cnn else THRESHOLD_CANDIDATES)
@@ -590,8 +679,43 @@ def out_of_fold_threshold(spec: Spec, train: Examples, recordings: dict[str, Rec
         return choose_threshold(scores, truth), "trainingRecordings", auc, None
     if not timelines:
         return ACTIVATION, "default", auc, None
+    if spec.cnn_v2:
+        threshold, events = v2_threshold(spec, timelines)
+        return threshold, "trainingRecordings", auc, events
     threshold, events = budget_threshold(spec, timelines)
     return threshold, "trainingRecordings", auc, events
+
+
+def v2_threshold(spec: Spec, timelines: list[tuple[Recording, np.ndarray, np.ndarray]]) -> tuple[float, dict[str, Any]]:
+    """The v2 CNN's cut-off: of V2_THRESHOLD_CANDIDATES, the one catching the most starts in `timelines` (each scored by a
+    model that did not see it, gated) whose false activations on the NO-GESTURE recordings among them stay within
+    FALSE_ACTIVATIONS_BUDGET_PER_HOUR (ties: the higher cut-off). Unlabelled time inside gesture recordings is not
+    counted: it may hold gestures nobody labelled, which kept the first rule's cut-off at 0.97-0.99. With no no-gesture
+    recording among them, `budget_threshold`'s rule instead."""
+    def has_target(r):
+        return any(label == spec.target for _, _, label in ppg_onset.holds(r.timestamps_ns, r.raw_labels))
+    quiet = [(r, t, s) for r, t, s in timelines if not has_target(r)]
+    if not quiet:
+        return budget_threshold(spec, timelines)
+    quiet_ids = {id(r) for r, _, _ in quiet}
+    replays = {}
+    for t in V2_THRESHOLD_CANDIDATES:
+        policy = policy_for(t, spec.trigger)
+        caught = gestures = fa = 0
+        quiet_ns = 0
+        for r, times, scores in timelines:
+            d = detections(spec, r, times, scores, policy)
+            caught += d["caught"]; gestures += d["gestures"]
+            if id(r) in quiet_ids:
+                fa += d["falseActivations"]; quiet_ns += d["negativeNs"]
+        hours = quiet_ns / 3.6e12
+        replays[t] = {"caught": caught, "gestures": gestures, "falseActivations": fa, "noGestureHours": hours,
+                      "falseActivationsPerHour": fa / hours if hours else None}
+    within = [t for t, e in replays.items() if e["falseActivationsPerHour"] is not None
+              and e["falseActivationsPerHour"] <= FALSE_ACTIVATIONS_BUDGET_PER_HOUR]
+    best = max(within, key=lambda t: (replays[t]["caught"], t)) if within else max(V2_THRESHOLD_CANDIDATES)
+    return float(best), {**replays[best], "falseActivationsBudgetPerHour": FALSE_ACTIVATIONS_BUDGET_PER_HOUR,
+                         "withinTarget": bool(within), "rule": "noGestureRecordings"}
 
 
 def budget_threshold(spec: Spec, timelines: list[tuple[Recording, np.ndarray, np.ndarray]]) -> tuple[float, dict[str, Any]]:
@@ -694,7 +818,12 @@ def timeline(spec: Spec, recording: Recording, predict) -> tuple[np.ndarray, np.
     ok = np.isfinite(x).all(axis=1) & spec.decided(recording.session_id, ts)
     if not ok.any():
         return None
-    return ts[ok], predict(x[ok])
+    scores = predict(x[ok])
+    if spec.gate_min_jerk is not None:
+        # The v2 gate, as the runtime applies it: no spike in the last GATE_WINDOW_MS, no score.
+        motion_ts, axes = motion_of(recording)
+        scores = np.where(cnn_input.spike(motion_ts, axes, ts[ok]) >= spec.gate_min_jerk, scores, 0.0)
+    return ts[ok], scores
 
 
 def gesture_episodes(held: list[tuple[int, int, str]], target: str) -> list[tuple[int, int]]:
@@ -896,7 +1025,7 @@ def training_range(x_train: np.ndarray) -> dict[str, list[float]] | None:
 def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, Any], x_train: np.ndarray) -> str:
     bundle = out / "bundle"
     bundle.mkdir(parents=True, exist_ok=True)
-    file, format_ = ("model.cnn", "cnn") if spec.cnn else ("model.trees", "trees")
+    file, format_ = ("model.cnn", "cnn-branches" if spec.cnn_v2 else "cnn") if spec.cnn else ("model.trees", "trees")
     (bundle / file).write_bytes(model_bytes)
     sha = hashlib.sha256(model_bytes).hexdigest()
     policy = policy_for(metrics["activationThreshold"], spec.trigger)
@@ -911,6 +1040,17 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, A
 
         details = {"convolutions": [c for c, _ in cnn.CONVOLUTIONS_FOR[cnn_input.grid_of(spec.motion_hz).window]],
                    "kernel": cnn.KERNEL, "epochs": cnn.EPOCHS}
+        if spec.cnn_v2:
+            from . import cnn_v2
+
+            pipeline = ("accelerometer, gyroscope, PPG and the accelerometer's jerk envelope on a 100 Hz grid -> each channel scaled by the median and"
+                        " median absolute deviation of its last 11 s, sigmoid -> the last 1 s (10 x 100) -> one branch per sensor (2 convolutions each),"
+                        " 2 shared convolutions, max and mean pooling of every branch and the shared maps, 2 dense -> 3 networks averaged"
+                        " -> peak gate (accelerometer jerk in the last 600 ms) -> peak trigger")
+            details = {"branches": [list(g) for g in cnn_v2.GROUPS], "branchConvolutions": [c for c, _ in cnn_v2.BRANCH],
+                       "sharedConvolutions": [c for c, _ in cnn_v2.SHARED], "kernel": cnn.KERNEL, "epochs": cnn.EPOCHS,
+                       "networks": cnn_v2.MEMBERS, "augmentation": "size, noise, 40 ms shift, pulse blanking, time and magnitude warping",
+                       "noiseOverlayCopies": OVERLAY_COPIES}
     else:
         import sklearn
 
@@ -934,7 +1074,10 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, A
                        **({"trigger": policy.trigger} if spec.motion else {}),
                        # How long after a gesture starts the model decides: the runtime's still-hand gate looks before that.
                        "decisionDelayMs": spec.decision_delay_ms},
-        "preprocessing": {"kind": CNN_PREPROCESSING if spec.cnn else PREPROCESSING[spec.sources],
+        "preprocessing": {"kind": (CNN_V2_PREPROCESSING if spec.cnn_v2 else CNN_PREPROCESSING) if spec.cnn else PREPROCESSING[spec.sources],
+                          # The v2 gate: the runtime scores 0 where the accelerometer's jerk did not reach minJerk in the last windowMs.
+                          **({"gate": {"windowMs": cnn_input.GATE_WINDOW_MS, "minJerk": spec.gate_min_jerk}}
+                             if spec.cnn_v2 and spec.gate_min_jerk is not None else {}),
                           # The grid the motion (and for the CNN, the pulse) is read on; absent (50 Hz) in the first models and
                           # for the pulse alone.
                           **({"motionHz": spec.motion_hz} if spec.motion else {})},
@@ -1003,7 +1146,13 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
         train = examples(spec, recordings, spec.train)
         held_out = examples(spec, recordings, spec.evaluation)
         check_enough(train, held_out, spec.steady_starts)
-        what = f"the CNN on {cnn_device()}" if spec.cnn else f"{TREES} trees"
+        if spec.cnn_v2:
+            spec = replace(spec, gate_min_jerk=gate_level(spec, recordings))
+            if spec.gate_min_jerk is not None:
+                say(f"Peak gate: a decision may fire only after an accelerometer jerk of {spec.gate_min_jerk:.0f} m/s^3 in the last "
+                    f"{cnn_input.GATE_WINDOW_MS} ms (90% of the training pinch moments have one)")
+            train = overlay_copies(spec, recordings, train, say)
+        what = (f"the v2 CNN on {cnn_device()}" if spec.cnn_v2 else f"the CNN on {cnn_device()}") if spec.cnn else f"{TREES} trees"
         say(f"Training {what} on {train.y.shape[0]} moments ({int(train.y.sum())} starts) from {len(spec.train)} recordings")
         for number, stage in enumerate(spec.stages, 1):
             rows = np.isin(train.groups, stage.recordings)
@@ -1027,7 +1176,12 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
             metrics["hardNegatives"] = mined
         (out / "evaluation.json").write_text(json.dumps(metrics, indent=2) + "\n")
 
-        if spec.cnn:
+        if spec.cnn_v2:
+            from . import cnn_v2
+
+            model_bytes, tolerance = cnn_v2.to_bytes(model), cnn_v2.PARITY_TOLERANCE
+            exported = cnn_v2.predict(model_bytes, held_out.x)
+        elif spec.cnn:
             from . import cnn
 
             model_bytes, tolerance = cnn.to_bytes(model), cnn.PARITY_TOLERANCE

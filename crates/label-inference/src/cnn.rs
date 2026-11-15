@@ -18,11 +18,11 @@ pub const FORMAT: &str = "ppg-imu-cnn";
 pub const VERSION: u32 = 1;
 /// The largest layer, kernel and dilation a file may have: far more than the trainer uses, small enough that a decision
 /// stays cheap.
-const MAX_WIDTH: usize = 256;
+pub(crate) const MAX_WIDTH: usize = 256;
 const MAX_KERNEL: usize = 15;
 const MAX_DILATION: usize = 32;
-const MAX_LAYERS: usize = 8;
-const MAX_MEMBERS: usize = 5;
+pub(crate) const MAX_LAYERS: usize = 8;
+pub(crate) const MAX_MEMBERS: usize = 5;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum CnnError {
@@ -36,7 +36,7 @@ pub enum CnnError {
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Conv {
+pub(crate) struct Conv {
     #[serde(rename = "in")]
     input: usize,
     out: usize,
@@ -48,7 +48,7 @@ struct Conv {
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Dense {
+pub(crate) struct Dense {
     #[serde(rename = "in")]
     input: usize,
     out: usize,
@@ -80,7 +80,7 @@ pub struct Cnn {
     members: Vec<Member>,
 }
 
-fn malformed(detail: impl Into<String>) -> CnnError {
+pub(crate) fn malformed(detail: impl Into<String>) -> CnnError {
     CnnError::Malformed(detail.into())
 }
 
@@ -143,8 +143,14 @@ fn check_member(file: &Member, channels: usize) -> Result<(), CnnError> {
             "each network needs at least one convolution and one dense layer, and at most 8 layers",
         ));
     }
+    let width = check_convs(&file.conv, channels)?;
+    check_dense(&file.dense, width * 2) // maxima, then means
+}
+
+/// Checks a chain of convolutions takes `channels` channels, each layer's shape and weights; returns the channels out.
+pub(crate) fn check_convs(convs: &[Conv], channels: usize) -> Result<usize, CnnError> {
     let mut width = channels;
-    for (i, c) in file.conv.iter().enumerate() {
+    for (i, c) in convs.iter().enumerate() {
         if c.input != width {
             return Err(malformed(format!(
                 "convolution {i} takes {} channels, but {width} reach it",
@@ -167,10 +173,18 @@ fn check_member(file: &Member, channels: usize) -> Result<(), CnnError> {
                 "convolution {i} has the wrong number of weights"
             )));
         }
+        if !c.weight.iter().chain(&c.bias).all(|w| w.is_finite()) {
+            return Err(malformed("a weight is not a finite number"));
+        }
         width = c.out;
     }
-    width *= 2; // maxima, then means
-    for (i, d) in file.dense.iter().enumerate() {
+    Ok(width)
+}
+
+/// Checks dense layers take `values` values and end in one, each layer's shape and weights.
+pub(crate) fn check_dense(dense: &[Dense], values: usize) -> Result<(), CnnError> {
+    let mut width = values;
+    for (i, d) in dense.iter().enumerate() {
         if d.input != width {
             return Err(malformed(format!(
                 "dense layer {i} takes {} values, but {width} reach it",
@@ -191,15 +205,9 @@ fn check_member(file: &Member, channels: usize) -> Result<(), CnnError> {
     if width != 1 {
         return Err(malformed("the last dense layer must give one value"));
     }
-    let finite = |v: &[f64]| v.iter().all(|w| w.is_finite());
-    if !file
-        .conv
+    if !dense
         .iter()
-        .all(|c| finite(&c.weight) && finite(&c.bias))
-        || !file
-            .dense
-            .iter()
-            .all(|d| finite(&d.weight) && finite(&d.bias))
+        .all(|d| d.weight.iter().chain(&d.bias).all(|w| w.is_finite()))
     {
         return Err(malformed("a weight is not a finite number"));
     }
@@ -209,63 +217,77 @@ fn check_member(file: &Member, channels: usize) -> Result<(), CnnError> {
 impl Member {
     /// One network's probability for `input`.
     fn predict(&self, input: &[f64], length: usize) -> f64 {
-        let mut x: Vec<f64> = input.to_vec();
-        for c in &self.conv {
-            // Each input channel with its zero padding, so every tap reads a contiguous run.
-            let pad = c.dilation * (c.kernel - 1) / 2;
-            let wide = length + 2 * pad;
-            let mut padded = vec![0.0; c.input * wide];
+        let x = run_convs(&self.conv, input.to_vec(), length);
+        let h = pooled(&x, length);
+        run_dense(&self.dense, h)
+    }
+}
+
+/// `x` (channels x `length`, channel by channel) through `convs`, each followed by a ReLU.
+pub(crate) fn run_convs(convs: &[Conv], mut x: Vec<f64>, length: usize) -> Vec<f64> {
+    for c in convs {
+        // Each input channel with its zero padding, so every tap reads a contiguous run.
+        let pad = c.dilation * (c.kernel - 1) / 2;
+        let wide = length + 2 * pad;
+        let mut padded = vec![0.0; c.input * wide];
+        for i in 0..c.input {
+            padded[i * wide + pad..][..length].copy_from_slice(&x[i * length..][..length]);
+        }
+        let mut y = vec![0.0; c.out * length];
+        for (o, out) in y.chunks_exact_mut(length).enumerate() {
+            out.fill(c.bias[o]);
             for i in 0..c.input {
-                padded[i * wide + pad..][..length].copy_from_slice(&x[i * length..][..length]);
-            }
-            let mut y = vec![0.0; c.out * length];
-            for (o, out) in y.chunks_exact_mut(length).enumerate() {
-                out.fill(c.bias[o]);
-                for i in 0..c.input {
-                    let row = &padded[i * wide..][..wide];
-                    for (k, weight) in c.weight[(o * c.input + i) * c.kernel..][..c.kernel]
-                        .iter()
-                        .enumerate()
-                    {
-                        for (value, tap) in out.iter_mut().zip(&row[k * c.dilation..][..length]) {
-                            *value += weight * tap;
-                        }
+                let row = &padded[i * wide..][..wide];
+                for (k, weight) in c.weight[(o * c.input + i) * c.kernel..][..c.kernel]
+                    .iter()
+                    .enumerate()
+                {
+                    for (value, tap) in out.iter_mut().zip(&row[k * c.dilation..][..length]) {
+                        *value += weight * tap;
                     }
                 }
-                for value in out.iter_mut() {
-                    *value = value.max(0.0);
-                }
             }
-            x = y;
+            for value in out.iter_mut() {
+                *value = value.max(0.0);
+            }
         }
-        let channels = x.len() / length;
-        let mut h: Vec<f64> = (0..channels)
-            .map(|c| {
-                x[c * length..][..length]
-                    .iter()
-                    .copied()
-                    .fold(f64::NEG_INFINITY, f64::max)
+        x = y;
+    }
+    x
+}
+
+/// Each channel's maximum over time, then each channel's mean.
+pub(crate) fn pooled(x: &[f64], length: usize) -> Vec<f64> {
+    let channels = x.len() / length;
+    let mut h: Vec<f64> = (0..channels)
+        .map(|c| {
+            x[c * length..][..length]
+                .iter()
+                .copied()
+                .fold(f64::NEG_INFINITY, f64::max)
+        })
+        .collect();
+    h.extend((0..channels).map(|c| x[c * length..][..length].iter().sum::<f64>() / length as f64));
+    h
+}
+
+/// `h` through the dense layers (a ReLU after every one but the last), the last's value through a sigmoid.
+pub(crate) fn run_dense(dense: &[Dense], mut h: Vec<f64>) -> f64 {
+    for (n, d) in dense.iter().enumerate() {
+        let last = n + 1 == dense.len();
+        h = (0..d.out)
+            .map(|o| {
+                let v = d.bias[o]
+                    + d.weight[o * d.input..][..d.input]
+                        .iter()
+                        .zip(&h)
+                        .map(|(w, v)| w * v)
+                        .sum::<f64>();
+                if last { v } else { v.max(0.0) }
             })
             .collect();
-        h.extend(
-            (0..channels).map(|c| x[c * length..][..length].iter().sum::<f64>() / length as f64),
-        );
-        for (n, d) in self.dense.iter().enumerate() {
-            let last = n + 1 == self.dense.len();
-            h = (0..d.out)
-                .map(|o| {
-                    let v = d.bias[o]
-                        + d.weight[o * d.input..][..d.input]
-                            .iter()
-                            .zip(&h)
-                            .map(|(w, v)| w * v)
-                            .sum::<f64>();
-                    if last { v } else { v.max(0.0) }
-                })
-                .collect();
-        }
-        1.0 / (1.0 + (-h[0]).exp())
     }
+    1.0 / (1.0 + (-h[0]).exp())
 }
 
 #[cfg(test)]

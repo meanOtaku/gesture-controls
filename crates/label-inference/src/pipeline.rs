@@ -380,7 +380,7 @@ impl LabelPipeline {
         // for the trees.
         let pulse_ns = u64::from(model.input.window_ms) * NS_PER_MS;
         let motion_ns = match model.kind {
-            ModelKind::Cnn | ModelKind::CnnMedian => model.cnn_grid.span_ns(),
+            ModelKind::Cnn | ModelKind::CnnMedian | ModelKind::CnnV2 => model.cnn_grid.span_ns(),
             ModelKind::PpgImu => model.motion_grid.span_ns(),
             ModelKind::PpgOnly => 0,
         };
@@ -584,6 +584,9 @@ impl LabelPipeline {
         for sample in pending {
             // The model's inputs, from the samples' own timestamps, for a decision at this sample: what the trainer computes.
             let inputs = match (motion_through, sample.watch_ns, cnn_scaling) {
+                (Some(_), Some(at), Some(_)) if model.kind == crate::inputs::ModelKind::CnnV2 => {
+                    cnn_input::inputs_v2(&motion, &pulse_on_watch, at)
+                }
                 (Some(_), Some(at), Some(scaling)) => {
                     cnn_input::inputs_on(model.cnn_grid, &motion, &pulse_on_watch, at, scaling)
                 }
@@ -600,9 +603,15 @@ impl LabelPipeline {
                 continue;
             };
             let input_check = model.check_input(&inputs);
-            let confidence = model
+            let mut confidence = model
                 .predict(&inputs)
                 .map_err(|e| Rejection::Model(e.to_string()))?;
+            // The v2 CNN's peak gate, as the trainer replays it: no jerk spike in its window, no score.
+            if let (Some(gate), Some(at)) = (model.gate, sample.watch_ns)
+                && cnn_input::spike(&motion, at, gate.window_ms) < gate.min_jerk
+            {
+                confidence = 0.0;
+            }
             scores.push(LabelScore {
                 label: model.label.clone(),
                 model_version: model.version_id.clone(),
@@ -621,9 +630,9 @@ impl LabelPipeline {
 pub(crate) mod tests {
     use super::*;
     use crate::model::tests::{
-        expected, expected_cnn, expected_median_cnn, expected_median_cnn_100hz, expected_motion,
-        expected_motion_100hz, loaded, loaded_cnn, loaded_median_cnn, loaded_median_cnn_100hz, loaded_motion,
-        loaded_motion_100hz,
+        expected, expected_cnn, expected_cnn_v2, expected_median_cnn, expected_median_cnn_100hz,
+        expected_motion, expected_motion_100hz, loaded, loaded_cnn, loaded_cnn_v2,
+        loaded_median_cnn, loaded_median_cnn_100hz, loaded_motion, loaded_motion_100hz,
     };
 
     /// One PPG batch of the samples `from..to` of `trace` (statuses all valid).
@@ -943,6 +952,23 @@ pub(crate) mod tests {
         let model = loaded_median_cnn_100hz();
         assert_eq!(model.cnn_grid, pinch_inference::cnn_input::CnnGrid::HZ_100);
         scores_the_live_streams(&model, expected_median_cnn_100hz());
+    }
+
+    #[test]
+    fn a_v2_cnn_scores_the_live_streams_as_the_trainer_did_gate_included() {
+        let model = loaded_cnn_v2();
+        let expected = expected_cnn_v2();
+        let gated = expected.2.iter().filter(|p| **p == Some(0.0)).count();
+        let open = expected
+            .2
+            .iter()
+            .filter(|p| p.is_some_and(|p| p > 0.0))
+            .count();
+        assert!(
+            gated > 50 && open > 50,
+            "the fixture must have decisions on both sides of the gate: {gated} gated, {open} open"
+        );
+        scores_the_live_streams(&model, expected);
     }
 
     fn scores_the_live_streams(

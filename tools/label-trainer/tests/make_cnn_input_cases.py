@@ -59,6 +59,8 @@ def case(name, m, p, decisions):
     median = C.inputs(m[0], m[1], p[0], p[1], decisions, scaling=C.MEDIAN)
     # On the 100 Hz grid, which the trainer now makes CNNs on (median scaling only, as those models use).
     median_100 = C.inputs(m[0], m[1], p[0], p[1], decisions, scaling=C.MEDIAN, hz=100)
+    # The v2 model's: the nine channels and the accelerometer's jerk envelope (100 Hz, median), and its gate's measure.
+    v2 = C.inputs(m[0], m[1], p[0], p[1], decisions, scaling=C.MEDIAN, hz=100, envelope=True)
     return {
         "name": name,
         "motion": [[int(a), *map(float, v)] for a, v in zip(*m)],
@@ -67,6 +69,8 @@ def case(name, m, p, decisions):
         "expected": [None if not np.isfinite(row).all() else [float(v) for v in row] for row in rows],
         "expected_median": [None if not np.isfinite(row).all() else [float(v) for v in row] for row in median],
         "expected_median_100": [None if not np.isfinite(row).all() else [float(v) for v in row] for row in median_100],
+        "expected_v2": [None if not np.isfinite(row).all() else [float(v) for v in row] for row in v2],
+        "expected_spike": [float(v) for v in C.spike(m[0], m[1], decisions, C.GATE_WINDOW_MS)],
     }
 
 
@@ -80,6 +84,7 @@ def build():
     return {
         "feature_names": list(C.FEATURE_NAMES),
         "feature_names_100": list(C.feature_names(100)),
+        "feature_names_v2": list(C.feature_names(100, envelope=True)),
         "cases": [
             case("100 Hz motion, 25 Hz pulse, a tap", m, p, [p[0][200], p[0][280], p[0][300], between(p[0], 305), p[0][315]]),
             case("a gap of 320 ms in the pulse", gm, (gp[0][keep], gp[1][keep]), [gp[0][285], gp[0][305], gp[0][315]]),

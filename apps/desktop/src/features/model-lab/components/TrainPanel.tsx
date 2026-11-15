@@ -11,7 +11,7 @@ import { Checkbox } from "../../../components/ui/checkbox";
 import { Label } from "../../../components/ui/label";
 import { useSessionState } from "../hooks/useSessionState";
 import { useTrainingRun } from "../hooks/useTrainingRun";
-import { CNN_METHOD, CNN_MODEL, PULSE_MODEL, TREES_METHOD, buildRequest, defaultStages, hasLabel, otherLabels, recordingsWithLabel, stagesForRequest, type OtherRole, type StageDraft, type TrainMethod, type TrainPlan, type TrainerEnvironment } from "../training";
+import { CNN_METHOD, CNN_MODEL, CNN_V2_METHOD, CNN_V2_MODEL, PULSE_MODEL, TREES_METHOD, buildRequest, defaultStages, hasLabel, otherLabels, recordingsWithLabel, stagesForRequest, type OtherRole, type StageDraft, type TrainMethod, type TrainPlan, type TrainerEnvironment } from "../training";
 import { TrainingPlanEditor } from "./TrainingPlanEditor";
 import { datasetLabels, inImportOrder, recordingNumber, type DatasetLabel, type DatasetSummary } from "../types";
 import { LabelTiming } from "./LabelTiming";
@@ -84,7 +84,7 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
     setPlan(null);
     const timer = window.setTimeout(() => { void invoke<TrainPlan>("plan_label_training", { request })
       .then((next) => { if (!stale) setPlan(next); })
-      .catch((err) => { if (!stale) setPlan({ train: [], evaluation: [], problem: String(err), inputs: method === CNN_METHOD ? CNN_MODEL.inputs : PULSE_MODEL.inputs }); });
+      .catch((err) => { if (!stale) setPlan({ train: [], evaluation: [], problem: String(err), inputs: method === CNN_METHOD ? CNN_MODEL.inputs : method === CNN_V2_METHOD ? CNN_V2_MODEL.inputs : PULSE_MODEL.inputs }); });
     }, 150);
     return () => { stale = true; window.clearTimeout(timer); };
     // `requestKey` stands for every part of `request`.
@@ -156,10 +156,19 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
             <div className="field-head"><Label htmlFor={`${uid}-method`}>Model</Label></div>
             <select id={`${uid}-method`} className={NATIVE_SELECT} value={method} disabled={running !== null} onChange={(event) => setMethod(event.target.value as TrainMethod)}>
               <option value={CNN_METHOD}>{CNN_MODEL.name}</option>
+              <option value={CNN_V2_METHOD}>{CNN_V2_MODEL.name}</option>
               <option value={TREES_METHOD}>{PULSE_MODEL.name} (trees)</option>
             </select>
           </div>
-          {method === CNN_METHOD ? (
+          {method === CNN_V2_METHOD ? (
+            <>
+              <p><strong>{CNN_V2_MODEL.name}</strong> <Badge variant="secondary">pulse sensor and motion</Badge> <Badge variant="outline">new</Badge></p>
+              <p className="field-hint">{CNN_V2_MODEL.summary} {CNN_V2_MODEL.trainingNote}</p>
+              <p className="field-hint">
+                On the research sessions it never trained on, at the cut-off it chose itself, it caught {<AnimatedNumber value={CNN_V2_MODEL.research.liveCaught} />} of {CNN_V2_MODEL.research.live} live pinches and {<AnimatedNumber value={CNN_V2_MODEL.research.movingCaught} />} of {CNN_V2_MODEL.research.moving} made with the arm moving, with no false activation in everyday activity; the CNN caught {CNN_V2_MODEL.research.baselineLiveCaught} and {CNN_V2_MODEL.research.baselineMovingCaught}, with {CNN_V2_MODEL.research.baselineFalsePerHour} an hour. Training one does not change the models you have: activate it in Models when you want to try it.
+              </p>
+            </>
+          ) : method === CNN_METHOD ? (
             <>
               <p><strong>{CNN_MODEL.name}</strong> <Badge variant="secondary">pulse sensor and motion</Badge></p>
               <p className="field-hint">{CNN_MODEL.summary} {CNN_MODEL.trainingNote}</p>

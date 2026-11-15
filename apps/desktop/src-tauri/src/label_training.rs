@@ -20,8 +20,8 @@ use std::sync::Mutex;
 
 use chrono::{SecondsFormat, Utc};
 use label_inference::{
-    RecordingInfo, RunPlan, begin_run, cnn_contract_100, complete_run, fail_run, monitor_only_run,
-    pinch_start_contract, plan_split_sessions, stage_bundle, trainer_backend,
+    RecordingInfo, RunPlan, begin_run, cnn_contract_100, cnn_v2_contract, complete_run, fail_run,
+    monitor_only_run, pinch_start_contract, plan_split_sessions, stage_bundle, trainer_backend,
 };
 use model_lab_core::{
     ArtifactRef, ExampleRole, InputContract, LabelId, LabelMapping, QualityRules, RecordingId,
@@ -52,6 +52,10 @@ pub(crate) const BACKEND: &str = "ppg-onset-trees";
 /// The CNN on the last second of motion and pulse (the trainer's `CNN_BACKEND`). Training it needs PyTorch, which the
 /// trainer's `cnn` extra installs.
 pub(crate) const CNN_BACKEND: &str = "ppg-imu-cnn";
+/// The v2 CNN (the trainer's `CNN_V2_BACKEND`): one branch per sensor, the accelerometer's jerk envelope, noise-overlay
+/// training and a peak gate (docs/research/artifacts/pinch-cnn-v2-2026-11). A model type of its own beside the CNN: the
+/// CNN and its versions are unchanged. Needs PyTorch too.
+pub(crate) const CNN_V2_BACKEND: &str = "ppg-imu-cnn-v2";
 /// The trees' seed (the research's).
 const SEED: u32 = 17;
 
@@ -194,6 +198,7 @@ fn method_of(request: &TrainRequest) -> Result<(&'static str, InputContract), St
         // The trees' motion features keep their names at 100 Hz, so their contract is the same.
         None | Some(BACKEND) => Ok((BACKEND, pinch_start_contract())),
         Some(CNN_BACKEND) => Ok((CNN_BACKEND, cnn_contract_100())),
+        Some(CNN_V2_BACKEND) => Ok((CNN_V2_BACKEND, cnn_v2_contract())),
         Some(other) => Err(format!("there is no training method '{other}'")),
     }
 }
@@ -728,7 +733,7 @@ fn split_copies(recordings: &[(String, Vec<i64>)], sets: Vec<Vec<String>>) -> Sa
 fn trainer_command(backend: &str) -> Command {
     let mut command = Command::new("uv");
     command.args(["run", "--project", TRAINER_PROJECT_DIR]);
-    if backend == CNN_BACKEND {
+    if backend == CNN_BACKEND || backend == CNN_V2_BACKEND {
         command.args(["--extra", "cnn"]);
     }
     command.arg("label-classifier-train");
@@ -1342,6 +1347,24 @@ mod tests {
             rehearse: true,
             epochs: None,
         }
+    }
+
+    #[test]
+    fn the_v2_cnn_is_a_method_of_its_own() {
+        let mut r = request();
+        r.method = Some(CNN_V2_BACKEND.into());
+        let (backend, input) = method_of(&r).unwrap();
+        assert_eq!(backend, CNN_V2_BACKEND);
+        assert_eq!(input.features.len(), 1000, "nine channels and the jerk envelope, 100 ticks each");
+        assert_eq!(input.features.last().unwrap(), "cnn_accel_jerk_env_t99");
+        // The first CNN is unchanged beside it.
+        r.method = Some(CNN_BACKEND.into());
+        assert_eq!(method_of(&r).unwrap().1.features.len(), 900);
+        assert_eq!(trainer_backend(CNN_V2_BACKEND), Some(model_lab_core::TrainerBackend::PyTorch));
+        // It trains on everything at once: no training plan.
+        r.method = Some(CNN_V2_BACKEND.into());
+        r.stages = vec![stage("A", &["s1"])];
+        assert!(check_stages(&r, CNN_V2_BACKEND).is_err());
     }
 
     #[test]

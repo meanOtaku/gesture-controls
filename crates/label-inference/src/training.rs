@@ -73,6 +73,12 @@ pub fn cnn_contract_100() -> InputContract {
     ModelKind::CnnMedian.contract_at(Some(100))
 }
 
+/// What the v2 CNN pinch-start model reads: the same 11 s on the 100 Hz grid, with the accelerometer's jerk envelope as a
+/// tenth channel (1,000 inputs; see [`ModelKind::CnnV2`]).
+pub fn cnn_v2_contract() -> InputContract {
+    ModelKind::CnnV2.contract_at(Some(100))
+}
+
 /// What the earlier PPG-only pinch-start model reads (see [`ModelKind::PpgOnly`]); its versions and runs are kept.
 pub fn ppg_onset_contract() -> InputContract {
     ModelKind::PpgOnly.contract()
@@ -479,7 +485,7 @@ pub fn monitor_only_run<P: Persist>(
 pub fn trainer_backend(name: &str) -> Option<TrainerBackend> {
     match name {
         "ppg-onset-trees" => Some(TrainerBackend::ScikitLearn),
-        "ppg-imu-cnn" => Some(TrainerBackend::PyTorch),
+        "ppg-imu-cnn" | "ppg-imu-cnn-v2" => Some(TrainerBackend::PyTorch),
         _ => None,
     }
 }

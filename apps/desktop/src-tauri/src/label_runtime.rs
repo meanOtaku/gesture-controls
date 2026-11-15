@@ -318,7 +318,9 @@ fn purge_old_models(store: &mut RegistryStore<FileStore>, dir: &Path) -> Result<
                 .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
                 .and_then(|spec| spec["backend"].as_str().map(str::to_string));
             if backend.is_some_and(|b| {
-                b != crate::label_training::BACKEND && b != crate::label_training::CNN_BACKEND
+                b != crate::label_training::BACKEND
+                    && b != crate::label_training::CNN_BACKEND
+                    && b != crate::label_training::CNN_V2_BACKEND
             }) {
                 let _ = std::fs::remove_dir_all(entry.path());
                 leftovers += 1;

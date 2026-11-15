@@ -40,9 +40,11 @@ export const PULSE_MODEL = {
 } as const;
 
 /** The trainer backend: the trees (the default) or the CNN. */
-export type TrainMethod = "ppg-onset-trees" | "ppg-imu-cnn";
+export type TrainMethod = "ppg-onset-trees" | "ppg-imu-cnn" | "ppg-imu-cnn-v2";
 export const TREES_METHOD: TrainMethod = "ppg-onset-trees";
 export const CNN_METHOD: TrainMethod = "ppg-imu-cnn";
+/** The v2 CNN, a model type of its own beside the CNN (docs/research/artifacts/pinch-cnn-v2-2026-11). */
+export const CNN_V2_METHOD: TrainMethod = "ppg-imu-cnn-v2";
 
 /** The CNN the app can train instead of the trees: what it reads, the steps it takes, and what the research measured. */
 export const CNN_MODEL = {
@@ -65,6 +67,29 @@ export const CNN_MODEL = {
    * earlier rolling scaling
    * (docs/research/artifacts/double-pinch-2026-10/cnn-vs-trees): against 64% for the trees. */
   research: { recall: 0.69, falsePerMinute: 1.0, delayMs: 500 },
+} as const;
+
+/** The v2 CNN: per-sensor branches, the jerk envelope, noise-overlay training and a peak gate. */
+export const CNN_V2_MODEL = {
+  name: "CNN v2 pinch-start model",
+  summary:
+    "Reads the same second of accelerometer, gyroscope and pulse as the CNN, plus the accelerometer's jerk envelope: the peaks of the sharp spikes a pinch makes, which slow arm movement does not. Each sensor has its own small network, joined partway and at the end, and three such networks are averaged. It is trained on its pinches also made with recorded everyday wrist motion added, so it knows pinches made with the arm moving. It may only fire just after a sharp spike, which keeps it quiet through everyday activity.",
+  /** What to know before training one. */
+  trainingNote:
+    "Train it on your gesture sessions together with everyday-noise recordings: it learns from their motion twice, as what is not a pinch and as motion added to your pinches. It chooses its cut-off on the everyday-noise recordings it trains on, so the more of them, the better it is set. Training needs PyTorch, as the CNN does.",
+  stages: [
+    { title: "Motion, pulse and jerk", detail: "Accelerometer, gyroscope, pulse and the accelerometer's jerk envelope, on one 100 Hz grid" },
+    { title: "Scaled to its recent level", detail: "Each channel against the median and spread of its last 11 s, then squashed to 0-1" },
+    { title: "The last second", detail: "10 channels x 100 ticks: 1,000 inputs" },
+    { title: "One branch per sensor", detail: "Accelerometer and jerk, gyroscope, pulse: each its own convolutions, then shared ones; three networks averaged" },
+    { title: "Peak gate", detail: "No sharp accelerometer spike in the last 0.6 s, no score" },
+    { title: "Peak trigger", detail: "Fires when the vote falls back after reaching the cut-off" },
+  ],
+  inputs: 1000,
+  networks: 3,
+  /** On the research benchmark's held-out sessions, at the cut-off it chose itself, against the active CNN at its own
+   * (docs/research/artifacts/pinch-cnn-v2-2026-11/FINDINGS.md, round 3). */
+  research: { liveCaught: 13, live: 20, movingCaught: 80, moving: 102, everydayFalsePerHour: 0, baselineLiveCaught: 7, baselineMovingCaught: 58, baselineFalsePerHour: 14.8 },
 } as const;
 
 /** The CNN as it was first trained: the same network, scaled by a rolling mean and deviation, which motion upsets. */
@@ -92,6 +117,7 @@ export function modelDescription(kind: unknown): ModelDescription | null {
     case "ppg_imu_onset": return PULSE_MODEL;
     case "ppg_multiscale_onset": return PULSE_ONLY_MODEL;
     case "ppg_imu_cnn_median": return CNN_MODEL;
+    case "ppg_imu_cnn_v2": return CNN_V2_MODEL;
     case "ppg_imu_cnn": return ROLLING_CNN_MODEL;
     default: return null;
   }
@@ -312,7 +338,7 @@ export function buildRequest(input: {
     excludes: input.others.filter((label) => role(label) === "exclude"),
     ...(input.research ? { research: true } : {}),
     ...(input.labelOffsetMs ? { labelOffsetMs: input.labelOffsetMs } : {}),
-    ...(input.method === CNN_METHOD ? { method: CNN_METHOD } : {}),
+    ...(input.method === CNN_METHOD || input.method === CNN_V2_METHOD ? { method: input.method } : {}),
     ...(input.hardNegatives ? { hardNegatives: true } : {}),
     ...(input.method === CNN_METHOD && input.stages?.length ? { stages: input.stages } : {}),
   };

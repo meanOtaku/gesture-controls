@@ -1,0 +1,72 @@
+{
+  "windows": 97948,
+  "positiveWindows": 880,
+  "negativeWindows": 97068,
+  "rocAuc": 0.9914191948849354,
+  "activationThreshold": 0.995,
+  "thresholdSource": "trainingRecordings",
+  "thresholdChosenOnEvaluationRecordings": false,
+  "precision": 0.9836289222373806,
+  "recall": 0.8193181818181818,
+  "f1": 0.8939863608183509,
+  "accuracy": 0.9982541756850574,
+  "falseActivationRate": 0.00012362467548522686,
+  "confusion": {
+    "truePositive": 721,
+    "falsePositive": 12,
+    "falseNegative": 159,
+    "trueNegative": 97056
+  },
+  "balancedAccuracy": 0.9095972785713483,
+  "atDefaultThreshold": {
+    "threshold": 0.5,
+    "precision": 0.8515057113187954,
+    "recall": 0.9318181818181818,
+    "f1": 0.8898534997287032,
+    "accuracy": 0.997927471719688,
+    "falseActivationRate": 0.0014731940495322866,
+    "confusion": {
+      "truePositive": 820,
+      "falsePositive": 143,
+      "falseNegative": 60,
+      "trueNegative": 96925
+    }
+  },
+  "brierScore": 0.001940547694880611,
+  "expectedCalibrationError": 0.0025517306289573344,
+  "crossCheckRocAuc": 0.9939613679775452,
+  "crossCheckEvents": {
+    "caught": 179,
+    "gestures": 224,
+    "falseActivations": 2,
+    "noGestureHours": 1.0008068887466666,
+    "falseActivationsPerHour": 1.9983875235957318,
+    "falseActivationsBudgetPerHour": 5.0,
+    "withinTarget": true,
+    "rule": "noGestureRecordings"
+  },
+  "events": {
+    "recordings": 16,
+    "gestures": 179,
+    "caught": 137,
+    "gestureRecall": 0.7653631284916201,
+    "repeats": 0,
+    "late": 17,
+    "repeatsPer100Gestures": 0.0,
+    "medianLatencyMs": 455.0,
+    "falseActivations": 2,
+    "negativeSeconds": 3787.190041768,
+    "falseActivationsPerHour": 1.901145683367602,
+    "falseOn": {
+      "unlabelled": 2
+    },
+    "cohort": "all",
+    "policy": {
+      "activation": 0.995,
+      "release": 0.84,
+      "cooldownMs": 1500,
+      "trigger": "peak"
+    }
+  },
+  "steadyStarts": false
+}

@@ -75,6 +75,8 @@ pub struct LoadedModel {
     pub motion_grid: pinch_inference::imu_onset::MotionGrid,
     /// For a CNN, the grid its inputs are read on (its manifest's `motionHz`).
     pub cnn_grid: pinch_inference::cnn_input::CnnGrid,
+    /// For a v2 CNN, its peak gate (its manifest's).
+    pub gate: Option<crate::bundle::Gate>,
     pub input: InputContract,
     pub thresholds: Thresholds,
     pub quality: QualityRules,
@@ -113,6 +115,7 @@ impl LoadedModel {
             kind: bundle.kind,
             motion_grid: bundle.manifest.preprocessing.motion_grid(),
             cnn_grid: bundle.manifest.preprocessing.cnn_grid(),
+            gate: bundle.manifest.preprocessing.gate,
             // The registry is authoritative for the contract and thresholds the model runs under.
             input: version.input.clone(),
             thresholds: version.thresholds,
@@ -200,9 +203,8 @@ impl LoadedModel {
 pub(crate) mod tests {
     use super::*;
     use crate::bundle::tests::{
-        cnn_fixture_dir, fixture_dir, median_cnn_100hz_fixture_dir, median_cnn_fixture_dir,
-        motion_100hz_fixture_dir,
-        motion_fixture_dir,
+        cnn_fixture_dir, cnn_v2_fixture_dir, fixture_dir, median_cnn_100hz_fixture_dir,
+        median_cnn_fixture_dir, motion_100hz_fixture_dir, motion_fixture_dir,
     };
     use crate::bundle::validate_bundle;
     use model_lab_core::{ModelOrigin, ProjectId};
@@ -264,6 +266,18 @@ pub(crate) mod tests {
     /// The 100 Hz median-scaled CNN fixture's trace, as [`expected_motion`].
     pub fn expected_median_cnn_100hz() -> (Vec<PpgSample>, Vec<MotionSample>, Vec<Option<f64>>) {
         expected_in(&median_cnn_100hz_fixture_dir())
+    }
+
+    /// The v2 CNN fixture model, approved and active.
+    pub fn loaded_cnn_v2() -> LoadedModel {
+        let bundle = validate_bundle(&cnn_v2_fixture_dir(), None).unwrap();
+        let version = active_version(&bundle);
+        LoadedModel::load(bundle, &version).unwrap()
+    }
+
+    /// The v2 CNN fixture's trace: its gated scores, as [`expected_motion`].
+    pub fn expected_cnn_v2() -> (Vec<PpgSample>, Vec<MotionSample>, Vec<Option<f64>>) {
+        expected_in(&cnn_v2_fixture_dir())
     }
 
     /// The CNN fixture model, approved and active.
@@ -344,6 +358,47 @@ pub(crate) mod tests {
         let model = loaded_median_cnn();
         assert_eq!(model.kind, ModelKind::CnnMedian);
         scores_every_decision_as_the_trainer_did(&model, expected_median_cnn());
+    }
+
+    #[test]
+    fn the_runtime_scores_every_v2_decision_as_the_trainer_did_before_the_gate() {
+        let model = loaded_cnn_v2();
+        assert_eq!(model.kind, ModelKind::CnnV2);
+        assert_eq!(model.cnn_grid, pinch_inference::cnn_input::CnnGrid::HZ_100);
+        let gate = model.gate.expect("a v2 bundle has a gate");
+        assert_eq!(gate.window_ms, 600);
+        let (samples, motion, _) = expected_cnn_v2();
+        let raw: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(cnn_v2_fixture_dir().join("expected.json")).unwrap(),
+        )
+        .unwrap();
+        let ungated: Vec<Option<f64>> = raw["ungated"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_f64())
+            .collect();
+        let mut scored = 0;
+        for (i, want) in ungated.iter().enumerate() {
+            let at = samples[i].ts_ns;
+            match (
+                pinch_inference::cnn_input::inputs_v2(&motion, &samples[..=i], at),
+                want,
+            ) {
+                (None, None) => {}
+                (Some(x), Some(want)) => {
+                    let p = model.predict(&x).unwrap();
+                    assert!((p - want).abs() < 1e-6, "sample {i}: {p} vs {want}");
+                    scored += 1;
+                }
+                (got, want) => panic!(
+                    "sample {i}: runtime inputs {}, trainer {}",
+                    got.is_some(),
+                    want.is_some()
+                ),
+            }
+        }
+        assert!(scored > 300, "{scored}");
     }
 
     fn scores_every_decision_as_the_trainer_did(

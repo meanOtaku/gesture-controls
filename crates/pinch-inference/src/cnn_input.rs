@@ -70,6 +70,28 @@ const PULSE_FLOOR_SCALE: f64 = 1e-3;
 pub const FEATURE_COUNT: usize = CHANNELS.len() * WINDOW_TICKS;
 const _: () = assert!(FEATURE_COUNT == 450 && GRID_TICKS == 549);
 
+/// The v2 model's tenth channel, after [`CHANNELS`]: the accelerometer's jerk envelope ([`inputs_v2`]).
+pub const ENVELOPE_CHANNEL: &str = "accel_jerk_env";
+/// The envelope's span: the largest jerk size over the last this many milliseconds of ticks.
+pub const ENVELOPE_MS: u64 = 50;
+/// The envelope's smallest spread, per tick per second (2.0 m/s³ on the 100 Hz grid).
+pub const ENVELOPE_FLOOR_PER_HZ: f64 = 0.02;
+/// The v2 model's peak gate looks this far back for a jerk spike ([`spike`]).
+pub const GATE_WINDOW_MS: u64 = 600;
+/// The v2 model's channels: [`CHANNELS`] and [`ENVELOPE_CHANNEL`].
+pub const V2_CHANNELS: usize = CHANNELS.len() + 1;
+
+/// The v2 model's inputs' names on the 100 Hz grid: `cnn_{channel}_t{tick:02}` for [`CHANNELS`] then [`ENVELOPE_CHANNEL`].
+pub static V2_FEATURE_NAMES: LazyLock<Vec<String>> = LazyLock::new(|| {
+    let window = CnnGrid::HZ_100.window;
+    let digits = (window - 1).to_string().len();
+    CHANNELS
+        .iter()
+        .chain(std::iter::once(&ENVELOPE_CHANNEL))
+        .flat_map(|channel| (0..window).map(move |tick| format!("cnn_{channel}_t{tick:0digits$}")))
+        .collect()
+});
+
 /// `cnn_{channel}_t{tick}`, channel by channel, ticks 00 (oldest) to 49 (the decision).
 pub static FEATURE_NAMES: LazyLock<Vec<String>> = LazyLock::new(|| {
     CHANNELS
@@ -309,6 +331,58 @@ pub fn inputs_on(
     decision_ns: u64,
     scaling: Scaling,
 ) -> Option<Vec<f64>> {
+    scaled_inputs(g, motion, pulse, decision_ns, scaling, false)
+}
+
+/// The v2 model's inputs for a decision at `decision_ns`, on the 100 Hz grid with [`Scaling::Median`]: [`inputs_on`]'s
+/// nine channels, then the accelerometer's jerk envelope. Jerk is the change of the held accelerometer from one tick to the
+/// next, per second (0 at the first tick); the envelope is its size's largest value over the last [`ENVELOPE_MS`] of
+/// ticks, scaled against its median and spread as the motion channels are (the same ticks left out), its spread floored by
+/// [`ENVELOPE_FLOOR_PER_HZ`] x 100. An exact mirror of the trainer's `cnn_input.inputs(..., envelope=True)`.
+pub fn inputs_v2(
+    motion: &[MotionSample],
+    pulse: &[PpgSample],
+    decision_ns: u64,
+) -> Option<Vec<f64>> {
+    scaled_inputs(
+        CnnGrid::HZ_100,
+        motion,
+        pulse,
+        decision_ns,
+        Scaling::Median,
+        true,
+    )
+}
+
+/// The v2 gate's measure at a decision: the largest accelerometer jerk (m/s³) between consecutive motion samples whose
+/// later one is in `(decision - window_ms, decision]`, the size of the three axes' change over the time between them (at
+/// least 1 ms); 0 when there is none. An exact mirror of the trainer's `cnn_input.spike`.
+pub fn spike(motion: &[MotionSample], decision_ns: u64, window_ms: u64) -> f64 {
+    let from = decision_ns.saturating_sub(window_ms * 1_000_000);
+    let first = motion.partition_point(|s| s.ts_ns <= from).max(1);
+    let last = motion.partition_point(|s| s.ts_ns <= decision_ns);
+    let mut best = 0.0f64;
+    for i in first..last {
+        let (a, b) = (&motion[i - 1], &motion[i]);
+        let dt = ((b.ts_ns.saturating_sub(a.ts_ns)) as f64 / 1e9).max(1e-3);
+        let d = [
+            b.accel[0] - a.accel[0],
+            b.accel[1] - a.accel[1],
+            b.accel[2] - a.accel[2],
+        ];
+        best = best.max((d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt() / dt);
+    }
+    best
+}
+
+fn scaled_inputs(
+    g: CnnGrid,
+    motion: &[MotionSample],
+    pulse: &[PpgSample],
+    decision_ns: u64,
+    scaling: Scaling,
+    envelope: bool,
+) -> Option<Vec<f64>> {
     let scaled: Scaler = match scaling {
         Scaling::Median => median,
         Scaling::Rolling => rolling,
@@ -336,7 +410,7 @@ pub fn inputs_on(
         Scaling::Median => moving_ticks_on(&m, g),
         Scaling::Rolling => vec![false; g.ticks()],
     };
-    let mut out = Vec::with_capacity(g.feature_count());
+    let mut out = Vec::with_capacity(g.feature_count() + if envelope { g.window } else { 0 });
     for (c, floor) in MOTION_FLOOR.iter().enumerate() {
         let series: Vec<f64> = m.iter().map(|row| row[c]).collect();
         scaled(&series, &|_| *floor, &left_out, g, &mut out);
@@ -350,6 +424,29 @@ pub fn inputs_on(
             g,
             &mut out,
         );
+    }
+    if envelope {
+        let hz = 1e9 / g.tick_ns as f64;
+        let jerk: Vec<f64> = (0..m.len())
+            .map(|k| {
+                if k == 0 {
+                    return 0.0;
+                }
+                let d: Vec<f64> = (0..3).map(|c| (m[k][c] - m[k - 1][c]) * hz).collect();
+                (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt()
+            })
+            .collect();
+        let span = ((ENVELOPE_MS as f64 * hz / 1000.0).round() as usize).max(1);
+        let series: Vec<f64> = (0..jerk.len())
+            .map(|k| {
+                jerk[(k + 1).saturating_sub(span)..=k]
+                    .iter()
+                    .copied()
+                    .fold(0.0, f64::max)
+            })
+            .collect();
+        let floor = ENVELOPE_FLOOR_PER_HZ * hz;
+        median(&series, &|_| floor, &left_out, g, &mut out);
     }
     out.iter().all(|v| v.is_finite()).then_some(out)
 }
@@ -370,12 +467,17 @@ mod tests {
         expected_median: Vec<Option<Vec<f64>>>,
         /// [`Scaling::Median`] on the 100 Hz grid.
         expected_median_100: Vec<Option<Vec<f64>>>,
+        /// The v2 model's inputs ([`inputs_v2`]).
+        expected_v2: Vec<Option<Vec<f64>>>,
+        /// The v2 gate's measure ([`spike`] over [`GATE_WINDOW_MS`]).
+        expected_spike: Vec<f64>,
     }
 
     #[derive(serde::Deserialize)]
     struct Cases {
         feature_names: Vec<String>,
         feature_names_100: Vec<String>,
+        feature_names_v2: Vec<String>,
         cases: Vec<Case>,
     }
 
@@ -433,6 +535,51 @@ mod tests {
     #[test]
     fn median_inputs_on_the_100_hz_grid_match_the_trainer() {
         check(Scaling::Median, CnnGrid::HZ_100);
+    }
+
+    #[test]
+    fn v2_inputs_and_the_gate_match_the_trainer() {
+        let all = cases();
+        assert_eq!(*V2_FEATURE_NAMES, all.feature_names_v2);
+        let mut compared = 0;
+        for case in all.cases {
+            let (motion, pulse) = streams(&case);
+            for ((decision, expected), want) in case
+                .decisions
+                .iter()
+                .zip(&case.expected_v2)
+                .zip(&case.expected_spike)
+            {
+                let got = spike(&motion, *decision, GATE_WINDOW_MS);
+                assert!(
+                    (got - want).abs() <= 1e-9 * want.max(1.0),
+                    "{}: spike at {decision}: {got} vs {want}",
+                    case.name
+                );
+                match (inputs_v2(&motion, &pulse, *decision), expected) {
+                    (None, None) => {}
+                    (Some(got), Some(expected)) => {
+                        assert_eq!(got.len(), V2_CHANNELS * CnnGrid::HZ_100.window);
+                        for (i, (a, b)) in got.iter().zip(expected).enumerate() {
+                            assert!(
+                                (a - b).abs() <= TOLERANCE,
+                                "{}: {} at {decision}: {a} vs {b}",
+                                case.name,
+                                V2_FEATURE_NAMES[i]
+                            );
+                        }
+                        compared += 1;
+                    }
+                    (got, expected) => panic!(
+                        "{}: at {decision} v2 inputs: runtime {}, trainer {}",
+                        case.name,
+                        got.is_some(),
+                        expected.is_some()
+                    ),
+                }
+            }
+        }
+        assert!(compared >= 6);
     }
 
     fn check(scaling: Scaling, g: CnnGrid) {

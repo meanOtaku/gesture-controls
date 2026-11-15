@@ -15,14 +15,15 @@
 mod bundle;
 mod clock;
 mod cnn;
+mod cnn_branches;
 mod detection;
 mod import;
 mod inputs;
 mod loader;
 mod model;
 mod pipeline;
-mod runtime;
 pub mod readiness;
+mod runtime;
 pub mod steadiness;
 mod training;
 mod trees;
@@ -50,8 +51,9 @@ pub use model::{FAR_EXCESS, InputCheck, LoadedModel, ModelError, OutsideInput, R
 pub use pipeline::{LabelPipeline, LabelScore, Rejection, WindowRejection};
 pub use runtime::{InputWarning, LabelRuntime, RuntimeMode, RuntimeOutput};
 pub use training::{
-    BegunRun, MIN_WINDOW_SAMPLES, RecordingInfo, RunPlan, TrainingError, begin_run, cnn_contract, cnn_contract_100,
-    complete_run, evaluation_only_run, fail_run, monitor_only_run, pinch_start_contract,
-    plan_split, plan_split_keeping, plan_split_sessions, ppg_onset_contract, trainer_backend,
+    BegunRun, MIN_WINDOW_SAMPLES, RecordingInfo, RunPlan, TrainingError, begin_run, cnn_contract,
+    cnn_contract_100, cnn_v2_contract, complete_run, evaluation_only_run, fail_run,
+    monitor_only_run, pinch_start_contract, plan_split, plan_split_keeping, plan_split_sessions,
+    ppg_onset_contract, trainer_backend,
 };
 pub use trees::{TreeEnsemble, TreesError};

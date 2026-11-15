@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CNN_METHOD, MAX_LOG_LINES, TREES_METHOD, appendLog, buildRequest, defaultStages, describeEvents, earlierRecordings, describeMetrics, hasLabel, newStage, otherLabels, recordingsWithLabel, stagesForRequest, thresholdNote, unstaged } from "./training";
+import { CNN_METHOD, CNN_V2_METHOD, CNN_V2_MODEL, MAX_LOG_LINES, modelDescription, TREES_METHOD, appendLog, buildRequest, defaultStages, describeEvents, earlierRecordings, describeMetrics, hasLabel, newStage, otherLabels, recordingsWithLabel, stagesForRequest, thresholdNote, unstaged } from "./training";
 import type { DatasetSummary } from "./types";
 
 const dataset = (id: string, labels: string[]): DatasetSummary => ({ id, originalFilename: `${id}.csv`, importedAt: "", label: labels.join(", "), labels, rowCount: 10 });
@@ -19,6 +19,20 @@ describe("otherLabels", () => {
   it("knows which recordings have a label", () => {
     expect(hasLabel(data[1], "walking")).toBe(true);
     expect(hasLabel(data[0], "idle")).toBe(false);
+  });
+});
+
+describe("the v2 CNN", () => {
+  it("is asked for by its own method, and trains on everything at once", () => {
+    const stages = [{ name: "A", datasetIds: ["a"], rehearse: false }];
+    const request = buildRequest({ label: "pinch_in", datasetIds: ["a"], others: [], roles: {}, method: CNN_V2_METHOD, stages });
+    expect(request.method).toBe("ppg-imu-cnn-v2");
+    expect(request).not.toHaveProperty("stages");
+    expect(buildRequest({ label: "pinch_in", datasetIds: ["a"], others: [], roles: {}, method: CNN_METHOD, stages }).stages).toEqual(stages);
+  });
+  it("describes a bundle of its kind", () => {
+    expect(modelDescription("ppg_imu_cnn_v2")).toBe(CNN_V2_MODEL);
+    expect(CNN_V2_MODEL.inputs).toBe(1000);
   });
 });
 

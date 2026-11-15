@@ -23,6 +23,17 @@ motion and pulse on a 50 Hz grid, each channel z-scored against its last 10 s an
 into three small dilated CNNs whose votes are averaged. It fires about 0.5 s after a gesture starts and is written as
 `model.cnn` (JSON weights, read by `crates/label-inference/src/cnn.rs`). It needs PyTorch: `uv run --extra cnn ...`.
 
+A spec with `"backend": "ppg-imu-cnn-v2"` trains the **v2 CNN** (`cnn_v2.py`, research
+[`pinch-cnn-v2-2026-11`](../../docs/research/artifacts/pinch-cnn-v2-2026-11/FINDINGS.md)), a model type of its own beside
+the CNN: the CNN's nine channels plus the accelerometer's jerk envelope (`cnn_input.inputs(..., envelope=True)`, 10 x 100
+inputs at 100 Hz, mirrored by `cnn_input.rs`'s `inputs_v2`), one small branch network per sensor joined partway and at the
+end, three networks averaged, trained with time and magnitude warping and with noise-overlay copies of the gesture
+recordings (motion from the training everyday-noise recordings added to their raw accelerometer and gyroscope). A peak
+gate in the manifest (`preprocessing.gate`) lets a decision score only after an accelerometer jerk spike in the last
+600 ms (`cnn_input.spike`, at the level 90% of the training pinch moments reach), and the cut-off is chosen out of fold on
+the no-gesture training recordings (`v2_threshold`). Written as `model.cnn` in the `ppg-imu-cnn-branches` format, read by
+`crates/label-inference/src/cnn_branches.rs`; `tests/make_runtime_bundle.py cnn-v2` writes its runtime fixture.
+
 The desktop decides everything that must be recorded and cannot change afterwards: which recordings train and which
 evaluate (never the same one) and what each label in the data means (the target, negatives, or left out). It hands them to
 this trainer in a `spec.json`.

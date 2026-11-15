@@ -5,6 +5,9 @@
 //!   trees.
 //! * [`ModelKind::CnnMedian`], which Model Lab can train instead: the last second of motion and pulse, each channel scaled
 //!   by its recent median ([`pinch_inference::cnn_input`]), read by a small convolutional network ([`crate::cnn`]).
+//! * [`ModelKind::CnnV2`], the v2 CNN Model Lab can also train: the same channels plus the accelerometer's jerk envelope
+//!   at 100 Hz ([`pinch_inference::cnn_input::inputs_v2`]), one branch per sensor ([`crate::cnn_branches`]), behind a peak
+//!   gate its manifest sets ([`crate::bundle::Gate`]).
 //! * [`ModelKind::Cnn`], the earlier CNN: the same network and inputs scaled by a rolling mean and deviation, which a burst
 //!   of motion upsets for 10 s. Versions trained on it keep running as they were.
 //! * [`ModelKind::PpgOnly`], the earlier model: the pulse sensor's features alone. Versions trained before the motion model
@@ -25,6 +28,7 @@ pub const PPG_ONLY_PREPROCESSING: &str = "ppg_multiscale_onset";
 pub const PPG_IMU_PREPROCESSING: &str = "ppg_imu_onset";
 pub const CNN_PREPROCESSING: &str = "ppg_imu_cnn";
 pub const CNN_MEDIAN_PREPROCESSING: &str = "ppg_imu_cnn_median";
+pub const CNN_V2_PREPROCESSING: &str = "ppg_imu_cnn_v2";
 /// The history a CNN decision reads: its grid of 10.96 s, rounded up.
 pub const CNN_WINDOW_MS: u32 = 11_000;
 
@@ -42,6 +46,7 @@ pub enum ModelKind {
     PpgImu,
     Cnn,
     CnnMedian,
+    CnnV2,
 }
 
 impl ModelKind {
@@ -52,6 +57,7 @@ impl ModelKind {
             PPG_IMU_PREPROCESSING => Some(Self::PpgImu),
             CNN_PREPROCESSING => Some(Self::Cnn),
             CNN_MEDIAN_PREPROCESSING => Some(Self::CnnMedian),
+            CNN_V2_PREPROCESSING => Some(Self::CnnV2),
             _ => None,
         }
     }
@@ -62,6 +68,7 @@ impl ModelKind {
             Self::PpgImu => PPG_IMU_PREPROCESSING,
             Self::Cnn => CNN_PREPROCESSING,
             Self::CnnMedian => CNN_MEDIAN_PREPROCESSING,
+            Self::CnnV2 => CNN_V2_PREPROCESSING,
         }
     }
 
@@ -70,6 +77,7 @@ impl ModelKind {
         match self {
             Self::PpgOnly | Self::PpgImu => crate::bundle::MODEL_FORMAT,
             Self::Cnn | Self::CnnMedian => crate::bundle::CNN_MODEL_FORMAT,
+            Self::CnnV2 => crate::bundle::CNN_BRANCHES_MODEL_FORMAT,
         }
     }
 
@@ -78,7 +86,7 @@ impl ModelKind {
         match self {
             Self::PpgOnly | Self::PpgImu => None,
             Self::Cnn => Some(Scaling::Rolling),
-            Self::CnnMedian => Some(Scaling::Median),
+            Self::CnnMedian | Self::CnnV2 => Some(Scaling::Median),
         }
     }
 
@@ -90,7 +98,7 @@ impl ModelKind {
     pub fn sources(self) -> Vec<StreamSource> {
         match self {
             Self::PpgOnly => vec![StreamSource::WatchPpg],
-            Self::PpgImu | Self::Cnn | Self::CnnMedian => {
+            Self::PpgImu | Self::Cnn | Self::CnnMedian | Self::CnnV2 => {
                 vec![StreamSource::WatchPpg, StreamSource::WatchOrientation]
             }
         }
@@ -101,6 +109,7 @@ impl ModelKind {
             Self::PpgOnly => &ppg_onset::FEATURE_NAMES,
             Self::PpgImu => &PPG_IMU_FEATURE_NAMES,
             Self::Cnn | Self::CnnMedian => &cnn_input::FEATURE_NAMES,
+            Self::CnnV2 => &cnn_input::V2_FEATURE_NAMES,
         }
     }
 
@@ -109,6 +118,7 @@ impl ModelKind {
             Self::PpgOnly => ppg_onset::FEATURE_COUNT,
             Self::PpgImu => ppg_onset::FEATURE_COUNT + imu_onset::FEATURE_COUNT,
             Self::Cnn | Self::CnnMedian => cnn_input::FEATURE_COUNT,
+            Self::CnnV2 => cnn_input::V2_CHANNELS * cnn_input::CnnGrid::HZ_100.window,
         }
     }
 
@@ -147,7 +157,7 @@ impl ModelKind {
     pub fn window_ms(self) -> u32 {
         match self {
             Self::PpgOnly | Self::PpgImu => WINDOW_MS,
-            Self::Cnn | Self::CnnMedian => CNN_WINDOW_MS,
+            Self::Cnn | Self::CnnMedian | Self::CnnV2 => CNN_WINDOW_MS,
         }
     }
 }
@@ -185,6 +195,7 @@ mod tests {
             ModelKind::PpgImu,
             ModelKind::Cnn,
             ModelKind::CnnMedian,
+            ModelKind::CnnV2,
         ] {
             assert_eq!(
                 ModelKind::from_preprocessing(kind.preprocessing()),
@@ -193,5 +204,11 @@ mod tests {
             kind.contract().validate().unwrap();
         }
         assert_eq!(ModelKind::from_preprocessing("spike_extraction"), None);
+        assert_eq!(ModelKind::CnnV2.feature_count(), 1000);
+        assert_eq!(
+            ModelKind::CnnV2.feature_names()[999],
+            "cnn_accel_jerk_env_t99"
+        );
+        assert_eq!(ModelKind::CnnV2.model_format(), "cnn-branches");
     }
 }

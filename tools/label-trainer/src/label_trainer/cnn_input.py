@@ -53,6 +53,17 @@ MOVING_GYRO = 1.0                  # rad/s: a tick whose recent gyroscope RMS is
 MOVING_RMS_TICKS = 15              # ...that RMS taken over the 0.3 s ending at the tick (fewer at the grid's start)...
 MOVING_MARGIN_TICKS = 25           # ...and the 0.5 s either side of such a tick is left out of the median scaling too
 FEATURE_NAMES = tuple(f"cnn_{channel}_t{tick:02d}" for channel in CHANNELS for tick in range(WINDOW_TICKS))
+# The v2 model's extra channel (`envelope=True`): the accelerometer's jerk envelope, after the nine above. Jerk is the
+# change of the zero-order-held accelerometer from one grid tick to the next, per second (m/s^3; 0 at the first tick); its
+# size's largest value over the last ENVELOPE_MS joins the peaks of the spikes a pinch makes. Scaled like the motion
+# channels, with ENVELOPE_FLOOR_PER_HZ x the grid's rate as its smallest spread (0.02 m/s^2 per tick, as the accelerometer).
+ENVELOPE_CHANNEL = "accel_jerk_env"
+ENVELOPE_MS = 50
+ENVELOPE_FLOOR_PER_HZ = 0.02
+V2_CHANNELS = (*CHANNELS, ENVELOPE_CHANNEL)
+# The v2 model's peak gate (`spike`): a decision may fire only if the accelerometer's jerk, from consecutive raw samples,
+# reached the bundle's level within the last GATE_WINDOW_MS.
+GATE_WINDOW_MS = 600
 FEATURE_COUNT = len(FEATURE_NAMES)
 assert FEATURE_COUNT == 450 and GRID_TICKS == 549
 
@@ -96,11 +107,64 @@ def grid_of(hz: int) -> Grid:
     return GRIDS[hz]
 
 
-def feature_names(hz: int = 50) -> tuple[str, ...]:
-    """The inputs' names at a rate: `cnn_{channel}_t{tick}`, the tick numbered with as many digits as the window needs."""
+def feature_names(hz: int = 50, envelope: bool = False) -> tuple[str, ...]:
+    """The inputs' names at a rate: `cnn_{channel}_t{tick}`, the tick numbered with as many digits as the window needs; with
+    `envelope`, the v2 model's ten channels."""
     window = grid_of(hz).window
     digits = len(str(window - 1))
-    return tuple(f"cnn_{channel}_t{tick:0{digits}d}" for channel in CHANNELS for tick in range(window))
+    return tuple(f"cnn_{channel}_t{tick:0{digits}d}" for channel in (V2_CHANNELS if envelope else CHANNELS) for tick in range(window))
+
+
+def _envelope_grid(motion_grid: np.ndarray, hz: int) -> np.ndarray:
+    """(decisions, ticks, 1): the accelerometer's jerk envelope on the grid (`ENVELOPE_CHANNEL`)."""
+    accel = motion_grid[:, :, 0:3]
+    jerk = np.diff(accel, axis=1, prepend=accel[:, :1, :]) * hz
+    size = np.linalg.norm(jerk, axis=2, keepdims=True)
+    k = max(1, round(ENVELOPE_MS * hz / 1000))
+    padded = np.concatenate([np.zeros((size.shape[0], k - 1, 1)), size], axis=1)
+    return np.lib.stride_tricks.sliding_window_view(padded, k, axis=1).max(axis=-1)
+
+
+def _median_scaled_floor(grid: np.ndarray, floor: np.ndarray, left_out: np.ndarray, g: Grid) -> np.ndarray:
+    """`_median_scaled` for motion-like channels with the given floor per channel."""
+    centre = np.median(grid, axis=1, keepdims=True)
+    spread = MAD_TO_STD * np.median(np.abs(grid - centre), axis=1, keepdims=True)
+    rows = np.flatnonzero(left_out.any(axis=1))
+    if len(rows):
+        kept = np.where(left_out[rows][:, :, None], np.nan, grid[rows])
+        centre[rows] = np.nanmedian(kept, axis=1, keepdims=True)
+        spread[rows] = MAD_TO_STD * np.nanmedian(np.abs(kept - centre[rows]), axis=1, keepdims=True)
+    z = (grid[:, -g.window:, :] - centre) / (spread + floor[None, None, :])
+    return 1.0 / (1.0 + np.exp(-np.clip(z, -MAX_Z, MAX_Z)))
+
+
+def spike(motion_ts_ns: np.ndarray, motion: np.ndarray, decisions_ns: np.ndarray, window_ms: int = GATE_WINDOW_MS) -> np.ndarray:
+    """The v2 gate's measure at each decision: the largest accelerometer jerk (m/s^3) between consecutive raw motion
+    samples whose later sample is in (T - window_ms, T]; 0 where there is none. A pair's jerk is the size of the change of
+    the three axes divided by the time between them (at least 1 ms)."""
+    ts = np.asarray(motion_ts_ns, dtype=np.int64)
+    decisions_ns = np.asarray(decisions_ns, dtype=np.int64)
+    out = np.zeros(len(decisions_ns))
+    if len(ts) < 2:
+        return out
+    accel = np.asarray(motion, dtype=np.float64)[:, 0:3]
+    jerk = np.zeros(len(ts))
+    jerk[1:] = np.linalg.norm(np.diff(accel, axis=0), axis=1) / np.maximum(np.diff(ts) / 1e9, 1e-3)
+    lo = np.searchsorted(ts, decisions_ns - window_ms * 1_000_000, side="right")
+    hi = np.searchsorted(ts, decisions_ns, side="right")
+    # Range maximum by a sparse table: each level holds the maximum of 2^level samples from each index.
+    levels = [jerk]
+    while (1 << len(levels)) <= len(jerk):
+        prev, half = levels[-1], 1 << (len(levels) - 1)
+        levels.append(np.maximum(prev[:-half], prev[half:]))
+    n = hi - lo
+    some = n > 0
+    level = np.zeros(len(n), dtype=int)
+    level[some] = np.floor(np.log2(n[some])).astype(int)
+    for k in np.unique(level[some]):
+        pick = some & (level == k)
+        out[pick] = np.maximum(levels[k][lo[pick]], levels[k][hi[pick] - (1 << k)])
+    return out
 
 
 def _held(ts_ns: np.ndarray, values: np.ndarray, decisions_ns: np.ndarray, g: Grid = GRIDS[50]) -> np.ndarray:
@@ -173,10 +237,11 @@ def _median_scaled(grid: np.ndarray, pulse: bool, left_out: np.ndarray | None = 
 
 
 def inputs(motion_ts_ns: np.ndarray, motion: np.ndarray, pulse_ts_ns: np.ndarray, pulse: np.ndarray,
-           decisions_ns: np.ndarray, chunk: int = 1024, scaling: str = MEDIAN, hz: int = 50) -> np.ndarray:
+           decisions_ns: np.ndarray, chunk: int = 1024, scaling: str = MEDIAN, hz: int = 50,
+           envelope: bool = False) -> np.ndarray:
     """(decisions, inputs) from motion samples (rows of accelerometer x/y/z, gyroscope x/y/z) and pulse samples (rows of
     green, red, IR), each at its sorted int64 timestamps on the decisions' clock, on the `hz` grid; a row of NaN where there
-    are none."""
+    are none. With `envelope` (median scaling only), the v2 model's tenth channel after the nine (`ENVELOPE_CHANNEL`)."""
     g = grid_of(hz)
     motion_ts_ns = np.asarray(motion_ts_ns, dtype=np.int64)
     pulse_ts_ns = np.asarray(pulse_ts_ns, dtype=np.int64)
@@ -185,7 +250,11 @@ def inputs(motion_ts_ns: np.ndarray, motion: np.ndarray, pulse_ts_ns: np.ndarray
     decisions_ns = np.asarray(decisions_ns, dtype=np.int64)
     if scaling not in (MEDIAN, ROLLING):
         raise ValueError(f"unknown scaling {scaling!r}")
-    out = np.full((len(decisions_ns), g.feature_count), np.nan)
+    if envelope and scaling != MEDIAN:
+        raise ValueError("the jerk envelope is scaled by the median")
+    channels = len(V2_CHANNELS) if envelope else len(CHANNELS)
+    width = channels * g.window
+    out = np.full((len(decisions_ns), width), np.nan)
     if len(motion_ts_ns) == 0 or len(pulse_ts_ns) == 0:
         return out
     ok = _gap_free(motion_ts_ns, decisions_ns, g) & _gap_free(pulse_ts_ns, decisions_ns, g)
@@ -199,10 +268,14 @@ def inputs(motion_ts_ns: np.ndarray, motion: np.ndarray, pulse_ts_ns: np.ndarray
         if scaling == MEDIAN:
             left_out = moving_ticks(np.nan_to_num(mg), g)  # a grid with NaN has no inputs anyway
             m, p = _median_scaled(mg, False, left_out, g), _median_scaled(pg, True, left_out, g)
+            parts = [m, p]
+            if envelope:
+                env = _envelope_grid(np.nan_to_num(mg), hz)
+                parts.append(_median_scaled_floor(env, np.array([ENVELOPE_FLOOR_PER_HZ * hz]), left_out, g))
         else:
-            m, p = _scaled(mg, pulse=False, g=g), _scaled(pg, pulse=True, g=g)
+            parts = [_scaled(mg, pulse=False, g=g), _scaled(pg, pulse=True, g=g)]
         # Channel by channel, oldest tick first.
-        rows = np.concatenate([m, p], axis=2).transpose(0, 2, 1).reshape(len(d), g.feature_count)
+        rows = np.concatenate(parts, axis=2).transpose(0, 2, 1).reshape(len(d), width)
         out[part] = rows
     bad = ~ok | ~np.isfinite(out).all(axis=1) | ~whole
     out[bad] = np.nan

@@ -39,6 +39,8 @@ pub(crate) const MAX_MODEL_BYTES: u64 = 64 * 1024 * 1024;
 pub const MODEL_FORMAT: &str = "trees";
 /// The CNN's file format.
 pub const CNN_MODEL_FORMAT: &str = "cnn";
+/// The v2 CNN's file format: one branch per sensor ([`crate::cnn_branches`]).
+pub const CNN_BRANCHES_MODEL_FORMAT: &str = "cnn-branches";
 /// The pulse history a decision reads (its grid of ticks), and how often a model decides.
 pub const WINDOW_MS: u32 = (GRID_TICKS as u64 * TICK_NS / 1_000_000) as u32;
 pub const STRIDE_MS: u32 = (TICK_NS / 1_000_000) as u32;
@@ -62,7 +64,7 @@ pub enum BundleError {
     #[error("the model file name '{0}' must be a plain file name inside the bundle")]
     UnsafePath(String),
     #[error(
-        "only the pinch-start models ('{MODEL_FORMAT}' or '{CNN_MODEL_FORMAT}' files) can run in this app, not a '{0}' model: train a new one in Model Lab"
+        "only the pinch-start models ('{MODEL_FORMAT}', '{CNN_MODEL_FORMAT}' or '{CNN_BRANCHES_MODEL_FORMAT}' files) can run in this app, not a '{0}' model: train a new one in Model Lab"
     )]
     UnsupportedFormat(String),
     #[error(
@@ -174,6 +176,19 @@ pub struct Preprocessing {
     /// [`pinch_inference::imu_onset::MotionGrid`]). Absent in the first such models, which read 50 Hz, and for the others.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub motion_hz: Option<u32>,
+    /// For a v2 CNN: its peak gate. Absent for every other model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate: Option<Gate>,
+}
+
+/// A v2 CNN's peak gate: a decision scores 0 unless the accelerometer's jerk between two consecutive motion samples
+/// reached `min_jerk` (m/s³) within the last `window_ms` ([`pinch_inference::cnn_input::spike`]). The trainer sets the
+/// level so that 90% of its training pinch moments pass.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Gate {
+    pub window_ms: u64,
+    pub min_jerk: f64,
 }
 
 impl Preprocessing {
@@ -240,12 +255,15 @@ impl Manifest {
 pub(crate) enum Network {
     Trees(TreeEnsemble),
     Cnn(Cnn),
+    Branches(crate::cnn_branches::BranchCnn),
 }
 
 impl Network {
     fn parse(format: &str, bytes: &[u8]) -> Result<Self, BundleError> {
         Ok(if format == CNN_MODEL_FORMAT {
             Self::Cnn(Cnn::parse(bytes)?)
+        } else if format == CNN_BRANCHES_MODEL_FORMAT {
+            Self::Branches(crate::cnn_branches::BranchCnn::parse(bytes)?)
         } else {
             Self::Trees(TreeEnsemble::parse(bytes)?)
         })
@@ -255,6 +273,7 @@ impl Network {
         match self {
             Self::Trees(trees) => trees.features(),
             Self::Cnn(cnn) => cnn.features(),
+            Self::Branches(cnn) => cnn.features(),
         }
     }
 
@@ -263,6 +282,7 @@ impl Network {
         match self {
             Self::Trees(trees) => trees.predict(input),
             Self::Cnn(cnn) => cnn.predict(input),
+            Self::Branches(cnn) => cnn.predict(input),
         }
     }
 }
@@ -335,7 +355,10 @@ pub fn validate_bundle(
     if !safe_model_name(name) {
         return Err(BundleError::UnsafePath(name.clone()));
     }
-    if manifest.model.format != MODEL_FORMAT && manifest.model.format != CNN_MODEL_FORMAT {
+    if manifest.model.format != MODEL_FORMAT
+        && manifest.model.format != CNN_MODEL_FORMAT
+        && manifest.model.format != CNN_BRANCHES_MODEL_FORMAT
+    {
         return Err(BundleError::UnsupportedFormat(
             manifest.model.format.clone(),
         ));
@@ -347,7 +370,7 @@ pub fn validate_bundle(
     };
     let mismatch = |what: String| Err(BundleError::ContractMismatch(what));
     if let Some(hz) = manifest.preprocessing.motion_hz {
-        if kind != ModelKind::PpgImu && kind != ModelKind::CnnMedian {
+        if kind != ModelKind::PpgImu && kind != ModelKind::CnnMedian && kind != ModelKind::CnnV2 {
             return mismatch(format!(
                 "only a '{PPG_IMU_PREPROCESSING}' or '{CNN_MEDIAN_PREPROCESSING}' model reads its motion at a rate it names, not a '{}' one",
                 kind.preprocessing()
@@ -359,6 +382,23 @@ pub fn validate_bundle(
                 kind.preprocessing()
             ));
         }
+    }
+    if kind == ModelKind::CnnV2 && manifest.preprocessing.motion_hz != Some(100) {
+        return mismatch("a v2 CNN reads its motion at 100 Hz and must say so".into());
+    }
+    match (kind, manifest.preprocessing.gate) {
+        (ModelKind::CnnV2, Some(g))
+            if !(1..=5_000).contains(&g.window_ms)
+                || !g.min_jerk.is_finite()
+                || g.min_jerk < 0.0 =>
+        {
+            return mismatch(
+                "a v2 CNN's gate needs a window of 1 to 5000 ms and a level that is 0 or more"
+                    .into(),
+            );
+        }
+        (ModelKind::CnnV2, _) | (_, None) => {}
+        (_, Some(_)) => return mismatch("only a v2 CNN has a peak gate".into()),
     }
     if manifest.model.format != kind.model_format() {
         return mismatch(format!(
@@ -482,6 +522,11 @@ pub(crate) mod tests {
     }
 
     /// The median-scaled CNN bundle the trainer makes now: on the 100 Hz grid, as its manifest says.
+    /// The v2 CNN bundle: branches, the jerk envelope and a peak gate (its expected scores are gated).
+    pub fn cnn_v2_fixture_dir() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ppg_imu_cnn_v2_bundle")
+    }
+
     pub fn median_cnn_100hz_fixture_dir() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ppg_imu_cnn_median_100hz_bundle")
     }
