@@ -55,5 +55,23 @@ export default defineConfig({
   resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
   clearScreen: false,
   server: { port: 1420, strictPort: true },
+  build: {
+    rollupOptions: {
+      output: {
+        /**
+         * The libraries every page needs go in chunks of their own, so the app's own code is a small chunk that changes
+         * on its own, and no chunk is so large that it slows the first paint while it is parsed.
+         */
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) return "vendor-react";
+          if (/node_modules\/(motion|motion-dom|motion-utils|framer-motion|number-flow|@number-flow)\//.test(id)) return "vendor-motion";
+          if (/node_modules\/(@radix-ui|@floating-ui|radix-ui|sonner|lucide-react|class-variance-authority|clsx|tailwind-merge)\//.test(id)) return "vendor-ui";
+          if (/node_modules\/@tauri-apps\//.test(id)) return "vendor-tauri";
+          return undefined;
+        },
+      },
+    },
+  },
   test: { environment: "jsdom", setupFiles: "./src/test/setup.ts" },
 });

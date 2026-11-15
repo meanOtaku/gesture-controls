@@ -4,8 +4,29 @@
     {
       "name": "desktop-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--workspace", "@spatial-gesture/desktop"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--workspace",
+        "@spatial-gesture/desktop"
+      ],
       "port": 1420
+    },
+    {
+      "name": "desktop-dist",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "exec",
+        "--workspace",
+        "@spatial-gesture/desktop",
+        "--",
+        "vite",
+        "preview",
+        "--port",
+        "4173",
+        "--strictPort"
+      ],
+      "port": 4173
     }
   ]
 }

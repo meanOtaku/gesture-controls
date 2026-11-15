@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { MissSaved } from "./missApi";
 import { MissDetailsDrawer, showMissDetails } from "./MissMarker";
@@ -16,11 +16,12 @@ const saved: MissSaved = {
 };
 
 describe("MissDetailsDrawer", () => {
-  it("is closed until a miss is shown, then says what each model did, the gaps and the camera", () => {
+  it("is closed until a miss is shown, then says what each model did, the gaps and the camera", async () => {
     render(<MissDetailsDrawer />);
     expect(screen.queryByText(saved.name)).not.toBeInTheDocument();
     act(() => showMissDetails({ saved, camera: "off" }));
-    expect(screen.getByText(saved.name)).toBeInTheDocument();
+    // The drawer's code loads the first time it opens.
+    expect(await screen.findByText(saved.name)).toBeInTheDocument();
     expect(screen.getByText(/The camera was off/)).toBeInTheDocument();
     const row = within(screen.getByRole("row", { name: /pinch_in/ }));
     expect(row.getByText("0.99")).toBeInTheDocument();
@@ -30,6 +31,6 @@ describe("MissDetailsDrawer", () => {
     expect(screen.getByText(/motion 45 s with 1 gap \(longest 910 ms\); pulse 45 s with 0 gaps/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open in Labelling" })).toBeInTheDocument();
     act(() => showMissDetails(null));
-    expect(screen.queryByRole("button", { name: "Open in Labelling" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Open in Labelling" })).not.toBeInTheDocument());
   });
 });

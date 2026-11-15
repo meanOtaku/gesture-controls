@@ -1,17 +1,11 @@
-import { AnimatedNumber, AnimatedText } from "../../components/app/AnimatedNumber";
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Drawer } from "vaul";
 import { HelpTooltip } from "../../components/app/HelpTooltip";
 import { Button } from "../../components/ui/button";
 import { getCameraController } from "../camera/cameraService";
-import { appNavigation } from "../../shared/navigation/appNavigation";
 import { markMiss, MISS_FAILED_EVENT, MISS_SAVED_EVENT, type MissKind, type MissSaved } from "./missApi";
 import { attachMissCamera, followCamera, MissCameraBuffer } from "./missCamera";
-
-/** The saved recording is 45 s long and ends at the mark; open it a little before its end, where the miss was. */
-const OPEN_AT_MS = 35_000;
 
 const inDesktop = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -43,69 +37,30 @@ function announce(saved: MissSaved, camera: CameraOutcome): void {
   });
 }
 
-const score = (value: number | null) => (value === null ? "–" : value.toFixed(2));
+/** The drawer itself, loaded the first time a miss's details are opened. */
+const MissDetailsView = lazy(() => import("./MissDetailsView").then((m) => ({ default: m.MissDetailsView })));
 
 /**
- * Everything a saved miss says, in a drawer that slides up from the bottom (Vaul): what each model scored and did, whether
- * the watch's streams had gaps, and whether the camera's view was saved, with the way on to Labelling.
+ * The details drawer for a saved miss, opened by `showMissDetails`. Mounted once, with the sidebar's marker; the drawer's
+ * code loads the first time it opens and then stays, so closing still slides it away.
  */
 export function MissDetailsDrawer() {
   const [details, setDetails] = useState<MissDetails | null>(null);
+  // What was shown last, kept while the drawer slides away after it is closed.
+  const [shown, setShown] = useState<MissDetails | null>(null);
   useEffect(() => {
-    detailsListeners.add(setDetails);
-    return () => { detailsListeners.delete(setDetails); };
+    const listener = (next: MissDetails | null) => {
+      setDetails(next);
+      if (next) setShown(next);
+    };
+    detailsListeners.add(listener);
+    return () => { detailsListeners.delete(listener); };
   }, []);
-  const saved = details?.saved;
+  if (shown === null) return null;
   return (
-    <Drawer.Root open={details !== null} onOpenChange={(open) => { if (!open) setDetails(null); }}>
-      <Drawer.Portal>
-        <Drawer.Overlay className="miss-drawer-overlay" />
-        <Drawer.Content className="miss-drawer" aria-describedby="miss-drawer-description">
-          <div className="miss-drawer-handle" aria-hidden="true" />
-          {saved && details && (
-            <div className="miss-drawer-body">
-              <Drawer.Title className="miss-drawer-title">{saved.name}</Drawer.Title>
-              <Drawer.Description id="miss-drawer-description" className="field-hint">
-                The last 45 seconds before you marked it, saved to Recordings under “Misses”. {CAMERA_LINE[details.camera]}
-              </Drawer.Description>
-              <ul className="miss-summary">
-                {saved.summary.lines.map((line) => <li key={line}>{line}</li>)}
-              </ul>
-              {saved.summary.labels.length > 0 && (
-                <table className="miss-table">
-                  <caption className="sr-only">What each model did in the saved seconds</caption>
-                  <thead>
-                    <tr><th scope="col">Model</th><th scope="col">Starts at</th><th scope="col">Highest score</th><th scope="col">Before the mark</th><th scope="col">Detected</th><th scope="col">Acted on</th><th scope="col">Rejections</th></tr>
-                  </thead>
-                  <tbody>
-                    {saved.summary.labels.map((label) => (
-                      <tr key={label.label}>
-                        <th scope="row">{label.label}</th>
-                        <td><AnimatedText>{score(label.activation)}</AnimatedText></td>
-                        <td><AnimatedText>{score(label.peak)}</AnimatedText></td>
-                        <td>{label.peakMsBeforeMark === null ? "–" : <><AnimatedNumber value={(label.peakMsBeforeMark / 1000)} digits={1} />{" s"}</>}</td>
-                        <td>{<AnimatedNumber value={label.detected} />}</td>
-                        <td>{<AnimatedNumber value={label.acted} />}</td>
-                        <td>{Object.entries(label.rejections).map(([reason, count]) => `${reason} ×${count}`).join(", ") || "none"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-              <p className="field-hint">
-                Watch streams: motion {<AnimatedNumber value={saved.summary.motion.seconds} digits={0} />} s with {<AnimatedNumber value={saved.summary.motion.gaps} />} gap{saved.summary.motion.gaps === 1 ? "" : "s"}
-                {saved.summary.motion.gaps > 0 ? <>{" (longest "}<AnimatedNumber value={saved.summary.motion.longestGapMs} />{" ms)"}</> : ""}; pulse {<AnimatedNumber value={saved.summary.pulse.seconds} digits={0} />} s with {<AnimatedNumber value={saved.summary.pulse.gaps} />} gap{saved.summary.pulse.gaps === 1 ? "" : "s"}
-                {saved.summary.pulse.gaps > 0 ? <>{" (longest "}<AnimatedNumber value={saved.summary.pulse.longestGapMs} />{" ms)"}</> : ""}.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={() => { setDetails(null); appNavigation.openInLabelling({ datasetId: saved.datasetId, atMs: OPEN_AT_MS }); }}>Open in Labelling</Button>
-                <Button variant="outline" onClick={() => setDetails(null)}>Close</Button>
-              </div>
-            </div>
-          )}
-        </Drawer.Content>
-      </Drawer.Portal>
-    </Drawer.Root>
+    <Suspense fallback={null}>
+      <MissDetailsView details={shown} open={details !== null} onClose={() => setDetails(null)} />
+    </Suspense>
   );
 }
 
