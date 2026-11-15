@@ -32,12 +32,21 @@ describe("Live telemetry", () => {
     expect(await screen.findByRole("region", { name: "Signal monitor" })).toBeInTheDocument();
   });
 
-  it("shows only the recorder on the Recorder page: the sessions, with the camera beside them", () => {
+  it("shows only the recorder on the Recorder page: one kind of session at a time, with the camera beside it", () => {
     render(<RecorderPage />);
     expect(screen.getByRole("heading", { name: "Recorder" })).toBeInTheDocument();
-    for (const card of ["Pinch in / out session", "Everyday noise session", "Record a gesture", "Session details"]) {
-      expect(screen.getByRole("region", { name: card })).toBeInTheDocument();
-    }
+    expect(screen.getByRole("region", { name: "Pinch in / out session" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Everyday noise session" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Session details" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Everyday noise" }));
+    expect(screen.getByRole("region", { name: "Everyday noise session" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Pinch in / out session" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Other gesture" }));
+    expect(screen.getByRole("region", { name: "Record a gesture" })).toBeInTheDocument();
+    // The choice is remembered for the next visit.
+    cleanup();
+    render(<RecorderPage />);
+    expect(screen.getByRole("region", { name: "Record a gesture" })).toBeInTheDocument();
     expect(within(screen.getByRole("complementary", { name: "Camera" })).getByRole("region", { name: "Camera hand tracking" })).toBeInTheDocument();
     // What these replaced is gone.
     for (const gone of ["Timeline recorder", "Guided session", "Exports", "Signal monitor"]) {

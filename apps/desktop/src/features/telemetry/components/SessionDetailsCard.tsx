@@ -1,9 +1,11 @@
+import { useState } from "react";
+import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
-import { SESSION_FIELDS, type SessionContext, type SessionField } from "../sessionContext";
+import { SESSION_FIELDS, describeContext, type SessionContext, type SessionField } from "../sessionContext";
 
 const NOT_SAID = "__not_said__";
 
@@ -16,22 +18,31 @@ type SessionDetailsCardProps = {
 
 /**
  * How the next recording is made: wrist, arm, what you are doing, strap and pinch. Kept with the recording, so a model can be
- * trained and tested on the conditions it will meet, and so you can see which conditions are still missing.
+ * trained and tested on the conditions it will meet, and so you can see which conditions are still missing. They rarely
+ * change between sessions, so the card says them in one line, and Edit opens the form.
  */
 export function SessionDetailsCard({ context, onChange, recording }: SessionDetailsCardProps) {
   const set = (field: SessionField, value: string) => onChange({ ...context, [field]: value });
+  const [editing, setEditing] = useState(false);
+  const summary = describeContext(context as Record<string, string>);
   return (
     <Card role="region" aria-label="Session details" className="min-w-0">
       <CardHeader>
         <SectionHeader
           title="Session details"
-          description={recording ? "The recording under way keeps the details it started with." : "Wrist, arm and strap for this session, saved with the recording."}
+          description={recording ? "The recording under way keeps the details it started with." : "Saved with each recording."}
+          status={!editing && <Button type="button" variant="outline" size="sm" disabled={recording} onClick={() => setEditing(true)}>Edit</Button>}
           help={{
             label: "About session details",
             content: "A model only learns the conditions it was shown, so vary them across sessions: arm resting, raised, moving and walking. Set them before you start: they are saved with the recording when it starts, and the last ones you used are kept.",
           }}
         />
       </CardHeader>
+      {!editing ? (
+        <CardContent>
+          <p className="text-sm" aria-label="Details of this session">{summary || "Nothing said yet: wrist, arm, what you are doing, strap and pinch."}</p>
+        </CardContent>
+      ) : (
       <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {SESSION_FIELDS.map(({ field, title, options, placeholder }) => (
           <div key={field} className="field">
@@ -60,7 +71,11 @@ export function SessionDetailsCard({ context, onChange, recording }: SessionDeta
             )}
           </div>
         ))}
+        <div className="flex items-end">
+          <Button type="button" variant="outline" onClick={() => setEditing(false)}>Done</Button>
+        </div>
       </CardContent>
+      )}
     </Card>
   );
 }

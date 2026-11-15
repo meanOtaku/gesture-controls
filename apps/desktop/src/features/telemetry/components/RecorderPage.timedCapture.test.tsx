@@ -44,6 +44,8 @@ async function ingestOneSample() {
 }
 
 beforeEach(() => {
+  // These are about the "Other gesture" card: the Recorder shows one kind of session at a time.
+  window.localStorage.setItem("recorderSessionKind", "gesture");
   telemetryStore.reset();
   timedCapture.reset();
   exportFolderStore.reset();
@@ -55,6 +57,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  window.localStorage.removeItem("recorderSessionKind");
   vi.useRealTimers();
   cleanup();
   telemetryStore.reset();
