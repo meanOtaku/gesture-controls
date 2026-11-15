@@ -54,7 +54,7 @@ const renderNav = (props: Partial<Parameters<typeof AppNav>[0]> = {}) => {
 
 describe("AppNav", () => {
   it("orders the pages with what is used every day first: use, devices, then record, label and train, then settings", () => {
-    expect(NAV_ORDER).toEqual(["main", "gestures", "recipes", "devices", "watch", "headphone", "drone", "recorder", "datasets", "labelling", "labels", "gestureLibrary", "modelLab", "settings"]);
+    expect(NAV_ORDER).toEqual(["main", "gestures", "recipes", "watch", "headphone", "drone", "recorder", "datasets", "labelling", "labels", "gestureLibrary", "modelLab", "settings"]);
   });
 
   it("folds the pages for making a model away, remembers it, and never hides the page you are on", () => {
@@ -130,7 +130,6 @@ describe("AppNav", () => {
     expect(shortcutFor("headphone")).toBe(`${prefix}9`);
     // Pages used less often have none.
     expect(shortcutFor("drone")).toBeNull();
-    expect(shortcutFor("devices")).toBeNull();
     expect(shortcutFor("settings")).toBe(`${prefix},`);
   });
 

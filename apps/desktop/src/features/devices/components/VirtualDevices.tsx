@@ -8,7 +8,7 @@ import { DEVICE_KINDS, buildDevice, isTrigger, defaultNumbers, deviceSpecs, type
 import { devicePosition } from "../deviceMath";
 import { DevicePreview } from "./DevicePreview";
 
-type VirtualDevicesPageProps = {
+type VirtualDevicesProps = {
   automation: AutomationState | null;
   /** Opens the recipe editor with this device already chosen. */
   onMakeRecipe: (kind: DeviceKind) => void;
@@ -16,19 +16,16 @@ type VirtualDevicesPageProps = {
 
 const signed = (value: number, unit: string) => `${value > 0 ? "+" : ""}${Number(value.toFixed(1))}${unit}`;
 
-/** The virtual devices a recipe can turn the wrist into, each with a live preview you can try with a slider. */
-export function VirtualDevicesPage({ automation, onMakeRecipe }: VirtualDevicesPageProps) {
+/**
+ * The virtual devices a recipe can turn the wrist into, each with a live preview you can try with a slider. Shown folded
+ * on the Recipes page (it was a page of its own).
+ */
+export function VirtualDevices({ automation, onMakeRecipe }: VirtualDevicesProps) {
   const [degrees, setDegrees] = useState(0);
   const sliderId = "virtual-devices-rotation";
 
   return (
-    <main className="shell">
-      <header className="hero">
-        <div>
-          <h1>Virtual devices</h1>
-          <p className="subtitle">The knobs and faders your wrist movements turn, and what they control.</p>
-        </div>
-      </header>
+    <div className="card-stack">
 
       <Card role="region" aria-label="Try the devices">
         <CardHeader>
@@ -98,6 +95,6 @@ export function VirtualDevicesPage({ automation, onMakeRecipe }: VirtualDevicesP
           );
         })}
       </div>
-    </main>
+    </div>
   );
 }

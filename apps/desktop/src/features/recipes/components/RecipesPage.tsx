@@ -1,6 +1,8 @@
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
+import { AdvancedSection } from "../../../components/app/AdvancedSection";
+import { VirtualDevices } from "../../devices/components/VirtualDevices";
 import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
@@ -25,13 +27,10 @@ type RecipesPageProps = {
   onDelete: (id: string) => void;
   /** Which built-in gestures are switched on in Settings; a recipe using an off one never fires. */
   builtInGestures?: HeuristicGestures;
-  /** Open the editor on a new recipe using this device (sent from the Virtual devices tab). */
-  startWithDevice?: DeviceKind | null;
-  onStartHandled?: () => void;
 };
 
 /** Where recipes are made: each one chains head, pinch/button and wrist steps into a virtual device that controls something. */
-export function RecipesPage({ automation, calibration, pendingRecipeIds, error, onSetEnabled, onSave, onDelete, startWithDevice = null, onStartHandled, builtInGestures }: RecipesPageProps) {
+export function RecipesPage({ automation, calibration, pendingRecipeIds, error, onSetEnabled, onSave, onDelete, builtInGestures }: RecipesPageProps) {
   const [editing, setEditing] = useState<Recipe | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const locations = calibration?.targets ?? [];
@@ -44,11 +43,11 @@ export function RecipesPage({ automation, calibration, pendingRecipeIds, error, 
   const gestureName = (id: string) => gestures.find((gesture) => gesture.id === id)?.name ?? "a removed gesture";
   const locationName = (id: string) => locations.find((location) => location.id === id)?.name ?? "a removed location";
 
-  useEffect(() => {
-    if (startWithDevice === null || calibration === null) return;
-    setEditing(blankRecipe(calibration.targets, startWithDevice));
-    onStartHandled?.();
-  }, [startWithDevice, calibration, onStartHandled]);
+  /** Opens the editor on a new recipe using this device, from the Virtual devices section. */
+  const startWithDevice = (kind: DeviceKind) => {
+    setEditing(blankRecipe(locations, kind));
+    window.scrollTo?.({ top: 0, behavior: "smooth" });
+  };
 
   const save = async (recipe: Recipe) => {
     const failure = await onSave(recipe);
@@ -172,6 +171,10 @@ export function RecipesPage({ automation, calibration, pendingRecipeIds, error, 
           </ul>
         </CardContent>
       </Card>
+
+      <AdvancedSection storageKey="recipesDevices" title="Virtual devices" summary="The knobs and faders your wrist turns: try each, or start a recipe with one">
+        <VirtualDevices automation={automation} onMakeRecipe={startWithDevice} />
+      </AdvancedSection>
     </main>
   );
 }

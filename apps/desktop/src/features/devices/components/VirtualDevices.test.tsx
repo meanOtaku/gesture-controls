@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AutomationState } from "../../../shared/protocol/events";
-import { VirtualDevicesPage } from "./VirtualDevicesPage";
+import { VirtualDevices } from "./VirtualDevices";
 
 afterEach(cleanup);
 
@@ -19,9 +19,9 @@ const automation: AutomationState = {
   loadedLabels: [],
 };
 
-describe("VirtualDevicesPage", () => {
+describe("VirtualDevices", () => {
   it("lists the four devices and says which recipes use each", () => {
-    render(<VirtualDevicesPage automation={automation} onMakeRecipe={() => {}} />);
+    render(<VirtualDevices automation={automation} onMakeRecipe={() => {}} />);
     for (const name of ["Rotation knob", "Horizontal fader", "Vertical fader", "Step knob"]) {
       expect(screen.getByRole("region", { name })).toBeInTheDocument();
     }
@@ -30,7 +30,7 @@ describe("VirtualDevicesPage", () => {
   });
 
   it("shows what a wrist rotation would change on each device", () => {
-    render(<VirtualDevicesPage automation={null} onMakeRecipe={() => {}} />);
+    render(<VirtualDevices automation={null} onMakeRecipe={() => {}} />);
     const read = (name: string) => within(screen.getByRole("region", { name })).getByText(/^[+-]?[\d.]+% of range$/).textContent;
     expect(read("Rotation knob")).toBe("0% of range");
 
@@ -46,7 +46,7 @@ describe("VirtualDevicesPage", () => {
 
   it("starts a recipe with the chosen device", () => {
     const onMakeRecipe = vi.fn();
-    render(<VirtualDevicesPage automation={null} onMakeRecipe={onMakeRecipe} />);
+    render(<VirtualDevices automation={null} onMakeRecipe={onMakeRecipe} />);
     fireEvent.click(within(screen.getByRole("region", { name: "Vertical fader" })).getByRole("button", { name: "Make a recipe with this" }));
     expect(onMakeRecipe).toHaveBeenCalledWith("verticalFader");
   });

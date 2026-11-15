@@ -330,12 +330,14 @@ describe("RecipesPage", () => {
     expect(deadZone).toHaveAttribute("aria-invalid", "true");
   });
 
-  it("opens the editor with the device chosen on the Virtual devices tab, then lets go of the request", () => {
-    const onStartHandled = vi.fn();
-    setup({ startWithDevice: "stepKnob", onStartHandled });
+  it("folds the virtual devices away, and starts a recipe with the one chosen there", async () => {
+    setup();
+    expect(screen.queryByRole("region", { name: "Step knob" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Virtual devices", { selector: ".advanced-title" }));
+    const knob = within(await screen.findByRole("region", { name: "Step knob" }));
+    fireEvent.click(knob.getByRole("button", { name: "Make a recipe with this" }));
     const editor = within(screen.getByRole("region", { name: "Recipe editor" }));
     expect(editor.getByLabelText("Device")).toHaveValue("stepKnob");
-    expect(onStartHandled).toHaveBeenCalled();
   });
 
   it("asks before deleting a recipe", () => {

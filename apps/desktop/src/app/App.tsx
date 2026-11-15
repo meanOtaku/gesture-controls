@@ -8,7 +8,6 @@ import { appNavigation } from "../shared/navigation/appNavigation";
 import { CommandPalette } from "./components/CommandPalette";
 import { ShortcutsSheet } from "./components/ShortcutsSheet";
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { DeviceKind } from "../features/recipes/recipeModel";
 import { AppNav, navStatuses, type AppTab } from "./components/AppNav";
 import { useCameraOn } from "../features/camera/useCameraOn";
 import { OperationFeedback } from "../components/app/OperationFeedback";
@@ -80,7 +79,7 @@ const emptyOverlay: OverlayState = {
  * always-visible safety/control surface and must stay eagerly bundled.
  */
 const Dashboard = lazy(() => import("../features/dashboard/components/Dashboard").then((m) => ({ default: m.Dashboard })));
-// Recipes, Gestures and Virtual devices are memoised the same way, so everything passed to them must keep its identity
+// Recipes and Gestures are memoised the same way, so everything passed to them must keep its identity
 // between publishes (state, or `useStableCallback`), or the memo does nothing.
 // `MainApp` re-renders on every telemetry publish (~15 Hz while a watch streams). These two
 // tabs take no props, so `memo` lets React skip them when only the parent changed;
@@ -93,7 +92,6 @@ const DatasetsPage = memo(lazy(() => import("../features/model-lab/components/Da
 const ModelLab = memo(lazy(() => import("../features/model-lab/components/ModelLab").then((m) => ({ default: m.ModelLab }))));
 const RecipesPage = memo(lazy(() => import("../features/recipes/components/RecipesPage").then((m) => ({ default: m.RecipesPage }))));
 const GesturesPage = memo(lazy(() => import("../features/gestures/components/GesturesPage").then((m) => ({ default: m.GesturesPage }))));
-const VirtualDevicesPage = memo(lazy(() => import("../features/devices/components/VirtualDevicesPage").then((m) => ({ default: m.VirtualDevicesPage }))));
 const DronePage = memo(lazy(() => import("../features/drone/DronePage").then((m) => ({ default: m.DronePage }))));
 const LabelsPage = memo(lazy(() => import("../features/labels/LabelsPage").then((m) => ({ default: m.LabelsPage }))));
 const GestureLibraryPage = memo(lazy(() => import("../features/gestureLibrary/GestureLibraryPage").then((m) => ({ default: m.GestureLibraryPage }))));
@@ -208,7 +206,6 @@ function MainApp() {
       window.scrollTo({ top: 0 });
     });
   });
-  const [startWithDevice, setStartWithDevice] = useState<DeviceKind | null>(null);
   const { isPending, run } = usePendingActions();
   const calibrationEventVersion = useRef(0);
   const overlayEventVersion = useRef(0);
@@ -595,15 +592,10 @@ function MainApp() {
   const stableSetRecipeEnabled = useStableCallback((id: string, enabled: boolean) => { void setRecipeEnabled(id, enabled); });
   const stableSaveRecipe = useStableCallback(saveRecipe);
   const stableDeleteRecipe = useStableCallback((id: string) => { void deleteRecipe(id); });
-  const clearStartWithDevice = useCallback(() => setStartWithDevice(null), []);
   // Another page asking to send you somewhere (the Labelling page, from a model's mistakes).
   useEffect(() => appNavigation.onOpen((tab) => setActiveTab(tab as AppTab)), []);
   const openModelLab = useCallback(() => setActiveTab("modelLab"), []);
   const openSettings = useCallback(() => setActiveTab("settings"), []);
-  const makeRecipeFromDevice = useCallback((kind: DeviceKind) => {
-    setStartWithDevice(kind);
-    setActiveTab("recipes");
-  }, []);
   // Which recipes have a change in flight. The pending set lives in a ref, so a memoised Recipes page is told about it
   // through this value instead of reading the ref itself.
   const pendingRecipeKey = (automation?.recipes ?? []).filter((recipe) => isPending(`recipe:${recipe.id}`)).map((recipe) => recipe.id).join(",");
@@ -693,15 +685,7 @@ function MainApp() {
         onSetEnabled={stableSetRecipeEnabled}
         onSave={stableSaveRecipe}
         onDelete={stableDeleteRecipe}
-        startWithDevice={startWithDevice}
         builtInGestures={settings?.heuristicGestures}
-        onStartHandled={clearStartWithDevice}
-      />
-    )}
-    {activeTab === "devices" && (
-      <VirtualDevicesPage
-        automation={automation}
-        onMakeRecipe={makeRecipeFromDevice}
       />
     )}
     {activeTab === "drone" && <DronePage />}

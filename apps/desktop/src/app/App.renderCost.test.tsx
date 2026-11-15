@@ -6,7 +6,7 @@ import { telemetryStore, EMPTY_WATCH_STATUS } from "../features/telemetry/store/
 const { invoke, listen, renders } = vi.hoisted(() => ({
   invoke: vi.fn(),
   listen: vi.fn(() => Promise.resolve(() => undefined)),
-  renders: { modelLab: 0, recorder: 0, recipes: 0, devices: 0, gestures: 0 },
+  renders: { modelLab: 0, recorder: 0, recipes: 0, gestures: 0 },
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
@@ -32,12 +32,6 @@ vi.mock("../features/recipes/components/RecipesPage", () => ({
     return <div>recipes body</div>;
   },
 }));
-vi.mock("../features/devices/components/VirtualDevicesPage", () => ({
-  VirtualDevicesPage: () => {
-    renders.devices += 1;
-    return <div>devices body</div>;
-  },
-}));
 vi.mock("../features/gestures/components/GesturesPage", () => ({
   GesturesPage: () => {
     renders.gestures += 1;
@@ -51,7 +45,6 @@ beforeEach(() => {
   renders.modelLab = 0;
   renders.recorder = 0;
   renders.recipes = 0;
-  renders.devices = 0;
   renders.gestures = 0;
   invoke.mockReset();
   invoke.mockResolvedValue(undefined);
@@ -104,7 +97,6 @@ describe("idle tabs are not re-rendered by telemetry publishes", () => {
   // function per render would make the memo useless and put them back at ~15 renders a second.
   it.each([
     ["Recipes", "recipes body", "recipes"],
-    ["Virtual devices", "devices body", "devices"],
     ["Gestures", "gestures body", "gestures"],
   ] as const)("%s is not re-rendered by telemetry publishes", async (tab, body, counter) => {
     render(<App />);
