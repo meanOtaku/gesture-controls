@@ -633,7 +633,10 @@ mod tests {
         let closed = || btleplug::Error::Other("Channel closed".into());
         assert!(BleError::Adapter(closed()).adapter_broken());
         assert!(BleError::Subscribe(closed()).adapter_broken());
-        assert!(!BleError::Connect(btleplug::Error::TimedOut(std::time::Duration::from_secs(1))).adapter_broken());
+        assert!(
+            !BleError::Connect(btleplug::Error::TimedOut(std::time::Duration::from_secs(1)))
+                .adapter_broken()
+        );
         assert!(!BleError::WatchNotFound.adapter_broken());
         assert!(!BleError::TimedOut(10, "subscribing to its telemetry").adapter_broken());
     }

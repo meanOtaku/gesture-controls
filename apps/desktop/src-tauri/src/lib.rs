@@ -153,8 +153,15 @@ fn watch_events_closed(error: &tokio::sync::broadcast::error::RecvError) -> bool
 /// of what went wrong just before it.
 fn log_file_path() -> Option<std::path::PathBuf> {
     let home = std::path::PathBuf::from(std::env::var_os("HOME")?);
-    let base = if cfg!(target_os = "macos") { home.join("Library/Logs") } else { home.join(".local/state") };
-    Some(base.join("dev.meanotaku.spatial-gesture-control").join("desktop.log"))
+    let base = if cfg!(target_os = "macos") {
+        home.join("Library/Logs")
+    } else {
+        home.join(".local/state")
+    };
+    Some(
+        base.join("dev.meanotaku.spatial-gesture-control")
+            .join("desktop.log"),
+    )
 }
 
 /// The log goes to the terminal and to [`log_file_path`]: a watch link that dropped in a run started from an app icon,
@@ -167,7 +174,9 @@ fn init_logging() {
         let _ = std::fs::rename(&path, path.with_file_name("desktop.previous.log"));
         std::fs::File::create(&path).ok()
     });
-    let terminal = tracing_subscriber::fmt::layer().with_target(true).with_thread_ids(true);
+    let terminal = tracing_subscriber::fmt::layer()
+        .with_target(true)
+        .with_thread_ids(true);
     let file = file.map(|file| {
         tracing_subscriber::fmt::layer()
             .with_ansi(false)

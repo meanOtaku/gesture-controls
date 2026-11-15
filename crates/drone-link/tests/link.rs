@@ -672,7 +672,11 @@ fn a_status_message_from_the_drone_is_read() {
     assert_eq!(link.status().unknown_packets, 0);
     let kept = link.unknown_packets();
     assert!(kept.iter().all(|packet| packet.status));
-    assert!(kept[0].line().contains("status control from"), "{}", kept[0].line());
+    assert!(
+        kept[0].line().contains("status control from"),
+        "{}",
+        kept[0].line()
+    );
     drop(link);
     finished.store(true, Ordering::SeqCst);
     worker.join().unwrap();

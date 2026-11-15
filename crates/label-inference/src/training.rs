@@ -210,11 +210,15 @@ pub fn plan_split_sessions(
                 if set[0] != recording.id && recordings.iter().any(|r| r.id == set[0]) {
                     continue;
                 }
-                let members: Vec<&RecordingInfo> = recordings.iter().filter(|r| set.contains(&r.id)).collect();
+                let members: Vec<&RecordingInfo> =
+                    recordings.iter().filter(|r| set.contains(&r.id)).collect();
                 merged.push(RecordingInfo {
                     id: recording.id.clone(),
                     sha256: recording.sha256.clone(),
-                    labels: members.iter().flat_map(|r| r.labels.iter().cloned()).collect(),
+                    labels: members
+                        .iter()
+                        .flat_map(|r| r.labels.iter().cloned())
+                        .collect(),
                 });
                 if members.iter().any(|r| train_only.contains(&r.id)) {
                     merged_train_only.push(recording.id.clone());
@@ -226,7 +230,11 @@ pub fn plan_split_sessions(
     let expand = |side: Vec<RecordingId>| -> Vec<RecordingId> {
         side.into_iter()
             .flat_map(|id| match set_of(&id) {
-                Some(index) => recordings.iter().filter(|r| sets[index].contains(&r.id)).map(|r| r.id.clone()).collect(),
+                Some(index) => recordings
+                    .iter()
+                    .filter(|r| sets[index].contains(&r.id))
+                    .map(|r| r.id.clone())
+                    .collect(),
                 None => vec![id],
             })
             .collect()
@@ -553,7 +561,14 @@ mod tests {
         recordings.push(info("s1c", &["idle"]));
         let id = |s: &str| RecordingId::new(s).unwrap();
         let set = vec![id("s1"), id("s1b"), id("s1c")];
-        let split = plan_split_sessions(&recordings, &mapping(), &label("pinch"), &[], std::slice::from_ref(&set)).unwrap();
+        let split = plan_split_sessions(
+            &recordings,
+            &mapping(),
+            &label("pinch"),
+            &[],
+            std::slice::from_ref(&set),
+        )
+        .unwrap();
         let held = set.iter().filter(|r| split.evaluation.contains(r)).count();
         assert!(held == 0 || held == set.len(), "{split:?}");
         assert_eq!(split.train.len() + split.evaluation.len(), recordings.len());

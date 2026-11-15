@@ -504,7 +504,9 @@ static PENDING_THEME: Mutex<Option<String>> = Mutex::new(None);
 #[tauri::command]
 pub fn set_watch_theme(app: AppHandle, theme: String) -> Result<(), String> {
     // Held across the check, so a bridge that comes up meanwhile still finds the theme (see `apply_pending_theme`).
-    let mut pending = PENDING_THEME.lock().map_err(|_| "the theme could not be kept")?;
+    let mut pending = PENDING_THEME
+        .lock()
+        .map_err(|_| "the theme could not be kept")?;
     match app.try_state::<std::sync::Arc<WatchBridgeServer>>() {
         Some(server) => server.set_theme(&theme).map_err(|error| error.to_string()),
         None => {
@@ -516,7 +518,10 @@ pub fn set_watch_theme(app: AppHandle, theme: String) -> Result<(), String> {
 
 /// Gives a bridge that just came up the theme the page named before it existed. Call after it is managed.
 pub fn apply_pending_theme(server: &WatchBridgeServer) {
-    let theme = PENDING_THEME.lock().ok().and_then(|mut pending| pending.take());
+    let theme = PENDING_THEME
+        .lock()
+        .ok()
+        .and_then(|mut pending| pending.take());
     if let Some(theme) = theme
         && let Err(error) = server.set_theme(&theme)
     {
@@ -676,9 +681,18 @@ mod tests {
     fn orientation_goes_out_in_batches_at_most_twenty_times_a_second() {
         let start = Instant::now();
         let batch = ORIENTATION_BATCH_INTERVAL;
-        assert!(orientation_flush_due(None, start), "the first batch goes at once");
-        assert!(!orientation_flush_due(Some(start), start + Duration::from_millis(10)));
-        assert!(!orientation_flush_due(Some(start), start + batch - Duration::from_millis(1)));
+        assert!(
+            orientation_flush_due(None, start),
+            "the first batch goes at once"
+        );
+        assert!(!orientation_flush_due(
+            Some(start),
+            start + Duration::from_millis(10)
+        ));
+        assert!(!orientation_flush_due(
+            Some(start),
+            start + batch - Duration::from_millis(1)
+        ));
         assert!(orientation_flush_due(Some(start), start + batch));
         assert!(
             Duration::from_secs(1).as_millis() / batch.as_millis() <= 20,

@@ -40,11 +40,18 @@ pub enum NoSignal {
 pub enum Readiness {
     Ready,
     /// The wrist is turning fast; `ready_in_ms` is how long until ready if it stopped now.
-    Moving { ready_in_ms: u64 },
+    Moving {
+        ready_in_ms: u64,
+    },
     /// The wrist stopped; ready in `ready_in_ms` if it stays calm.
-    Settling { ready_in_ms: u64 },
+    Settling {
+        ready_in_ms: u64,
+    },
     /// It cannot score; `ready_in_ms` is how long until that clears by itself, when that can be known.
-    NoSignal { why: NoSignal, ready_in_ms: Option<u64> },
+    NoSignal {
+        why: NoSignal,
+        ready_in_ms: Option<u64>,
+    },
 }
 
 impl Readiness {
@@ -54,10 +61,21 @@ impl Readiness {
             Self::Ready => "ready",
             Self::Moving { .. } => "moving",
             Self::Settling { .. } => "settling",
-            Self::NoSignal { why: NoSignal::Waiting, .. } => "waiting",
-            Self::NoSignal { why: NoSignal::Stale, .. } => "stale",
-            Self::NoSignal { why: NoSignal::WarmingUp, .. } => "warmingUp",
-            Self::NoSignal { why: NoSignal::Gap, .. } => "gap",
+            Self::NoSignal {
+                why: NoSignal::Waiting,
+                ..
+            } => "waiting",
+            Self::NoSignal {
+                why: NoSignal::Stale,
+                ..
+            } => "stale",
+            Self::NoSignal {
+                why: NoSignal::WarmingUp,
+                ..
+            } => "warmingUp",
+            Self::NoSignal {
+                why: NoSignal::Gap, ..
+            } => "gap",
         }
     }
 
@@ -103,9 +121,13 @@ pub fn from_calm(calm_ns: u64) -> Readiness {
     if calm_ms >= READY_CALM_MS {
         Readiness::Ready
     } else if calm_ms < MOVING_NOW_MS {
-        Readiness::Moving { ready_in_ms: READY_CALM_MS - calm_ms }
+        Readiness::Moving {
+            ready_in_ms: READY_CALM_MS - calm_ms,
+        }
     } else {
-        Readiness::Settling { ready_in_ms: READY_CALM_MS - calm_ms }
+        Readiness::Settling {
+            ready_in_ms: READY_CALM_MS - calm_ms,
+        }
     }
 }
 
@@ -119,7 +141,14 @@ mod tests {
         (0..=end_ms / 10)
             .map(|k| {
                 let at = k * 10;
-                (at * MS, if at < moving_until_ms { [3.0, 0.0, 0.0] } else { [0.02, 0.01, 0.0] })
+                (
+                    at * MS,
+                    if at < moving_until_ms {
+                        [3.0, 0.0, 0.0]
+                    } else {
+                        [0.02, 0.01, 0.0]
+                    },
+                )
             })
             .collect()
     }
@@ -135,7 +164,10 @@ mod tests {
     #[test]
     fn a_second_of_calm_is_ready() {
         assert_eq!(from_calm(1_200 * MS), Readiness::Ready);
-        assert_eq!(from_calm(600 * MS), Readiness::Settling { ready_in_ms: 400 });
+        assert_eq!(
+            from_calm(600 * MS),
+            Readiness::Settling { ready_in_ms: 400 }
+        );
         assert_eq!(from_calm(100 * MS), Readiness::Moving { ready_in_ms: 900 });
         assert_eq!(from_calm(100 * MS).name(), "moving");
     }

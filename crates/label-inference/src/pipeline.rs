@@ -357,8 +357,8 @@ impl LabelPipeline {
     /// Whether `model` can catch a gesture now (see [`crate::readiness`]): it has its streams, its whole history without a
     /// gap, and (if it reads motion) the wrist has been calm long enough.
     pub fn readiness(&self, model: &LoadedModel, now_ns: u64) -> crate::readiness::Readiness {
-        use crate::readiness::{NoSignal, Readiness, from_calm};
         use crate::inputs::ModelKind;
+        use crate::readiness::{NoSignal, Readiness, from_calm};
         let no = |why, ready_in_ns: Option<u64>| Readiness::NoSignal {
             why,
             ready_in_ms: ready_in_ns.map(|ns| ns.div_ceil(NS_PER_MS)),
@@ -372,7 +372,11 @@ impl LabelPipeline {
             return no(NoSignal::Waiting, None);
         }
         if now_ns.saturating_sub(newest_ppg.at_ns) > stale
-            || (reads_motion && self.motion.back().is_some_and(|m| now_ns.saturating_sub(m.received_ns) > stale))
+            || (reads_motion
+                && self
+                    .motion
+                    .back()
+                    .is_some_and(|m| now_ns.saturating_sub(m.received_ns) > stale))
         {
             return no(NoSignal::Stale, None);
         }
@@ -396,7 +400,12 @@ impl LabelPipeline {
             later(NoSignal::WarmingUp, pulse_ns - covered);
         }
         let mut previous: Option<u64> = None;
-        for at in self.ppg.iter().map(|s| s.at_ns).filter(|&at| at + pulse_ns > now_ns) {
+        for at in self
+            .ppg
+            .iter()
+            .map(|s| s.at_ns)
+            .filter(|&at| at + pulse_ns > now_ns)
+        {
             if let Some(before) = previous
                 && at - before > pulse_gap_ns
             {
@@ -413,8 +422,13 @@ impl LabelPipeline {
             }
             let motion_gap_ns = pinch_inference::imu_onset::MAX_GAP_MS * NS_PER_MS;
             let mut previous: Option<u64> = None;
-            let horizon = crate::readiness::MOVING_RMS_NS + crate::readiness::READY_CALM_MS * NS_PER_MS;
-            for m in self.motion.iter().filter(|m| m.sample.ts_ns + motion_ns > newest) {
+            let horizon =
+                crate::readiness::MOVING_RMS_NS + crate::readiness::READY_CALM_MS * NS_PER_MS;
+            for m in self
+                .motion
+                .iter()
+                .filter(|m| m.sample.ts_ns + motion_ns > newest)
+            {
                 let at = m.sample.ts_ns;
                 if let Some(before) = previous
                     && at - before > motion_gap_ns
@@ -433,7 +447,10 @@ impl LabelPipeline {
         if !reads_motion {
             return Readiness::Ready;
         }
-        from_calm(crate::readiness::calm_ns(&gyro, crate::readiness::READY_CALM_MS * NS_PER_MS))
+        from_calm(crate::readiness::calm_ns(
+            &gyro,
+            crate::readiness::READY_CALM_MS * NS_PER_MS,
+        ))
     }
 
     /// The scores of the pulse samples after `last_decided` (only the newest, the first time), oldest first, and the raw
@@ -871,8 +888,9 @@ pub(crate) mod tests {
         p.configure(&[model]);
         let origin = trace[0].ts_ns;
         let received = |ts: u64, delay_ms: u64| ts - origin + 10_000_000_000 + delay_ms * NS_PER_MS;
-        let mut arrivals: Vec<(u64, bool, usize)> =
-            (0..trace.len()).map(|i| (received(trace[i].ts_ns, 5), true, i)).collect();
+        let mut arrivals: Vec<(u64, bool, usize)> = (0..trace.len())
+            .map(|i| (received(trace[i].ts_ns, 5), true, i))
+            .collect();
         arrivals.extend((0..motion.len()).map(|j| (received(motion[j].ts_ns, 60), false, j)));
         arrivals.sort();
         let mut out = Vec::new();
@@ -883,15 +901,23 @@ pub(crate) mod tests {
                 b.timestamps_ns = vec![trace[i].ts_ns - SDK_BEHIND_NS];
                 p.observe_ppg(&b, at).unwrap();
             } else {
-                p.observe_orientation(&motion_sample(&motion[i], i as u64), at).unwrap();
+                p.observe_orientation(&motion_sample(&motion[i], i as u64), at)
+                    .unwrap();
             }
             out.push(((at - 10_000_000_000) as f64 / 1e9, p.readiness(model, at)));
         }
         out
     }
 
-    fn at(states: &[(f64, crate::readiness::Readiness)], seconds: f64) -> crate::readiness::Readiness {
-        states.iter().find(|(t, _)| *t >= seconds).expect("the trace reaches that far").1
+    fn at(
+        states: &[(f64, crate::readiness::Readiness)],
+        seconds: f64,
+    ) -> crate::readiness::Readiness {
+        states
+            .iter()
+            .find(|(t, _)| *t >= seconds)
+            .expect("the trace reaches that far")
+            .1
     }
 
     #[test]
@@ -902,18 +928,28 @@ pub(crate) mod tests {
         let origin = trace[0].ts_ns;
         let since = |m: &MotionSample| (m.ts_ns - origin) as f64 / 1e9;
         // The wrist turning fast from 14 to 15 s.
-        for m in motion.iter_mut().filter(|m| (14.0..15.0).contains(&since(m))) {
+        for m in motion
+            .iter_mut()
+            .filter(|m| (14.0..15.0).contains(&since(m)))
+        {
             m.gyro = [3.0, 1.0, 0.5];
         }
         let states = readiness_over(&model, &trace, &motion);
         // Until the buffer holds the CNN's 11 s, it cannot score, and says how long that takes.
         match at(&states, 5.0) {
-            Readiness::NoSignal { why: NoSignal::WarmingUp, ready_in_ms: Some(ms) } => assert!((5_500..=6_500).contains(&ms), "{ms}"),
+            Readiness::NoSignal {
+                why: NoSignal::WarmingUp,
+                ready_in_ms: Some(ms),
+            } => assert!((5_500..=6_500).contains(&ms), "{ms}"),
             other => panic!("{other:?}"),
         }
         assert_eq!(at(&states, 13.0), Readiness::Ready);
         assert!(matches!(at(&states, 14.8), Readiness::Moving { .. }));
-        assert!(matches!(at(&states, 15.8), Readiness::Settling { .. }), "{:?}", at(&states, 15.8));
+        assert!(
+            matches!(at(&states, 15.8), Readiness::Settling { .. }),
+            "{:?}",
+            at(&states, 15.8)
+        );
         assert_eq!(at(&states, 16.6), Readiness::Ready);
     }
 
@@ -932,7 +968,10 @@ pub(crate) mod tests {
         assert_eq!(at(&states, 14.0), Readiness::Ready);
         match at(&states, 17.0) {
             // The gap ends at 15.5 s and stays in the 10.98 s history until about 26.5 s.
-            Readiness::NoSignal { why: NoSignal::Gap, ready_in_ms: Some(ms) } => assert!((9_000..=10_000).contains(&ms), "{ms}"),
+            Readiness::NoSignal {
+                why: NoSignal::Gap,
+                ready_in_ms: Some(ms),
+            } => assert!((9_000..=10_000).contains(&ms), "{ms}"),
             other => panic!("{other:?}"),
         }
     }
@@ -1008,15 +1047,26 @@ pub(crate) mod tests {
     #[test]
     fn a_100_hz_motion_model_scores_the_live_streams_as_the_trainer_did() {
         let model = loaded_motion_100hz();
-        assert_eq!(model.motion_grid, pinch_inference::imu_onset::MotionGrid::HZ_100);
+        assert_eq!(
+            model.motion_grid,
+            pinch_inference::imu_onset::MotionGrid::HZ_100
+        );
         let (trace, motion, probabilities) = expected_motion_100hz();
-        let (scores, rejected) = replay_streams(&model, (trace.clone(), motion, probabilities.clone()), 60);
+        let (scores, rejected) =
+            replay_streams(&model, (trace.clone(), motion, probabilities.clone()), 60);
         assert!(rejected.is_empty(), "{rejected:?}");
         assert!(scores.len() > 300, "{}", scores.len());
         for score in &scores {
-            let i = trace.iter().position(|s| s.ts_ns - SDK_BEHIND_NS == score.timestamp_ns).unwrap();
+            let i = trace
+                .iter()
+                .position(|s| s.ts_ns - SDK_BEHIND_NS == score.timestamp_ns)
+                .unwrap();
             let want = probabilities[i].expect("the trainer scored it too");
-            assert!((score.confidence - want).abs() < 1e-6, "sample {i}: {} vs {want}", score.confidence);
+            assert!(
+                (score.confidence - want).abs() < 1e-6,
+                "sample {i}: {} vs {want}",
+                score.confidence
+            );
         }
         // Read on the 50 Hz grid instead, the same model gives other scores: the grid is the manifest's, not a default.
         let mut wrong = loaded_motion_100hz();
@@ -1024,7 +1074,10 @@ pub(crate) mod tests {
         let (trace, motion, probabilities) = expected_motion_100hz();
         let (other, _) = replay_streams(&wrong, (trace.clone(), motion, probabilities.clone()), 60);
         assert!(other.iter().any(|score| {
-            let i = trace.iter().position(|s| s.ts_ns - SDK_BEHIND_NS == score.timestamp_ns).unwrap();
+            let i = trace
+                .iter()
+                .position(|s| s.ts_ns - SDK_BEHIND_NS == score.timestamp_ns)
+                .unwrap();
             (score.confidence - probabilities[i].unwrap_or(f64::NAN)).abs() > 1e-6
         }));
     }

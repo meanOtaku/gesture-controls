@@ -162,7 +162,11 @@ impl CnnGrid {
 
     /// The inputs' names on this grid, in order.
     pub fn feature_names(&self) -> &'static [String] {
-        if *self == Self::HZ_100 { &FEATURE_NAMES_100 } else { &FEATURE_NAMES }
+        if *self == Self::HZ_100 {
+            &FEATURE_NAMES_100
+        } else {
+            &FEATURE_NAMES
+        }
     }
 }
 
@@ -405,7 +409,13 @@ fn scaled_inputs(
         decision_ns,
         g,
     )?;
-    let p = held(pulse, |s| s.ts_ns, |s| [s.green, s.red, s.ir], decision_ns, g)?;
+    let p = held(
+        pulse,
+        |s| s.ts_ns,
+        |s| [s.green, s.red, s.ir],
+        decision_ns,
+        g,
+    )?;
     let left_out = match scaling {
         Scaling::Median => moving_ticks_on(&m, g),
         Scaling::Rolling => vec![false; g.ticks()],

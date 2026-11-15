@@ -643,14 +643,17 @@ pub(crate) mod tests {
     }
 
     /// The PPG + IMU fixture with its manifest changed by `edit`, validated.
-    fn motion_edited(edit: impl FnOnce(&mut serde_json::Value)) -> Result<ValidatedBundle, BundleError> {
+    fn motion_edited(
+        edit: impl FnOnce(&mut serde_json::Value),
+    ) -> Result<ValidatedBundle, BundleError> {
         let dir = tempfile::tempdir().unwrap();
         for entry in fs::read_dir(motion_fixture_dir()).unwrap() {
             let entry = entry.unwrap();
             fs::copy(entry.path(), dir.path().join(entry.file_name())).unwrap();
         }
         let path = dir.path().join("manifest.json");
-        let mut manifest: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         edit(&mut manifest);
         fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
         validate_bundle(dir.path(), None)
@@ -662,10 +665,19 @@ pub(crate) mod tests {
         // The first motion models name no rate: they read the 50 Hz grid they were trained on.
         let first = validate_bundle(&motion_fixture_dir(), None).unwrap();
         assert_eq!(first.manifest.preprocessing.motion_hz, None);
-        assert_eq!(first.manifest.preprocessing.motion_grid(), MotionGrid::HZ_50);
+        assert_eq!(
+            first.manifest.preprocessing.motion_grid(),
+            MotionGrid::HZ_50
+        );
         let fast = motion_edited(|m| m["preprocessing"]["motionHz"] = 100.into()).unwrap();
-        assert_eq!(fast.manifest.preprocessing.motion_grid(), MotionGrid::HZ_100);
-        let odd = motion_edited(|m| m["preprocessing"]["motionHz"] = 75.into()).err().unwrap().to_string();
+        assert_eq!(
+            fast.manifest.preprocessing.motion_grid(),
+            MotionGrid::HZ_100
+        );
+        let odd = motion_edited(|m| m["preprocessing"]["motionHz"] = 75.into())
+            .err()
+            .unwrap()
+            .to_string();
         assert!(odd.contains("50 or 100 Hz, not 75 Hz"), "{odd}");
         assert!(
             refused(|m| m["preprocessing"]["motionHz"] = 100.into())
@@ -688,7 +700,8 @@ pub(crate) mod tests {
             fs::copy(entry.path(), dir.path().join(entry.file_name())).unwrap();
         }
         let path = dir.path().join("manifest.json");
-        let mut manifest: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         manifest["preprocessing"]["motionHz"] = 100.into();
         fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
         let refused = validate_bundle(dir.path(), None).err().unwrap().to_string();

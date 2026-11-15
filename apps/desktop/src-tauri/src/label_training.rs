@@ -562,7 +562,11 @@ fn recordings_for(app: &AppHandle, request: &TrainRequest) -> Result<Checked, St
     let (sessions, decide_from_ns) = session_plan(&stamps);
     checked.sessions = sessions
         .into_iter()
-        .map(|set| set.into_iter().map(RecordingId::new).collect::<Result<Vec<_>, _>>())
+        .map(|set| {
+            set.into_iter()
+                .map(RecordingId::new)
+                .collect::<Result<Vec<_>, _>>()
+        })
         .collect::<Result<_, _>>()
         .map_err(|e| e.to_string())?;
     checked.decide_from_ns = decide_from_ns;
@@ -706,7 +710,12 @@ fn split_copies(recordings: &[(String, Vec<i64>)], sets: Vec<Vec<String>>) -> Sa
         recordings
             .iter()
             .find(|(rid, _)| rid == id)
-            .map(|(_, stamps)| stamps.iter().copied().collect::<std::collections::HashSet<i64>>())
+            .map(|(_, stamps)| {
+                stamps
+                    .iter()
+                    .copied()
+                    .collect::<std::collections::HashSet<i64>>()
+            })
             .unwrap_or_default()
     };
     let mut out = SameSessionSets::default();
@@ -800,8 +809,14 @@ pub async fn suggest_label_offset(
     request: TrainRequest,
 ) -> Result<Vec<OffsetScore>, String> {
     let checked = recordings_for(&app, &request)?;
-    let split = plan_split_sessions(&checked.recordings, &checked.mapping, &checked.target, &[], &checked.sessions)
-        .map_err(|e| e.to_string())?;
+    let split = plan_split_sessions(
+        &checked.recordings,
+        &checked.mapping,
+        &checked.target,
+        &[],
+        &checked.sessions,
+    )
+    .map_err(|e| e.to_string())?;
     if !Path::new(TRAINER_PROJECT_DIR)
         .join("pyproject.toml")
         .is_file()
@@ -857,9 +872,15 @@ fn plan_label_training_blocking(app: &AppHandle, request: &TrainRequest) -> Plan
             contract.features.len()
         });
     let result = recordings_for(app, request).and_then(|checked| {
-        plan_split_sessions(&checked.recordings, &checked.mapping, &checked.target, &[], &checked.sessions)
-            .map(|split| (checked, split))
-            .map_err(|e| e.to_string())
+        plan_split_sessions(
+            &checked.recordings,
+            &checked.mapping,
+            &checked.target,
+            &[],
+            &checked.sessions,
+        )
+        .map(|split| (checked, split))
+        .map_err(|e| e.to_string())
     });
     match result {
         Ok((checked, split)) => {
@@ -1355,12 +1376,19 @@ mod tests {
         r.method = Some(CNN_V2_BACKEND.into());
         let (backend, input) = method_of(&r).unwrap();
         assert_eq!(backend, CNN_V2_BACKEND);
-        assert_eq!(input.features.len(), 1000, "nine channels and the jerk envelope, 100 ticks each");
+        assert_eq!(
+            input.features.len(),
+            1000,
+            "nine channels and the jerk envelope, 100 ticks each"
+        );
         assert_eq!(input.features.last().unwrap(), "cnn_accel_jerk_env_t99");
         // The first CNN is unchanged beside it.
         r.method = Some(CNN_BACKEND.into());
         assert_eq!(method_of(&r).unwrap().1.features.len(), 900);
-        assert_eq!(trainer_backend(CNN_V2_BACKEND), Some(model_lab_core::TrainerBackend::PyTorch));
+        assert_eq!(
+            trainer_backend(CNN_V2_BACKEND),
+            Some(model_lab_core::TrainerBackend::PyTorch)
+        );
         // It trains on everything at once: no training plan.
         r.method = Some(CNN_V2_BACKEND.into());
         r.stages = vec![stage("A", &["s1"])];
@@ -1538,7 +1566,11 @@ mod tests {
 
     #[test]
     fn copies_are_told_from_overlapping_windows() {
-        let window = |end_s: i64| ((end_s - 45) * 50..end_s * 50).map(|k| k * 20_000_000).collect::<Vec<_>>();
+        let window = |end_s: i64| {
+            ((end_s - 45) * 50..end_s * 50)
+                .map(|k| k * 20_000_000)
+                .collect::<Vec<_>>()
+        };
         let a = window(100);
         let recordings = vec![
             ("a".to_string(), a.clone()),
@@ -1554,16 +1586,34 @@ mod tests {
     #[test]
     fn misses_saved_seconds_apart_train_together_each_moment_decided_once() {
         // Three 45 s windows marked 10 s apart, as the miss recorder saves them, and one unrelated recording.
-        let window = |end_s: i64| ((end_s - 45) * 50..end_s * 50).map(|k| k * 20_000_000).collect::<Vec<_>>();
+        let window = |end_s: i64| {
+            ((end_s - 45) * 50..end_s * 50)
+                .map(|k| k * 20_000_000)
+                .collect::<Vec<_>>()
+        };
         let recordings = vec![
             ("m3".to_string(), window(120)),
             ("m1".to_string(), window(100)),
-            ("other".to_string(), (0..2000).map(|k| 9_000_000_000_000 + k * 19_998_877).collect()),
+            (
+                "other".to_string(),
+                (0..2000)
+                    .map(|k| 9_000_000_000_000 + k * 19_998_877)
+                    .collect(),
+            ),
             ("m2".to_string(), window(110)),
         ];
         let (sets, decide_from) = session_plan(&recordings);
         assert_eq!(sets, vec![vec!["m1".to_string(), "m2".into(), "m3".into()]]);
-        let last = |id: &str| *recordings.iter().find(|(r, _)| r == id).unwrap().1.iter().max().unwrap();
+        let last = |id: &str| {
+            *recordings
+                .iter()
+                .find(|(r, _)| r == id)
+                .unwrap()
+                .1
+                .iter()
+                .max()
+                .unwrap()
+        };
         assert_eq!(decide_from.get("m1"), None);
         assert_eq!(decide_from.get("m2"), Some(&last("m1")));
         assert_eq!(decide_from.get("m3"), Some(&last("m2")));
@@ -1663,7 +1713,14 @@ mod tests {
         r.label_offset_ms = Some(-250);
         r.research = true;
         let checked = check_request(&r, &datasets(), &sha).unwrap();
-        let split = plan_split_sessions(&checked.recordings, &checked.mapping, &checked.target, &[], &checked.sessions).unwrap();
+        let split = plan_split_sessions(
+            &checked.recordings,
+            &checked.mapping,
+            &checked.target,
+            &[],
+            &checked.sessions,
+        )
+        .unwrap();
         let paths: BTreeMap<String, PathBuf> = checked
             .recordings
             .iter()
@@ -1768,7 +1825,14 @@ mod tests {
         // The 100 Hz CNN: 9 channels of 100 ticks, and the trainer is told the rate.
         assert_eq!(checked.input, cnn_contract_100());
         assert_eq!(checked.input.features.len(), 900);
-        let split = plan_split_sessions(&checked.recordings, &checked.mapping, &checked.target, &[], &checked.sessions).unwrap();
+        let split = plan_split_sessions(
+            &checked.recordings,
+            &checked.mapping,
+            &checked.target,
+            &[],
+            &checked.sessions,
+        )
+        .unwrap();
         let spec = build_spec(&checked, &split, &BTreeMap::new());
         assert_eq!(spec["backend"], CNN_BACKEND);
         assert_eq!(spec["motionHz"], MOTION_HZ);
