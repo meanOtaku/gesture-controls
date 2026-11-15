@@ -1,3 +1,4 @@
+import { ChevronRightIcon } from "lucide-react";
 import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { recordingTitle } from "../recordingNames";
@@ -124,6 +125,13 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
     }
   };
 
+  /** The options that are on, named for the folded Options line. */
+  const optionsOn = [
+    ...(staged && method === CNN_METHOD ? ["training in stages"] : []),
+    ...(labelOffset !== 0 ? [`labels moved ${Math.abs(labelOffset)} ms ${labelOffset < 0 ? "earlier" : "later"}`] : []),
+    ...(hardNegatives ? ["learning from its false alarms"] : []),
+    ...(research ? ["research checks"] : []),
+  ];
   const canStart = desktopAvailable && request !== null && plan !== null && plan.problem === null && running === null && environment?.available !== false;
   const name = (id: string) => {
     const dataset = datasets.find((entry) => entry.id === id);
@@ -155,39 +163,47 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
           <div className="field">
             <div className="field-head"><Label htmlFor={`${uid}-method`}>Model</Label></div>
             <select id={`${uid}-method`} className={NATIVE_SELECT} value={method} disabled={running !== null} onChange={(event) => setMethod(event.target.value as TrainMethod)}>
-              <option value={CNN_METHOD}>{CNN_MODEL.name}</option>
-              <option value={CNN_V2_METHOD}>{CNN_V2_MODEL.name}</option>
-              <option value={TREES_METHOD}>{PULSE_MODEL.name} (trees)</option>
+              <optgroup label="CNNs">
+                <option value={CNN_METHOD}>{CNN_MODEL.name}</option>
+                <option value={CNN_V2_METHOD}>{CNN_V2_MODEL.name}</option>
+              </optgroup>
+              <optgroup label="Older">
+                <option value={TREES_METHOD}>{PULSE_MODEL.name} (trees)</option>
+              </optgroup>
             </select>
           </div>
-          {method === CNN_V2_METHOD ? (
-            <>
-              <p><strong>{CNN_V2_MODEL.name}</strong> <Badge variant="secondary">pulse sensor and motion</Badge> <Badge variant="outline">new</Badge></p>
-              <p className="field-hint">{CNN_V2_MODEL.summary} {CNN_V2_MODEL.trainingNote}</p>
-              <p className="field-hint">
-                On the research sessions it never trained on, at the cut-off it chose itself, it caught {<AnimatedNumber value={CNN_V2_MODEL.research.liveCaught} />} of {CNN_V2_MODEL.research.live} live pinches and {<AnimatedNumber value={CNN_V2_MODEL.research.movingCaught} />} of {CNN_V2_MODEL.research.moving} made with the arm moving, with no false activation in everyday activity; the CNN caught {CNN_V2_MODEL.research.baselineLiveCaught} and {CNN_V2_MODEL.research.baselineMovingCaught}, with {CNN_V2_MODEL.research.baselineFalsePerHour} an hour. Training one does not change the models you have: activate it in Models when you want to try it.
-              </p>
-            </>
-          ) : method === CNN_METHOD ? (
-            <>
-              <p><strong>{CNN_MODEL.name}</strong> <Badge variant="secondary">pulse sensor and motion</Badge></p>
-              <p className="field-hint">{CNN_MODEL.summary} {CNN_MODEL.trainingNote}</p>
-              <p className="field-hint">
-                Compared with the trees on the same pinch recordings, with the hand still before each pinch, it caught about {<AnimatedNumber value={Math.round(CNN_MODEL.research.recall * 100)} />}% of pinch starts at {<AnimatedNumber value={CNN_MODEL.research.falsePerMinute} digits={0} />} false alarm a minute or fewer (the trees: 64%), about {<AnimatedNumber value={CNN_MODEL.research.delayMs} />} ms after the pinch began.
-              {" "}
-                {onShowPipeline ? <Button type="button" variant="link" className="h-auto p-0" onClick={onShowPipeline}>See how it works</Button> : null}
-              </p>
-            </>
-          ) : (
-            <>
-              <p><strong>{PULSE_MODEL.name}</strong> <Badge variant="secondary">pulse sensor and motion</Badge></p>
-              <p className="field-hint">{PULSE_MODEL.summary}</p>
-              <p className="field-hint">
-                In the research (37 recordings, 20 tests on recordings it never saw) it scored a worst-case AUC of {<AnimatedNumber value={PULSE_MODEL.research.worstAuc} />} and caught about {<AnimatedNumber value={Math.round(PULSE_MODEL.research.recall * 100)} />}% of gesture starts, with about {<AnimatedNumber value={PULSE_MODEL.research.falsePerMinute} digits={1} />} false alarms a minute.{" "}
-                {onShowPipeline ? <Button type="button" variant="link" className="h-auto p-0" onClick={onShowPipeline}>See how it works</Button> : null}
-              </p>
-            </>
-          )}
+          <p className="field-hint">{(method === CNN_V2_METHOD ? CNN_V2_MODEL : method === CNN_METHOD ? CNN_MODEL : PULSE_MODEL).tagline}{method === CNN_V2_METHOD ? <> <Badge variant="outline">new</Badge></> : null}</p>
+          {/* Always drawn, so the details read the same whether open or not. */}
+          <details className="inline-menu">
+            <summary>About this model</summary>
+            <div className="inline-menu-body flex-col items-start">
+              {method === CNN_V2_METHOD ? (
+                <>
+                  <p className="field-hint">{CNN_V2_MODEL.summary} {CNN_V2_MODEL.trainingNote}</p>
+                  <p className="field-hint">
+                    On the research sessions it never trained on, at the cut-off it chose itself, it caught {<AnimatedNumber value={CNN_V2_MODEL.research.liveCaught} />} of {CNN_V2_MODEL.research.live} live pinches and {<AnimatedNumber value={CNN_V2_MODEL.research.movingCaught} />} of {CNN_V2_MODEL.research.moving} made with the arm moving, with no false activation in everyday activity; the CNN caught {CNN_V2_MODEL.research.baselineLiveCaught} and {CNN_V2_MODEL.research.baselineMovingCaught}, with {CNN_V2_MODEL.research.baselineFalsePerHour} an hour. Training one does not change the models you have: activate it in Models when you want to try it.
+                  </p>
+                </>
+              ) : method === CNN_METHOD ? (
+                <>
+                  <p className="field-hint">{CNN_MODEL.summary} {CNN_MODEL.trainingNote}</p>
+                  <p className="field-hint">
+                    Compared with the trees on the same pinch recordings, with the hand still before each pinch, it caught about {<AnimatedNumber value={Math.round(CNN_MODEL.research.recall * 100)} />}% of pinch starts at {<AnimatedNumber value={CNN_MODEL.research.falsePerMinute} digits={0} />} false alarm a minute or fewer (the trees: 64%), about {<AnimatedNumber value={CNN_MODEL.research.delayMs} />} ms after the pinch began.
+                  {" "}
+                    {onShowPipeline ? <Button type="button" variant="link" className="h-auto p-0" onClick={onShowPipeline}>See how it works</Button> : null}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="field-hint">{PULSE_MODEL.summary}</p>
+                  <p className="field-hint">
+                    In the research (37 recordings, 20 tests on recordings it never saw) it scored a worst-case AUC of {<AnimatedNumber value={PULSE_MODEL.research.worstAuc} />} and caught about {<AnimatedNumber value={Math.round(PULSE_MODEL.research.recall * 100)} />}% of gesture starts, with about {<AnimatedNumber value={PULSE_MODEL.research.falsePerMinute} digits={1} />} false alarms a minute.{" "}
+                    {onShowPipeline ? <Button type="button" variant="link" className="h-auto p-0" onClick={onShowPipeline}>See how it works</Button> : null}
+                  </p>
+                </>
+              )}
+            </div>
+          </details>
         </section>
 
         <div className="field">
@@ -196,7 +212,7 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
             <option value="">Choose a label…</option>
             {usable.map((label) => <option key={label.id} value={label.id}>{label.displayName}</option>)}
           </select>
-          {usable.length === 0 && <p className="field-hint">Add a label first (see Labels below).</p>}
+          {usable.length === 0 && <p className="field-hint">Add a label on the Labels page first.</p>}
         </div>
 
         {target !== "" && (
@@ -221,19 +237,6 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
                 </ul>
               </fieldset>
             )}
-
-            {method === CNN_METHOD && (
-              <fieldset className="flex flex-col gap-2">
-                <legend className="label">Training plan</legend>
-                <div className="flex items-start gap-2 text-sm">
-                  <Checkbox checked={staged} disabled={running !== null} onCheckedChange={toggleStaged} aria-label="Train in stages" />
-                  <span><strong>Train in stages</strong> <small className="text-muted-foreground">Choose the order it learns from the recordings, such as pinches, then everyday noise, then pinches again. Each stage carries on from where the one before left it. Off, it learns from all of them at once.</small></span>
-                </div>
-                {staged && <TrainingPlanEditor stages={stages} onChange={setStages} chosen={chosen} datasets={datasets} target={target} disabled={running !== null} />}
-              </fieldset>
-            )}
-
-            <LabelTiming request={request} offset={labelOffset} onOffset={setLabelOffset} disabled={running !== null} />
 
             {plan && (
               <div role="status" aria-label="Training plan">
@@ -273,15 +276,39 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
               </div>
             )}
 
-            <div className="flex items-start gap-2 text-sm">
-              <Checkbox checked={hardNegatives} disabled={running !== null} onCheckedChange={() => setHardNegatives((value) => !value)} aria-label="Learn from its own false alarms" />
-              <span><strong>Learn from its own false alarms</strong> <small className="text-muted-foreground">After training, run the model over its training recordings, add every moment it fired with no gesture under way as an example of what is not the gesture, and train it again. Everyday-noise recordings (Recorder → Everyday noise) teach it most. It takes about twice as long.</small></span>
-            </div>
 
-            <div className="flex items-start gap-2 text-sm">
-              <Checkbox checked={research} disabled={running !== null} onCheckedChange={() => setResearch((value) => !value)} aria-label="Also run research checks" />
-              <span><strong>Also run research checks</strong> <small className="text-muted-foreground">After training, retrain the same model on a quarter, half and three quarters of the data, and on all but one recording at a time, to see how far its score can be trusted. It takes several times longer, and the results are in the model&apos;s Inspect view.</small></span>
-            </div>
+            {/* Set rarely, so folded; always drawn, so what is set applies whether it is open or not. */}
+            <details className="advanced-section">
+              <summary>
+                <ChevronRightIcon className="advanced-chevron size-4" aria-hidden="true" />
+                <span className="advanced-title">Options</span>
+                <span className="advanced-summary">{optionsOn.length === 0 ? "Training in stages, label timing, learning from its false alarms, research checks: none on" : `On: ${optionsOn.join(", ")}`}</span>
+              </summary>
+              <div className="flex flex-col gap-4 advanced-body">
+                {method === CNN_METHOD && (
+                  <fieldset className="flex flex-col gap-2">
+                    <legend className="label">Training plan</legend>
+                    <div className="flex items-start gap-2 text-sm">
+                      <Checkbox checked={staged} disabled={running !== null} onCheckedChange={toggleStaged} aria-label="Train in stages" />
+                      <span><strong>Train in stages</strong> <small className="text-muted-foreground">Choose the order it learns from the recordings, such as pinches, then everyday noise, then pinches again. Each stage carries on from where the one before left it. Off, it learns from all of them at once.</small></span>
+                    </div>
+                    {staged && <TrainingPlanEditor stages={stages} onChange={setStages} chosen={chosen} datasets={datasets} target={target} disabled={running !== null} />}
+                  </fieldset>
+                )}
+
+                <LabelTiming request={request} offset={labelOffset} onOffset={setLabelOffset} disabled={running !== null} />
+
+                <div className="flex items-start gap-2 text-sm">
+                  <Checkbox checked={hardNegatives} disabled={running !== null} onCheckedChange={() => setHardNegatives((value) => !value)} aria-label="Learn from its own false alarms" />
+                  <span><strong>Learn from its own false alarms</strong> <small className="text-muted-foreground">After training, run the model over its training recordings, add every moment it fired with no gesture under way as an example of what is not the gesture, and train it again. Everyday-noise recordings (Recorder → Everyday noise) teach it most. It takes about twice as long.</small></span>
+                </div>
+
+                <div className="flex items-start gap-2 text-sm">
+                  <Checkbox checked={research} disabled={running !== null} onCheckedChange={() => setResearch((value) => !value)} aria-label="Also run research checks" />
+                  <span><strong>Also run research checks</strong> <small className="text-muted-foreground">After training, retrain the same model on a quarter, half and three quarters of the data, and on all but one recording at a time, to see how far its score can be trusted. It takes several times longer, and the results are in the model&apos;s Inspect view.</small></span>
+                </div>
+              </div>
+            </details>
 
             <div className="flex flex-wrap items-center gap-2">
               {running === null && <Button type="button" disabled={!canStart} onClick={() => void start()}>Train model</Button>}

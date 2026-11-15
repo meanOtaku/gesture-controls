@@ -23,6 +23,8 @@ export interface ModelDescription {
 
 export const PULSE_MODEL = {
   name: "PPG + IMU pinch-start model",
+  /** One line for the Train card; the summary and figures sit behind its details. */
+  tagline: "The trees: they train quickly and from little data, and fire about 0.9 s after a gesture starts.",
   summary:
     "Reads the watch's pulse sensor and its accelerometer and gyroscope, and fires about 0.9 s after a gesture starts. The pulse is compared with the 1, 2 and 4 seconds before it, the motion is summarised over the last 0.3 to 1.3 s, and 300 randomised decision trees decide whether a gesture has just begun. It fires at the top of the trees' rising vote, at a cut-off that keeps it within 5 false activations an hour on training recordings it did not see.",
   stages: [
@@ -49,6 +51,8 @@ export const CNN_V2_METHOD: TrainMethod = "ppg-imu-cnn-v2";
 /** The CNN the app can train instead of the trees: what it reads, the steps it takes, and what the research measured. */
 export const CNN_MODEL = {
   name: "CNN pinch-start model",
+  /** One line for the Train card; the summary and figures sit behind its details. */
+  tagline: "Fires about 0.5 s after a pinch starts, sooner than the trees, and catches more. Leave Settings → Gestures → Still hand off.",
   summary:
     "Reads the last second of the watch's accelerometer, gyroscope and pulse sensor, each scaled by the median and spread of its last 11 seconds so that a burst of motion does not hide the next pinch, and fires about 0.5 s after a gesture starts, about 0.4 s sooner than the trees. Three small convolutional networks look at the shape of that second and their votes are averaged.",
   /** What to know before training one. */
@@ -72,6 +76,8 @@ export const CNN_MODEL = {
 /** The v2 CNN: per-sensor branches, the jerk envelope, noise-overlay training and a peak gate. */
 export const CNN_V2_MODEL = {
   name: "CNN v2 pinch-start model",
+  /** One line for the Train card; the summary and figures sit behind its details. */
+  tagline: "The CNN plus the accelerometer's jerk, trained on pinches made while moving, and quiet through everyday activity.",
   summary:
     "Reads the same second of accelerometer, gyroscope and pulse as the CNN, plus the accelerometer's jerk envelope: the peaks of the sharp spikes a pinch makes, which slow arm movement does not. Each sensor has its own small network, joined partway and at the end, and three such networks are averaged. It is trained on its pinches also made with recorded everyday wrist motion added, so it knows pinches made with the arm moving. It may only fire just after a sharp spike, which keeps it quiet through everyday activity.",
   /** What to know before training one. */

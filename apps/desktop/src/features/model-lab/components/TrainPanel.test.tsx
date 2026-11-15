@@ -159,6 +159,29 @@ describe("TrainPanel", () => {
     expect(calls("start_label_training")[0][1].request.method).toBe("ppg-imu-cnn");
   });
 
+  it("says each model in one line, with the rest under About this model, and groups the trees as older", async () => {
+    setup();
+    choose("snap");
+    await screen.findByText(/It will train on/);
+    const model = within(screen.getByRole("region", { name: "The model" }));
+    expect(model.getByText(/Fires about 0\.5 s after a pinch starts/)).toBeInTheDocument();
+    const about = model.getByText("About this model").closest("details");
+    expect(about).not.toHaveAttribute("open");
+    expect(about).toHaveTextContent(/Three small convolutional networks/);
+    expect(screen.getByRole("group", { name: "Older" })).toHaveTextContent("(trees)");
+  });
+
+  it("folds the options, and names the ones that are on", async () => {
+    setup();
+    choose("snap");
+    await screen.findByText(/It will train on/);
+    const summary = screen.getByText("Options", { selector: ".advanced-title" }).parentElement!;
+    expect(summary).toHaveTextContent(/none on/);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Learn from its own false alarms" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Also run research checks" }));
+    expect(summary).toHaveTextContent("On: learning from its false alarms, research checks");
+  });
+
   it("asks for research checks only when ticked", async () => {
     setup();
     choose("snap");
