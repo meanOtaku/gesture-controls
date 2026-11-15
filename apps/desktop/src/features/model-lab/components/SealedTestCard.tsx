@@ -96,7 +96,8 @@ export function SealedTestCard({ desktopAvailable, models, datasets }: { desktop
       <CardHeader>
         <SectionHeader
           title="Final test"
-          description="Runs a model over the sealed recordings, exactly as the app runs it live. Nothing was trained or chosen on them, so this is how the model does on a day it has not seen. Test sparingly: each look makes them a little less untouched."
+          description="How a model does on sealed recordings: a day it has never seen. Test sparingly."
+          help={{ label: "About the final test", content: "Runs a model over the sealed recordings, exactly as the app runs it live. Nothing was trained or chosen on them, so this is how the model does on a day it has not seen. Test sparingly: each look makes them a little less untouched." }}
         />
       </CardHeader>
       <CardContent className="flex flex-col gap-3">

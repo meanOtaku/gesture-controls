@@ -168,7 +168,8 @@ export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: 
       <CardHeader>
         <SectionHeader
           title="Threshold"
-          description="What a model's threshold trades, and setting it: lower catches more starts and fires more often with no gesture under way. Each dot is a threshold, on the recordings the model was tested on; its own is ringed, and the dashed line is the budget a model must stay within to go live."
+          description="Lower catches more starts, and fires more often with no gesture under way."
+          help={{ label: "About the threshold", content: "Each dot is a threshold, on the recordings the model was tested on; its own is ringed, and the dashed line is the budget a model must stay within to go live." }}
         />
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">

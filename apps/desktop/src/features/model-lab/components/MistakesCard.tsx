@@ -120,7 +120,8 @@ export function MistakesCard({ desktopAvailable, models, datasets }: { desktopAv
       <CardHeader>
         <SectionHeader
           title="Mistakes"
-          description="Every start a model missed, every time it fired with no gesture under way, and every time it fired again (or too late) during a gesture, on the recordings it was tested on. Open one on the Labelling page: fix a wrong label there, or label a false activation's stretch as everyday activity so the next model learns from it."
+          description="Every miss and false activation on the recordings a model was tested on. Open one in Labelling to fix it."
+          help={{ label: "About mistakes", content: "Every start a model missed, every time it fired with no gesture under way, and every time it fired again (or too late) during a gesture, on the recordings it was tested on. Open one on the Labelling page: fix a wrong label there, or label a false activation's stretch as everyday activity so the next model learns from it." }}
         />
       </CardHeader>
       <CardContent className="flex flex-col gap-3">

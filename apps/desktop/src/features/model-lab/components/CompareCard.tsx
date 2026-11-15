@@ -65,7 +65,8 @@ export function CompareCard({ desktopAvailable, models, datasets }: { desktopAva
       <CardHeader>
         <SectionHeader
           title="Compare models"
-          description="Two to four models of one label, on the same recordings: ones none of them trained on. Each was tested on its own recordings when it was trained, so their scores there cannot be compared; here they can."
+          description="Two to four models of one label, on recordings none of them trained on."
+          help={{ label: "About comparing models", content: "Each model was tested on its own recordings when it was trained, so their scores there cannot be compared. Here they run on the same recordings, ones none of them trained on, so they can." }}
         />
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">

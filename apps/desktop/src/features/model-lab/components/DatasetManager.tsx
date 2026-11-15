@@ -315,10 +315,10 @@ export function DatasetManager({ desktopAvailable, datasets, loading, importing,
       <CardHeader>
         <SectionHeader
           title="Recordings"
-          description="Every recording to label, train and test on. Recorder sessions join by themselves, with the camera's hand landmarks; import is for recordings made elsewhere. Rename one to give it your own name everywhere."
+          description="Every recording to label, train and test on. Recorder sessions join by themselves."
           help={{
             label: "About importing recordings",
-            content: "A recording folder exported by the Recorder keeps its camera files (hand_landmarks.csv and clock_sync.csv) when imported; a single CSV has no camera data. Only files exported from the Recorder are supported. A Quick Capture session has one label; a Timeline Capture session keeps the label of each interval and drops rows outside any interval. An import either fully succeeds or writes nothing, and a failure says exactly why so you can fix it and retry.",
+            content: "Recorder sessions join by themselves, with the camera's hand landmarks; import is for recordings made elsewhere. Rename one to give it your own name everywhere. A recording folder exported by the Recorder keeps its camera files (hand_landmarks.csv and clock_sync.csv) when imported; a single CSV has no camera data. Only files exported from the Recorder are supported. A Quick Capture session has one label; a Timeline Capture session keeps the label of each interval and drops rows outside any interval. An import either fully succeeds or writes nothing, and a failure says exactly why so you can fix it and retry.",
           }}
         />
       </CardHeader>

@@ -742,7 +742,8 @@ export function LabellingPage() {
           <CardHeader>
             <SectionHeader
               title="Signals"
-              description="Drag across any graph to select. Ctrl/⌘+scroll or a pinch zooms where the cursor is; Shift+scroll or a sideways swipe moves along. Arrow keys move the selection's end (Alt: its start, Shift: five times as far). Press ? for every shortcut."
+              description="Drag across any graph to select. Press ? for every shortcut."
+              help={{ label: "About moving around the signals", content: "Ctrl/⌘+scroll or a pinch zooms where the cursor is; Shift+scroll or a sideways swipe moves along. Arrow keys move the selection's end (Alt: its start, Shift: five times as far)." }}
             />
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
@@ -1023,7 +1024,8 @@ export function LabellingPage() {
           <CardHeader>
             <SectionHeader
               title="Check the model"
-              description="Runs your active models over this recording exactly as the app runs them live (in Monitor: nothing acts). Each model's score is drawn above the signals, and its detections on a rail: green where one comes 0.68 to 1.28 s after a start of its gesture, red where it does not. Click a red one to select the stretch that makes it a training example of what is not the gesture, then label it with an everyday-activity label (Enter)."
+              description="Runs your active models over this recording, as live in Monitor. Click a red detection to label it as everyday activity."
+              help={{ label: "About checking the model", content: "Each model's score is drawn above the signals, and its detections on a rail: green where one comes 0.68 to 1.28 s after a start of its gesture, red where it does not. Clicking a red one selects the stretch that makes it a training example of what is not the gesture; label it with an everyday-activity label (Enter). Nothing acts while it runs." }}
             />
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
@@ -1075,7 +1077,8 @@ export function LabellingPage() {
           <CardHeader>
             <SectionHeader
               title="Label timing"
-              description={`How late this recording's ${nameOf(lagLabel)} labels start, as far as the camera or the model can tell. Labels from the recorder or camera marking are often a few hundred milliseconds late, by a different amount in each recording; moving them makes training learn the right moment. The move is made as hand labels, so Undo or Erase takes it back.`}
+              description={`How late this recording's ${nameOf(lagLabel)} labels start, as far as the camera or the model can tell.`}
+              help={{ label: "About label timing", content: "Labels from the recorder or camera marking are often a few hundred milliseconds late, by a different amount in each recording; moving them makes training learn the right moment. The move is made as hand labels, so Undo or Erase takes it back." }}
             />
           </CardHeader>
           <CardContent className="flex flex-col gap-2 text-sm">
@@ -1108,7 +1111,8 @@ export function LabellingPage() {
           <CardHeader>
             <SectionHeader
               title="Keep it"
-              description="Save to original updates this dataset’s manual_label column with your labels. Save as new dataset keeps a separate copy in Datasets, and leaves this one as it was. Export includes all available recording files and manual labels. CSV exports also include a companion folder for supporting files."
+              description="Save your labels into this recording, or keep them as a separate copy."
+              help={{ label: "About saving and exporting", content: "Save to original updates this dataset’s manual_label column with your labels. Save as new dataset keeps a separate copy in Datasets, and leaves this one as it was. Export includes all available recording files and manual labels. CSV exports also include a companion folder for supporting files." }}
             />
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-4">
