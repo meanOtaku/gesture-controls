@@ -84,10 +84,13 @@ describe("LabelModelsPanel", () => {
     expect(screen.getByText("Snap")).toBeInTheDocument();
   });
 
-  it("marks a model that may only run in Monitor, and lets it be approved for Monitor", async () => {
+  it("marks a model that may only run in Monitor, and lets it be activated or approved for Monitor", async () => {
     setup([{ ...draft, imported: false, deployable: false, monitorOnly: true, state: "evaluated" }]);
     expect(await screen.findByText("Monitor only")).toBeInTheDocument();
     expect(screen.getByText(/never starts a recipe, even in Live/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Activate for Monitor snap-abc" })).toBeInTheDocument();
+    // The single step is behind More.
+    fireEvent.click(screen.getByRole("button", { name: "More actions for snap-abc" }));
     expect(screen.getByRole("button", { name: "Approve for Monitor snap-abc" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Fine-tune/ })).toBeNull();
   });
@@ -138,6 +141,18 @@ describe("LabelModelsPanel", () => {
     expect(screen.queryByRole("button", { name: /Activate/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Mark as evaluated snap-abc" }));
     await waitFor(() => expect(calls("set_label_model_state")).toEqual([["set_label_model_state", { id: "snap-abc", state: "evaluated" }]]));
+  });
+
+  it("activates a model trained here in one click, taking each lifecycle step on the way", async () => {
+    setup([{ ...draft, imported: false }]);
+    fireEvent.click(await screen.findByRole("button", { name: "Activate snap-abc" }));
+    await waitFor(() => expect(calls("activate_label_model")).toEqual([["activate_label_model", { id: "snap-abc" }]]));
+    const steps = invokeMock.mock.calls.filter(([command]) => command === "set_label_model_state" || command === "activate_label_model");
+    expect(steps).toEqual([
+      ["set_label_model_state", { id: "snap-abc", state: "evaluated" }],
+      ["set_label_model_state", { id: "snap-abc", state: "approved" }],
+      ["activate_label_model", { id: "snap-abc" }],
+    ]);
   });
 
   it("activates an approved model and rolls back or deactivates an active one by label", async () => {
@@ -193,7 +208,7 @@ describe("LabelModelsPanel", () => {
   it("warns when a label has no active model, and says what to do next", async () => {
     setup([{ ...draft, state: "approved" }, { ...draft, id: "fist-1", label: "fist", state: "active", active: true }]);
     expect(await screen.findByText("No active model")).toBeInTheDocument();
-    expect(screen.getByText(/Nothing detects snap, so no recipe that uses it can start or end\. Activate an approved version below\./)).toBeInTheDocument();
+    expect(screen.getByText(/Nothing detects snap, so no recipe that uses it can start or end\. Activate a version below\./)).toBeInTheDocument();
     expect(screen.queryByText(/Nothing detects fist/)).toBeNull();
     expect(screen.getByRole("status")).toHaveTextContent("Scoring 1 of 2 labels. Nothing acts on them.");
   });

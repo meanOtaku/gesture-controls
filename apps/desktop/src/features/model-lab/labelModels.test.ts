@@ -6,14 +6,20 @@ const model = (over: Partial<LabelModel>): LabelModel => ({
 });
 
 describe("actionsFor", () => {
-  it("only offers the next safe move, and activation only from Approved", () => {
-    expect(actionsFor({ state: "draft", deployable: true }).map((a) => a.label)).toEqual(["Mark as evaluated"]);
-    expect(actionsFor({ state: "evaluated", deployable: true }).map((a) => a.label)).toEqual(["Approve", "Archive"]);
+  it("walks an imported draft one step at a time, and activates straight from Approved", () => {
+    expect(actionsFor({ state: "draft", deployable: true, imported: true }).map((a) => a.label)).toEqual(["Mark as evaluated"]);
     expect(actionsFor({ state: "approved", deployable: true }).map((a) => a.kind)).toContain("activate");
-    for (const state of ["draft", "evaluated", "archived", "active"] as const) {
+    for (const state of ["archived", "active"] as const) {
       expect(actionsFor({ state, deployable: true }).some((a) => a.kind === "activate")).toBe(false);
     }
     expect(actionsFor({ state: "active", deployable: true }).map((a) => a.kind)).toEqual(["deactivate"]);
+  });
+
+  it("offers Activate first for a model trained here and for an evaluated one, through each step", () => {
+    expect(actionsFor({ state: "draft", deployable: true, imported: false })[0]).toEqual({ kind: "activate", label: "Activate", via: ["evaluated", "approved"] });
+    expect(actionsFor({ state: "evaluated", deployable: true }).map((a) => a.label)).toEqual(["Activate", "Approve", "Archive"]);
+    expect(actionsFor({ state: "evaluated", deployable: true })[0]).toMatchObject({ via: ["approved"] });
+    expect(actionsFor({ state: "evaluated", deployable: false, monitorOnly: true })[0].label).toBe("Activate for Monitor");
   });
 
   it("never offers approval for a model that cannot be deployed", () => {

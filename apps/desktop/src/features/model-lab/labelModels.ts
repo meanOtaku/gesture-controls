@@ -132,17 +132,29 @@ export const MODE_OPTIONS: ReadonlyArray<{ value: LabelRuntimeMode; label: strin
 
 export type ModelAction =
   | { kind: "state"; to: "evaluated" | "approved" | "archived" | "draft"; label: string }
-  | { kind: "activate"; label: string }
+  /** `via`: the lifecycle steps taken first, in order, so one click goes from Draft or Evaluated to Active. */
+  | { kind: "activate"; label: string; via?: ("evaluated" | "approved")[] }
   | { kind: "deactivate"; label: string };
 
-/** What a person can do next with a model in each state. Becoming active is only ever through activation. */
-export function actionsFor(model: Pick<LabelModel, "state" | "deployable" | "monitorOnly">): ModelAction[] {
+/**
+ * What a person can do next with a model in each state, the first being its next step. Becoming active is only ever
+ * through activation, and the registry still records every step (evaluated, approved, active). A model trained here
+ * (already tested on recordings it never saw) and any evaluated one that may be approved offer Activate at once, taking
+ * those steps in one go; the single steps stay behind it. An imported draft is walked through one step at a time.
+ */
+export function actionsFor(model: Pick<LabelModel, "state" | "deployable" | "monitorOnly"> & { imported?: boolean }): ModelAction[] {
+  const approvable = model.deployable || model.monitorOnly;
+  const activateLabel = model.deployable ? "Activate" : "Activate for Monitor";
   switch (model.state) {
     case "draft":
-      return [{ kind: "state", to: "evaluated", label: "Mark as evaluated" }];
+      return [
+        ...(approvable && model.imported === false ? [{ kind: "activate", label: activateLabel, via: ["evaluated", "approved"] } as const] : []),
+        { kind: "state", to: "evaluated", label: "Mark as evaluated" },
+      ];
     case "evaluated":
       return [
-        ...(model.deployable || model.monitorOnly ? [{ kind: "state", to: "approved", label: model.deployable ? "Approve" : "Approve for Monitor" } as const] : []),
+        ...(approvable ? [{ kind: "activate", label: activateLabel, via: ["approved"] } as const] : []),
+        ...(approvable ? [{ kind: "state", to: "approved", label: model.deployable ? "Approve" : "Approve for Monitor" } as const] : []),
         { kind: "state", to: "archived", label: "Archive" },
       ];
     case "approved":

@@ -138,7 +138,7 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
           description="Teach the app a label from your recordings."
           help={{
             label: "About training",
-            content: "You choose the label, the recordings and what each other label means. The app decides which recordings train and which test, never the same one, so the score is about recordings the model has not seen. The result is a Draft: it does nothing until you approve and activate it. A model that does not pass the checks for going live can still be activated, but it only runs in Monitor. Training runs on this computer and needs uv; running a model does not.",
+            content: "You choose the label, the recordings and what each other label means. The app decides which recordings train and which test, never the same one, so the score is about recordings the model has not seen. The result does nothing until you activate it under Label models, in one click. A model that does not pass the checks for going live can still be activated, but it only runs in Monitor. Training runs on this computer and needs uv; running a model does not.",
           }}
         />
       </CardHeader>

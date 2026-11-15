@@ -102,7 +102,10 @@ export function LabelModelsPanel({
       return attempt(key, action.label, () => invoke("set_label_model_state", { id: model.id, state: action.to }));
     }
     if (action.kind === "activate") {
-      return attempt(key, "Activate", () => invoke("activate_label_model", { id: model.id }), `${modelName(model)} is now the active ${model.label} model.`);
+      return attempt(key, "Activate", async () => {
+        for (const step of action.via ?? []) await invoke("set_label_model_state", { id: model.id, state: step });
+        await invoke("activate_label_model", { id: model.id });
+      }, `${modelName(model)} is now the active ${model.label} model.`);
     }
     return attempt(key, "Deactivate", () => invoke("deactivate_label_model", { label: model.label }));
   };
@@ -308,7 +311,7 @@ export function LabelModelsPanel({
                   {(status?.inputWarnings ?? []).filter((w) => w.label === group.label).map((w) => <InputWarningNote key={w.modelId} warning={w} />)}
                   {!active && (
                     <p className="text-sm text-destructive">
-                      Nothing detects {group.label}, so no recipe that uses it can start or end. {others.some((m) => m.state === "approved") ? "Activate an approved version below." : "Approve a version below, then activate it."}
+                      Nothing detects {group.label}, so no recipe that uses it can start or end. Activate a version below.
                     </p>
                   )}
                   <ul className="model-rows" aria-label={`${group.label} models`}>
