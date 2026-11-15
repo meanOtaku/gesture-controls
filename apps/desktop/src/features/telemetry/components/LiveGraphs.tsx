@@ -1,9 +1,8 @@
-import { AnimatedNumber, AnimatedWord, AnimatedText } from "../../../components/app/AnimatedNumber";
+import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { useState, useSyncExternalStore } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { SignalMonitor, type SignalView } from "./SignalMonitor";
-import { StreamStatus } from "./StreamStatus";
 import { WellnessCapturePanel } from "./WellnessCapturePanel";
 import {
   ESTIMATED_BYTES_PER_CSV_ROW,
@@ -17,12 +16,12 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** The live charts: what the sensors are sending right now. For checking a stream, not for recording one. */
-export function LiveSignalsPage() {
-  const [measurementError, setMeasurementError] = useState<string | null>(null);
-  const [pendingMeasurement, setPendingMeasurement] = useState<string | null>(null);
+/**
+ * The live charts: what the sensors are sending right now, for checking a stream. They sit folded under the Recorder (they
+ * were a page of their own) and subscribe to the store only while unfolded, since they redraw many times a second.
+ */
+export function LiveGraphs() {
   const [signalView, setSignalView] = useState<SignalView>("all");
-  const desktopAvailable = "__TAURI_INTERNALS__" in window;
   useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
 
   const watchStatus = telemetryStore.getWatchStatus();
@@ -30,13 +29,6 @@ export function LiveSignalsPage() {
   const watchOrientationPoints = telemetryStore.getSeries("watchOrientation");
   const ppgPoints = telemetryStore.getSeries("ppg");
   const watchAccelerationPoints = telemetryStore.getSeries("watchAcceleration");
-  const heartRatePoints = telemetryStore.getSeries("heartRate");
-  const ibiPoints = telemetryStore.getSeries("ibi");
-  const temperaturePoints = telemetryStore.getSeries("temperature");
-  const edaPoints = telemetryStore.getSeries("eda");
-  const spo2Points = telemetryStore.getSeries("spo2");
-  const ecgPoints = telemetryStore.getSeries("ecg");
-  const datasetRecording = telemetryStore.getDatasetRecording();
 
   // Mirrors Dashboard.tsx's IMU_SENSOR_IDS default-enabled read and the
   // continuous-tracker "idle means disabled" convention.
@@ -65,6 +57,33 @@ export function LiveSignalsPage() {
       : watchAccelerationPoints.length === 0
         ? "Connected, but no acceleration samples have arrived yet — they arrive with each orientation sample."
         : undefined;
+  return (
+    <div className="card-stack">
+      <SignalMonitor
+        signalView={signalView}
+        onSignalViewChange={setSignalView}
+        orientationEnabled={orientationEnabled}
+        headPoints={headPoints}
+        watchOrientationPoints={watchOrientationPoints}
+        watchAccelerationPoints={watchAccelerationPoints}
+        accelerationEnabled={accelerationEnabled}
+        watchAccelerationHint={watchAccelerationHint}
+        ppgPoints={ppgPoints}
+        watchOrientationHint={watchOrientationHint}
+        ppgHint={watchPaused ? WATCH_OFF_WRIST_HINT : undefined}
+      />
+      <p className="hint telemetry-note">Graphs retain the latest {<AnimatedNumber value={MAX_VISIBLE_SAMPLES} />} points. Timeline recording is bounded to the most recent <AnimatedText>{MAX_CSV_ROWS.toLocaleString()}</AnimatedText> rows (~<AnimatedText>{formatBytes(MAX_CSV_ROWS * ESTIMATED_BYTES_PER_CSV_ROW)}</AnimatedText> max).</p>
+    </div>
+  );
+}
+
+/** The watch's health signals and its on-demand captures (SpO₂, ECG, BIA), under the Watch page's Diagnostics. */
+export function WellnessCaptures() {
+  const [measurementError, setMeasurementError] = useState<string | null>(null);
+  const [pendingMeasurement, setPendingMeasurement] = useState<string | null>(null);
+  const desktopAvailable = "__TAURI_INTERNALS__" in window;
+  useSyncExternalStore(telemetryStore.subscribe, telemetryStore.getVersion, telemetryStore.getVersion);
+  const watchStatus = telemetryStore.getWatchStatus();
   const heartRateStreaming = watchStatus?.medicalStatus?.heart_rate_continuous === "streaming";
   const skinTemperatureStreaming = watchStatus?.medicalStatus?.skin_temperature_continuous === "streaming";
   const edaStreaming = watchStatus?.medicalStatus?.eda_continuous === "streaming";
@@ -84,43 +103,22 @@ export function LiveSignalsPage() {
     }
   };
 
-  return <main className="shell telemetry-shell">
-    <header className="hero">
-      <div><h1>Live signals</h1><p className="subtitle">What your sensors are sending right now.</p></div>
-      <div className={`connection ${datasetRecording ? "online" : "offline"}`}><span className="pulse" /><AnimatedWord>{datasetRecording ? "Recording" : "Not recording"}</AnimatedWord></div>
-    </header>
-    <StreamStatus />
-    <div className="card-stack">
-      <SignalMonitor
-        signalView={signalView}
-        onSignalViewChange={setSignalView}
-        orientationEnabled={orientationEnabled}
-        headPoints={headPoints}
-        watchOrientationPoints={watchOrientationPoints}
-        watchAccelerationPoints={watchAccelerationPoints}
-        accelerationEnabled={accelerationEnabled}
-        watchAccelerationHint={watchAccelerationHint}
-        ppgPoints={ppgPoints}
-        watchOrientationHint={watchOrientationHint}
-        ppgHint={watchPaused ? WATCH_OFF_WRIST_HINT : undefined}
-      />
-      <WellnessCapturePanel
-        desktopAvailable={desktopAvailable}
-        watchStatus={watchStatus}
-        heartRateStreaming={heartRateStreaming}
-        skinTemperatureStreaming={skinTemperatureStreaming}
-        edaStreaming={edaStreaming}
-        heartRatePoints={heartRatePoints}
-        ibiPoints={ibiPoints}
-        temperaturePoints={temperaturePoints}
-        edaPoints={edaPoints}
-        spo2Points={spo2Points}
-        ecgPoints={ecgPoints}
-        pendingMeasurement={pendingMeasurement}
-        measurementError={measurementError}
-        onRequestMeasurement={(tracker, measuring) => { void requestMeasurement(tracker, measuring); }}
-      />
-      <p className="hint telemetry-note">Graphs retain the latest {<AnimatedNumber value={MAX_VISIBLE_SAMPLES} />} points. Timeline recording is bounded to the most recent <AnimatedText>{MAX_CSV_ROWS.toLocaleString()}</AnimatedText> rows (~<AnimatedText>{formatBytes(MAX_CSV_ROWS * ESTIMATED_BYTES_PER_CSV_ROW)}</AnimatedText> max).</p>
-    </div>
-  </main>;
+  return (
+    <WellnessCapturePanel
+      desktopAvailable={desktopAvailable}
+      watchStatus={watchStatus}
+      heartRateStreaming={heartRateStreaming}
+      skinTemperatureStreaming={skinTemperatureStreaming}
+      edaStreaming={edaStreaming}
+      heartRatePoints={telemetryStore.getSeries("heartRate")}
+      ibiPoints={telemetryStore.getSeries("ibi")}
+      temperaturePoints={telemetryStore.getSeries("temperature")}
+      edaPoints={telemetryStore.getSeries("eda")}
+      spo2Points={telemetryStore.getSeries("spo2")}
+      ecgPoints={telemetryStore.getSeries("ecg")}
+      pendingMeasurement={pendingMeasurement}
+      measurementError={measurementError}
+      onRequestMeasurement={(tracker, measuring) => { void requestMeasurement(tracker, measuring); }}
+    />
+  );
 }

@@ -1,10 +1,12 @@
 import { useSyncExternalStore } from "react";
 import { AnimatedWord } from "../../../components/app/AnimatedNumber";
+import { AdvancedSection } from "../../../components/app/AdvancedSection";
 import { CameraCapturePanel } from "../../camera/components/CameraCapturePanel";
 import { CoverageCard } from "./CoverageCard";
 import { EverydayNoiseCard } from "./EverydayNoiseCard";
 import { GestureRecordingCard } from "./GestureRecordingCard";
 import { JustRecordedCard } from "./JustRecordedCard";
+import { LiveGraphs } from "./LiveGraphs";
 import { PinchSessionCard } from "./PinchSessionCard";
 import { SessionDetailsCard } from "./SessionDetailsCard";
 import { SignalHealthStrip } from "./SignalHealthStrip";
@@ -49,5 +51,9 @@ export function RecorderPage() {
         <CoverageCard />
       </div>
     </div>
+    {/* Folded by default: the graphs redraw many times a second, and draw nothing while folded. */}
+    <AdvancedSection storageKey="recorderGraphs" title="Live graphs" summary="What the sensors send right now: head and watch orientation, motion and pulse">
+      <LiveGraphs />
+    </AdvancedSection>
   </main>;
 }

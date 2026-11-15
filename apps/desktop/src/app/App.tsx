@@ -87,7 +87,6 @@ const Dashboard = lazy(() => import("../features/dashboard/components/Dashboard"
 // The capture pages still update themselves through their own store subscription, and Model Lab shows
 // nothing that the telemetry store drives. Without it the whole Model Lab tree (datasets,
 // registry, lifecycle controls) re-rendered 15 times a second while merely open.
-const LiveSignalsPage = memo(lazy(() => import("../features/telemetry/components/LiveSignalsPage").then((m) => ({ default: m.LiveSignalsPage }))));
 const RecorderPage = memo(lazy(() => import("../features/telemetry/components/RecorderPage").then((m) => ({ default: m.RecorderPage }))));
 const LabellingPage = memo(lazy(() => import("../features/labelling/LabellingPage").then((m) => ({ default: m.LabellingPage }))));
 const DatasetsPage = memo(lazy(() => import("../features/model-lab/components/DatasetsPage").then((m) => ({ default: m.DatasetsPage }))));
@@ -722,7 +721,6 @@ function MainApp() {
         onOpenSettings={openSettings}
       />
     )}
-    {activeTab === "signals" && <LiveSignalsPage />}
     {activeTab === "recorder" && <RecorderPage />}
     {activeTab === "datasets" && <DatasetsPage />}
     {activeTab === "labelling" && <LabellingPage />}

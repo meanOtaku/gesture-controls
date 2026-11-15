@@ -20,6 +20,7 @@ import { WatchSensorsOffNote } from "./WatchSensorsOffNote";
 import { LinkHealthCard } from "./LinkHealthCard";
 import { WatchTelemetryPanel } from "./WatchTelemetryPanel";
 import { WatchWellnessPanel } from "./WatchWellnessPanel";
+import { WellnessCaptures } from "../../telemetry/components/LiveGraphs";
 
 interface DashboardProps {
   view?: "main" | "headphone" | "watch";
@@ -168,10 +169,11 @@ export function Dashboard({
       {view === "watch" && <WatchSensorsOffNote watchStatus={watchStatus ?? null} />}
       {view === "watch" && <WatchTelemetryPanel watchStatus={watchStatus ?? null} />}
       {view === "watch" && (
-        <AdvancedSection storageKey="watch" title="Diagnostics" summary="Link health, power measurement, and the pulse and health sensors">
+        <AdvancedSection storageKey="watch" title="Diagnostics" summary="Link health, power measurement, the pulse and health sensors, and on-demand captures">
           <LinkHealthCard />
           <WatchPowerCard />
           <WatchWellnessPanel watchStatus={watchStatus ?? null} />
+          <WellnessCaptures />
         </AdvancedSection>
       )}
 

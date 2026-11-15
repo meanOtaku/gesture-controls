@@ -90,7 +90,8 @@ describe("App overlay integration", () => {
         irStatus: [0, 0],
       },
     }));
-    fireEvent.click(screen.getByRole("button", { name: "Live signals" }));
+    fireEvent.click(screen.getByRole("button", { name: "Recorder" }));
+    fireEvent.click(await screen.findByText("Live graphs", { selector: ".advanced-title" }));
     await waitFor(
       () => expect(screen.getAllByText("2 samples").length).toBeGreaterThan(0),
       { timeout: 5000 },
@@ -110,7 +111,8 @@ describe("App overlay integration", () => {
         irStatus: [0],
       },
     }));
-    fireEvent.click(screen.getByRole("button", { name: "Live signals" }));
+    // The graphs were left unfolded, and stay so.
+    fireEvent.click(screen.getByRole("button", { name: "Recorder" }));
     await waitFor(
       () => expect(screen.getAllByText("3 samples").length).toBeGreaterThan(0),
       { timeout: 5000 },

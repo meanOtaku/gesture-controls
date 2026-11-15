@@ -6,7 +6,7 @@ import { telemetryStore, EMPTY_WATCH_STATUS } from "../features/telemetry/store/
 const { invoke, listen, renders } = vi.hoisted(() => ({
   invoke: vi.fn(),
   listen: vi.fn(() => Promise.resolve(() => undefined)),
-  renders: { modelLab: 0, signals: 0, recorder: 0, recipes: 0, devices: 0, gestures: 0 },
+  renders: { modelLab: 0, recorder: 0, recipes: 0, devices: 0, gestures: 0 },
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
@@ -17,12 +17,6 @@ vi.mock("../features/model-lab/components/ModelLab", () => ({
   ModelLab: () => {
     renders.modelLab += 1;
     return <div>model lab body</div>;
-  },
-}));
-vi.mock("../features/telemetry/components/LiveSignalsPage", () => ({
-  LiveSignalsPage: () => {
-    renders.signals += 1;
-    return <div>signals body</div>;
   },
 }));
 vi.mock("../features/telemetry/components/RecorderPage", () => ({
@@ -55,7 +49,6 @@ beforeEach(() => {
   telemetryStore.reset();
   Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
   renders.modelLab = 0;
-  renders.signals = 0;
   renders.recorder = 0;
   renders.recipes = 0;
   renders.devices = 0;
@@ -95,7 +88,6 @@ describe("idle tabs are not re-rendered by telemetry publishes", () => {
   });
 
   it.each([
-    ["Live signals", "signals body", "signals"],
     ["Recorder", "recorder body", "recorder"],
   ] as const)("%s renders once from the parent's side (it subscribes to the store itself)", async (tab, body, counter) => {
     render(<App />);

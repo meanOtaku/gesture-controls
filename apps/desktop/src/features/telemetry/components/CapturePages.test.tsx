@@ -1,6 +1,6 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LiveSignalsPage } from "./LiveSignalsPage";
+import { LiveGraphs } from "./LiveGraphs";
 import { RecorderPage } from "./RecorderPage";
 import { telemetryStore } from "../store/telemetryStore";
 import { resetFeedbackForTests } from "../../../components/app/OperationFeedback";
@@ -16,15 +16,20 @@ vi.mock("../../../shared/tauri/exportCsv", () => ({
 }));
 
 beforeEach(() => { telemetryStore.reset(); invoke.mockReset(); exportCsvToFolder.mockReset(); resetFeedbackForTests(); });
-afterEach(() => { cleanup(); telemetryStore.reset(); resetFeedbackForTests(); Reflect.deleteProperty(window, "__TAURI_INTERNALS__"); });
+afterEach(() => { cleanup(); window.localStorage.clear(); telemetryStore.reset(); resetFeedbackForTests(); Reflect.deleteProperty(window, "__TAURI_INTERNALS__"); });
 
 describe("Live telemetry", () => {
-  it("shows the signal monitor and wellness sections on Live signals, and not the recorder", () => {
-    render(<LiveSignalsPage />);
-    expect(screen.getByRole("heading", { name: "Live signals" })).toBeInTheDocument();
+  it("shows the signal monitor in the live graphs, without the wellness captures", () => {
+    render(<LiveGraphs />);
     expect(screen.getByRole("region", { name: "Signal monitor" })).toBeInTheDocument();
-    expect(screen.getByText("Wellness signals & on-demand captures")).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Record a gesture" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Wellness signals & on-demand captures")).not.toBeInTheDocument();
+  });
+
+  it("keeps the live graphs folded under the Recorder until asked for", async () => {
+    render(<RecorderPage />);
+    expect(screen.queryByRole("region", { name: "Signal monitor" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Live graphs", { selector: ".advanced-title" }));
+    expect(await screen.findByRole("region", { name: "Signal monitor" })).toBeInTheDocument();
   });
 
   it("shows only the recorder on the Recorder page: the sessions, with the camera beside them", () => {
