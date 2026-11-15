@@ -15,6 +15,7 @@ import {
 } from "../../components/ui/sidebar";
 import { MissMarker } from "../../features/misses/MissMarker";
 import { ReadinessLight } from "../../features/model-lab/components/ReadinessLight";
+import { RuntimeSwitch } from "../../features/model-lab/components/RuntimeSwitch";
 
 export type AppTab = "main" | "headphone" | "watch" | "recipes" | "devices" | "drone" | "gestures" | "signals" | "recorder" | "recordings" | "datasets" | "labelling" | "labels" | "gestureLibrary" | "modelLab" | "networkLab" | "settings";
 
@@ -253,6 +254,7 @@ function AppNavView({ activeTab, onSelect, statuses = {} }: AppNavProps) {
         </div>
       </SidebarContent>
       <SidebarFooter>
+        <RuntimeSwitch variant="sidebar" />
         <ReadinessLight />
         <MissMarker />
         <SidebarMenu>{entry(SETTINGS)}</SidebarMenu>

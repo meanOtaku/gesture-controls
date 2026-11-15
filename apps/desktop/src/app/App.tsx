@@ -617,7 +617,6 @@ function MainApp() {
   // Another page asking to send you somewhere (the Labelling page, from a model's mistakes).
   useEffect(() => appNavigation.onOpen((tab) => setActiveTab(tab as AppTab)), []);
   const openModelLab = useCallback(() => setActiveTab("modelLab"), []);
-  const openLabels = useCallback(() => setActiveTab("labels"), []);
   const [networkLabModel, setNetworkLabModel] = useState<string | null>(null);
   const openNetworkLab = useCallback(() => setActiveTab("networkLab"), []);
   const inspectInNetworkLab = useCallback((id: string) => {
@@ -755,7 +754,7 @@ function MainApp() {
     {activeTab === "labels" && <LabelsPage onOpen={setActiveTab} />}
     {activeTab === "gestureLibrary" && <GestureLibraryPage />}
     {activeTab === "modelLab" && (
-      <ModelLab onOpenLabels={openLabels} onInspectModel={inspectInNetworkLab} onOpenNetworkLab={openNetworkLab} />
+      <ModelLab onInspectModel={inspectInNetworkLab} onOpenNetworkLab={openNetworkLab} />
     )}
     {activeTab === "networkLab" && <NetworkLab modelId={networkLabModel} onModelChange={setNetworkLabModel} />}
     {activeTab === "settings" && (

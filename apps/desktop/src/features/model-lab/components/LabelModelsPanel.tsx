@@ -1,10 +1,9 @@
 import { AnimatedNumber, AnimatedText } from "../../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useId, useState } from "react";
+import { useState } from "react";
 import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { SectionHeader } from "../../../components/app/SectionHeader";
-import { SegmentedControl } from "../../../components/app/SegmentedControl";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
@@ -13,17 +12,15 @@ import { Input } from "../../../components/ui/input";
 import { usePendingActions } from "../hooks/usePendingActions";
 import {
   MAX_MODEL_NAME,
-  MODE_OPTIONS,
   actionsFor,
   formatTime,
+  runtimeSummary,
   groupByLabel,
   modelName,
   modelStats,
-  runtimeSummary,
   type ImportedLabelModel,
   type LabelModel,
   type LabelModelState,
-  type LabelRuntimeMode,
   type LabelRuntimeStatus,
   type ModelAction,
 } from "../labelModels";
@@ -38,8 +35,8 @@ const STATE_LABEL: Record<LabelModelState, string> = {
 };
 
 /**
- * One binary model per label: bring a model in, review it, approve it, activate it, and choose whether the
- * models only watch (Monitor) or can drive recipes (Live). Every step is a person's choice; importing never
+ * One binary model per label: bring a model in, review it, approve it and activate it. Whether the models only watch
+ * (Monitor) or can drive recipes (Live) is chosen with `RuntimeSwitch`. Every step is a person's choice; importing never
  * activates anything.
  *
  * Each label gets a slot: its active model first, with its threshold and held-out results, then its other versions as
@@ -62,11 +59,9 @@ export function LabelModelsPanel({
   /** Opens the Inspect view for a model. */
   onInspect?: (id: string) => void;
 }) {
-  const modeId = useId();
   const [actionError, setActionError] = useState<string | null>(null);
   const error = actionError ?? loadError;
   const setError = setActionError;
-  const [confirmLive, setConfirmLive] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
   const [moreOpen, setMoreOpen] = useState<string | null>(null);
@@ -119,16 +114,6 @@ export function LabelModelsPanel({
     void attempt(`${model.id}:rename`, "Rename model", () => invoke("rename_label_model", { id: model.id, name: name || null }));
   };
 
-  const setMode = (mode: LabelRuntimeMode) => {
-    if (mode === "live" && status?.mode !== "live") {
-      setConfirmLive(true);
-      return;
-    }
-    setConfirmLive(false);
-    void attempt("mode", "Change mode", () => invoke("set_label_runtime_mode", { mode }));
-  };
-
-  const mode = status?.mode ?? "off";
   const groups = groupByLabel(models);
   const anyImported = models.some((model) => model.imported && model.state !== "archived" && !model.active);
 
@@ -293,34 +278,7 @@ export function LabelModelsPanel({
           </Alert>
         ))}
 
-        <div className="field">
-          <div className="field-head"><span id={modeId} className="label">Model runtime</span></div>
-          <SegmentedControl
-            labelledBy={modeId}
-            value={mode}
-            disabled={!desktopAvailable || isPending("mode") || status?.registryError != null}
-            options={MODE_OPTIONS.map(({ value, label }) => ({ value, label }))}
-            onValueChange={setMode}
-          />
-          <p className="field-hint" role="status">
-            {runtimeSummary(mode, groups)} A restart always comes back in Monitor, never Live.
-          </p>
-        </div>
-        {confirmLive && (
-          <Alert role="alert">
-            <AlertTitle>Let models drive recipes?</AlertTitle>
-            <AlertDescription>
-              <p>In Live, a detection from an active model can start any recipe that uses its label (volume, brightness, scroll, media keys). Check the models in Monitor first.</p>
-              <div className="mt-2 flex gap-2">
-                <Button type="button" variant="destructive" onClick={() => { setConfirmLive(false); void attempt("mode", "Change mode", () => invoke("set_label_runtime_mode", { mode: "live" })); }}>
-                  Switch to Live
-                </Button>
-                <Button type="button" variant="outline" onClick={() => setConfirmLive(false)}>Stay in {mode}</Button>
-              </div>
-            </AlertDescription>
-          </Alert>
-        )}
-
+        <p className="field-hint" role="status">{runtimeSummary(status?.mode ?? "off", groups)}</p>
         {groups.length === 0 ? (
           <p className="hint">No label models yet. Import a model folder, or train one from your recordings below.</p>
         ) : (

@@ -155,29 +155,11 @@ describe("LabelModelsPanel", () => {
     await waitFor(() => expect(calls("rollback_label_model")).toEqual([["rollback_label_model", { label: "snap" }]]));
   });
 
-  it("asks for confirmation before Live, and switches to Monitor or Off without asking", async () => {
-    setup([], { mode: "monitor" });
-    const group = await screen.findByRole("radiogroup");
-    fireEvent.click(within(group).getByRole("radio", { name: /Live/ }));
-    expect(await screen.findByText("Let models drive recipes?")).toBeInTheDocument();
-    expect(calls("set_label_runtime_mode")).toHaveLength(0);
-    fireEvent.click(screen.getByRole("button", { name: "Stay in monitor" }));
-    expect(calls("set_label_runtime_mode")).toHaveLength(0);
-    fireEvent.click(within(group).getByRole("radio", { name: /Live/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Switch to Live" }));
-    await waitFor(() => expect(calls("set_label_runtime_mode")).toEqual([["set_label_runtime_mode", { mode: "live" }]]));
-    // The switch is disabled while the Live change finishes; wait for it before asking for Off.
-    await waitFor(() => expect(within(group).getByRole("radio", { name: /Off/ })).not.toBeDisabled());
-    fireEvent.click(within(group).getByRole("radio", { name: /Off/ }));
-    await waitFor(() => expect(calls("set_label_runtime_mode")).toContainEqual(["set_label_runtime_mode", { mode: "off" }]));
-  });
-
   it("names a label whose active model could not be loaded, and a registry that could not open", async () => {
     setup([], { loadFailures: [{ label: "snap", version: "snap-abc", detail: "the model file was changed" }], registryError: "corrupt" });
     expect(await screen.findByText("snap has no running model")).toBeInTheDocument();
     expect(screen.getByText(/the model file was changed/)).toBeInTheDocument();
     expect(screen.getByText("The model registry could not be opened")).toBeInTheDocument();
-    expect(within(screen.getByRole("radiogroup")).getByRole("radio", { name: /Live/ })).toBeDisabled();
   });
 
   it("offers delete only for an archived model, and asks before deleting for good", async () => {

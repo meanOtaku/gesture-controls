@@ -1,15 +1,14 @@
 import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
-import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
 import { useLabelModels } from "../hooks/useLabelModels";
 import { useModelLabData } from "../hooks/useModelLabData";
 import { datasetLabels } from "../types";
-import { appNavigation } from "../../../shared/navigation/appNavigation";
 import { CompareCard } from "./CompareCard";
 import { MistakesCard } from "./MistakesCard";
 import { ThresholdCard } from "./ThresholdCard";
 import { SealedTestCard } from "./SealedTestCard";
 import { DetectionActivity } from "./DetectionActivity";
+import { RuntimeSwitch } from "./RuntimeSwitch";
 import { AdvancedSection } from "../../../components/app/AdvancedSection";
 import { LabelModelsPanel } from "./LabelModelsPanel";
 import { TrainingHistory } from "./TrainingHistory";
@@ -19,7 +18,7 @@ import { TrainPanel } from "./TrainPanel";
  * Model Lab: teach the app a gesture one label at a time. The recordings it trains and tests on are kept on the Datasets
  * tab; here you train, look back at what was tried, then switch the models on and watch what they detect.
  */
-export function ModelLab({ onOpenLabels, onInspectModel, onOpenNetworkLab }: { onOpenLabels?: () => void; /** Opens the Network lab on this model, to look inside it. */ onInspectModel?: (id: string) => void; onOpenNetworkLab?: () => void }) {
+export function ModelLab({ onInspectModel, onOpenNetworkLab }: { /** Opens the Network lab on this model, to look inside it. */ onInspectModel?: (id: string) => void; onOpenNetworkLab?: () => void }) {
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
   const { datasets, labels } = useModelLabData(desktopAvailable);
   const { models, status, error: modelsError, refresh } = useLabelModels(desktopAvailable);
@@ -29,7 +28,6 @@ export function ModelLab({ onOpenLabels, onInspectModel, onOpenNetworkLab }: { o
     for (const label of datasetLabels(dataset)) coverageByLabel.set(label, (coverageByLabel.get(label) ?? 0) + 1);
   }
   const activeCount = models.filter((model) => model.state === "active").length;
-  const mode = status?.mode ?? "off";
 
   return (
     <main className="shell model-lab-shell">
@@ -54,37 +52,25 @@ export function ModelLab({ onOpenLabels, onInspectModel, onOpenNetworkLab }: { o
       )}
 
       <section className="overview-grid" aria-label="Model Lab overview">
-        <Card><CardContent><span className="label">Runtime</span><strong className="text-numeric">{desktopAvailable ? mode : "Preview"}</strong><small>{mode === "live" ? "Detections can start recipes" : mode === "monitor" ? "Watching only; nothing acts" : "No model runs"}</small></CardContent></Card>
+        <Card>{desktopAvailable ? <CardContent><RuntimeSwitch variant="page" /></CardContent> : <CardContent><span className="label">Runtime</span><strong className="text-numeric">Preview</strong><small>No model runs</small></CardContent>}</Card>
         <Card><CardContent><span className="label">Active models</span><strong className="text-numeric">{desktopAvailable ? <AnimatedNumber value={activeCount} /> : "—"}</strong><small>{desktopAvailable ? <><AnimatedNumber value={models.length} />{" registered"}</> : "Available in the desktop app"}</small></CardContent></Card>
         <Card><CardContent><span className="label">Recordings</span><strong className="text-numeric">{desktopAvailable ? <AnimatedNumber value={datasets.length} /> : "—"}</strong><small>{desktopAvailable ? <><AnimatedNumber value={coverageByLabel.size} />{" label"}{coverageByLabel.size === 1 ? "" : "s"}{" covered"}</> : "Available in the desktop app"}</small></CardContent></Card>
       </section>
 
       <nav className="lab-workflow" aria-label="Model Lab sections">
-        <a href="#lab-dataset">Recordings</a><a href="#lab-train">Train</a><a href="#lab-labels">Models</a><a href="#lab-activity">Activity</a><a href="#lab-advanced">Advanced</a>
+        <a href="#lab-train">Train</a><a href="#lab-labels">Models</a><a href="#lab-activity">Activity</a><a href="#lab-advanced">Advanced</a>
       </nav>
 
       <fieldset className="lab-workspace card-stack" disabled={!desktopAvailable} aria-label="Desktop model tools">
-        <Card id="lab-dataset" role="region" aria-label="Recordings">
-          <CardContent className="flex flex-wrap items-center justify-between gap-3">
-            <span className="text-sm">{<AnimatedNumber value={datasets.length} />} recording{datasets.length === 1 ? "" : "s"} to train and test on, kept on the Datasets tab: name, group and seal them there, and add ones recorded elsewhere.</span>
-            <Button type="button" variant="outline" onClick={() => appNavigation.open("datasets")}>Open Datasets</Button>
-          </CardContent>
-        </Card>
         <TrainPanel desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} onOpenNetworkLab={onOpenNetworkLab} />
         <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} onInspect={onInspectModel} />
         <DetectionActivity desktopAvailable={desktopAvailable} />
-        <AdvancedSection id="lab-advanced" storageKey="modelLab" summary="Training history, mistakes, threshold, comparing models, the final test, and labels">
+        <AdvancedSection id="lab-advanced" storageKey="modelLab" summary="Training history, mistakes, threshold, comparing models and the final test">
           <TrainingHistory desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} refreshKey={models.map((model) => `${model.id}:${model.state}`).join(",")} />
           <MistakesCard desktopAvailable={desktopAvailable} models={models} datasets={datasets} />
           <ThresholdCard desktopAvailable={desktopAvailable} models={models} />
           <CompareCard desktopAvailable={desktopAvailable} models={models} datasets={datasets} />
           <SealedTestCard desktopAvailable={desktopAvailable} models={models} datasets={datasets} />
-          <Card id="lab-coverage" role="region" aria-label="Labels">
-            <CardContent className="flex flex-wrap items-center justify-between gap-3">
-              <span><strong>Labels</strong> <small className="text-muted-foreground">Add, rename and archive labels on the Labels tab. {<AnimatedNumber value={labels.filter((label) => label.archivedAt === null).length} />} in use here.</small></span>
-              {onOpenLabels && <Button type="button" variant="outline" onClick={onOpenLabels}>Open Labels</Button>}
-            </CardContent>
-          </Card>
         </AdvancedSection>
       </fieldset>
     </main>

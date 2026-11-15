@@ -646,3 +646,10 @@ number-flow-react {
 @media (prefers-reduced-motion: reduce) { .readiness-light[data-tone="wait"] .readiness-dot { animation: none; } }
 /* The sidebar folded to icons: the dot alone. */
 [data-collapsible="icon"] .readiness-text { display: none; }
+/* Off / Monitor / Live for the trained models: in the sidebar footer (compact) and in Model Lab's overview. */
+.runtime-switch { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
+.runtime-switch-label { font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.runtime-switch-sidebar { padding: .35rem .5rem; }
+.runtime-switch-sidebar .segment { padding: 0 .4rem; font-size: .72rem; letter-spacing: .04em; }
+.runtime-switch-sidebar .segmented[data-slot="radio-group"] { height: calc(var(--control-h) * .8); }
+.runtime-switch-sidebar .segment { min-height: calc(var(--control-h) * .8 - 2px); }
