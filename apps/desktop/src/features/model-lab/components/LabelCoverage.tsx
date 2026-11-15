@@ -202,7 +202,7 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
               const inUse = sessions > 0 || labelModels.length > 0 || gestures > 0 || (usageFor ? usageCount(usageFor(row.id)) > 0 : false);
               const full = labels.find((label) => label.id === row.id);
               return (
-                <li key={row.id} className="recipe-item">
+                <li key={row.id} className="recipe-item label-row">
                   <div className="flex min-w-0 flex-col gap-1">
                     <span className="text-sm">
                       {row.name}{row.name !== row.id && <> <code>{row.id}</code></>}{" "}

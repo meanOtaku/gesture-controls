@@ -45,7 +45,7 @@ export function WatchTransportSection({ selected, onSelect }: WatchTransportSect
 
   const refresh = useCallback(() => {
     invoke<WatchTransportStatus>("get_watch_transport_status")
-      .then((status) => setBle(status.ble))
+      .then((status) => setBle(status?.ble ?? { state: "idle" }))
       .catch((cause: unknown) => setError(errorText(cause)));
   }, []);
 

@@ -850,3 +850,4 @@ html[data-theme="nerv"] [data-sidebar="content"] [data-sidebar="group-label"] { 
 html[data-theme="nerv"] [data-sidebar="content"] .nav-lab-toggle { padding-top: .2rem; padding-bottom: .2rem; }
 html[data-theme="nerv"] [data-sidebar="footer"] { gap: 4px; padding-top: 4px; padding-bottom: 4px; }
 html[data-theme="nerv"] .miss-marker { padding-top: .25rem; padding-bottom: .3rem; gap: .25rem; }
+html[data-theme="nerv"] .label-row { border-bottom-color: var(--eva-frame); }
