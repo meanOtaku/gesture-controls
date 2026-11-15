@@ -1,0 +1,94 @@
+{
+ "source": "sections/10-conclusion.tex",
+ "tex": "% Shared section: used by paper-ieee.tex, paper-lncs.tex and report.tex.\n% Use \\sect / \\subsect for headings (see README), never \\section directly.\n\n\\sect{Conclusion}\\label{conclusion}\n\n\\iffull\nConsumer head tracking and smartwatch optical and inertial sensing can be combined into a working desktop interaction, with explicit grab, release and cancellation. Our audit shows what the current data support. The 37 hand-labelled exports reduce to 28 distinct streams, the pinch-in model's training and evaluation sets share no stream, and its result of 47 of 57 starts caught with no false activations in 0.48\\,h can be reproduced, but it is development evidence rather than an independent test. Historical camera-label results varied widely from day to day, which a single pooled number hides. The next step is not a bigger model. It is matched comparisons of label versions and sensing modalities, followed by a frozen prospective study with real interaction tasks.\n\n\\else\nConsumer head tracking and smartwatch PPG and inertial sensing can be combined into a working hands-free interaction with explicit grab, release and cancellation. On one participant's held-out recordings, the pinch-in detector caught 47 of 57 starts with no false activations in 0.48\\,h, a reproducible development result rather than an independent test. The next steps are matched modality comparisons, a frozen multi-participant study with real tasks, and trials inside AR/VR headsets.\n\\fi",
+ "segments": [
+  {
+   "kind": "kept",
+   "latex": "% Shared section: used by paper-ieee.tex, paper-lncs.tex and report.tex.",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "% Use \\sect / \\subsect for headings (see README), never \\section directly.",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\sect{Conclusion}\\label{conclusion}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Consumer head tracking and smartwatch optical and inertial sensing can be combined into a working desktop interaction, with explicit grab, release and cancellation. Our audit shows what the current data support. The 37 hand-labelled exports reduce to 28 distinct streams, the pinch-in model's training and evaluation sets share no stream, and its result of 47 of 57 starts caught with no false activations in 0.48\\,h can be reproduced, but it is development evidence rather than an independent test. Historical camera-label results varied widely from day to day, which a single pooled number hides. The next step is not a bigger model. It is matched comparisons of label versions and sensing modalities, followed by a frozen prospective study with real interaction tasks.",
+   "variant": "report",
+   "id": "10-conclusion/p001",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\else",
+   "variant": "paper",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Consumer head tracking and smartwatch PPG and inertial sensing can be combined into a working hands-free interaction with explicit grab, release and cancellation. On one participant's held-out recordings, the pinch-in detector caught 47 of 57 starts with no false activations in 0.48\\,h, a reproducible development result rather than an independent test. The next steps are matched modality comparisons, a frozen multi-participant study with real tasks, and trials inside AR/VR headsets.",
+   "variant": "paper",
+   "id": "10-conclusion/p002",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  }
+ ]
+}

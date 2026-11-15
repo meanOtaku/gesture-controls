@@ -1,0 +1,416 @@
+{
+ "source": "sections/08-prospective-protocol.tex",
+ "tex": "% Shared section: used by paper-ieee.tex, paper-lncs.tex and report.tex.\n% Use \\sect / \\subsect for headings (see README), never \\section directly.\n\n\\iffull\n\\sect{Prospective Validation Protocol}\\label{prospective-validation-protocol}\n\\else\n\\sect{Future Work}\\label{prospective-validation-protocol}\n\\fi\n\n\\iffull\nThis section describes planned work; none of these experiments has been run yet. The first step is to freeze everything that affects the result: model files, label versions, source groups, exclusions, thresholds, matching rules and how unavailable input is counted. Before any headline comparison, the full event logs for the current model and the pinch-out data should be recovered.\n\\else\nThree studies come next; none has been run yet. First, with models, labels and thresholds frozen in advance, compare IMU-only, PPG-only and fused inputs, rolling against median scaling, and the CNN against engineered-feature trees on the same corrected data. Second, test generalisation with multiple participants across new days and strap refits, holding out whole participants for user-independent claims. Third, run a counterbalanced task comparing look--pinch--turn with a conventional volume control, with fault trials and a latency breakdown, and repeat the selection task inside an AR/VR headset, comparing its camera pinch, the watch pinch and both combined.\n\\fi\n\n\\iffull\n\\begin{widefigure}\n\\centering\n\\includegraphics[width=1\\linewidth,height=\\textheight,keepaspectratio,alt={Proposed development, freeze, prospective collection and continuous/live evaluation sequence.}]{figures/prospective-protocol.png}\n\\caption[Planned confirmatory workflow]{Planned confirmatory workflow: develop, freeze, collect new data, then evaluate continuously and in live use. None of these stages has been carried out yet.}\\label{fig-prospective}\n\\end{widefigure}\n\\fi\n\n\\iffull\n\\subsect{Matched sensing and preprocessing comparisons}\\label{matched-sensing-and-preprocessing-comparisons}\n\\fi\n\n\\iffull\nThe smallest useful ablation compares IMU-only, PPG-only and fused inputs on the same corrected source groups, then rolling against median scaling, then the CNN against the engineered-feature trees. All variants should share the selection procedure, false-activation target, input rate, exclusions and matching rules. Each may have its own threshold, chosen the same way on development data and never on test data. Synthetic splices are useful, but real pinches after real movement should be tested as well.\n\\fi\n\n\\iffull\n\\subsect{Personalisation and generalisation}\\label{personalisation-and-generalisation}\n\\fi\n\n\\iffull\nDifferent claims need different splits. A personalised claim needs each person's frozen model tested on new days and after the strap is refitted. A user-independent claim needs whole participants held out. Few-shot adaptation needs a calibration block kept separate from the later test. The number of participants and the amount of exposure should be set from pilot variation and the precision we want. New sessions should include ordinary keyboard and mouse use, wrist turns, different arm support and strap fit, and the quiet conditions the interaction assumes. Pinching while the hand moves should be reported separately if it falls outside the intended still-hand use.\n\\fi\n\n\\iffull\n\\subsect{Interaction and physical fault trials}\\label{interaction-and-physical-fault-trials}\n\\fi\n\n\\iffull\nA counterbalanced task should compare look--pinch--turn with a conventional volume control, using set practice, target and timeout rules. We would measure completion time, final error, retries, missed grabs and releases, unintended actions, and discomfort and workload. Fault trials should cover stale signals, disconnection and reconnection, the head leaving the target, model replacement and a release while a volume write is still queued. Latency should be broken down into sensing, receipt, scoring, event emission, policy acceptance and the completed output, with clock uncertainty and unavailable intervals reported.\n\\fi\n\n\\iffull\n\\subsect{Testing in a headset}\\label{testing-in-a-headset}\n\\fi\n\n\\iffull\nA natural next step is to repeat the selection task inside an AR or VR headset, using the headset's own head or eye tracking for targeting and the watch for pinch-in and pinch-out. Useful comparisons would be the headset's built-in camera pinch alone, the watch pinch alone, and both combined, including trials with the hand deliberately kept out of the cameras' view. The same event-level measures (recall, false activations per hour of no-gesture time, latency) would let the results be compared directly with the desktop study.\n\n\\fi",
+ "segments": [
+  {
+   "kind": "kept",
+   "latex": "% Shared section: used by paper-ieee.tex, paper-lncs.tex and report.tex.",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "% Use \\sect / \\subsect for headings (see README), never \\section directly.",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\sect{Prospective Validation Protocol}\\label{prospective-validation-protocol}",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\else",
+   "variant": "paper",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\sect{Future Work}\\label{prospective-validation-protocol}",
+   "variant": "paper",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "This section describes planned work; none of these experiments has been run yet. The first step is to freeze everything that affects the result: model files, label versions, source groups, exclusions, thresholds, matching rules and how unavailable input is counted. Before any headline comparison, the full event logs for the current model and the pinch-out data should be recovered.",
+   "variant": "report",
+   "id": "08-prospective-protocol/p001",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\else",
+   "variant": "paper",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Three studies come next; none has been run yet. First, with models, labels and thresholds frozen in advance, compare IMU-only, PPG-only and fused inputs, rolling against median scaling, and the CNN against engineered-feature trees on the same corrected data. Second, test generalisation with multiple participants across new days and strap refits, holding out whole participants for user-independent claims. Third, run a counterbalanced task comparing look--pinch--turn with a conventional volume control, with fault trials and a latency breakdown, and repeat the selection task inside an AR/VR headset, comparing its camera pinch, the watch pinch and both combined.",
+   "variant": "paper",
+   "id": "08-prospective-protocol/p002",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "env",
+   "latex": "\\begin{widefigure}\n\\centering\n\\includegraphics[width=1\\linewidth,height=\\textheight,keepaspectratio,alt={Proposed development, freeze, prospective collection and continuous/live evaluation sequence.}]{figures/prospective-protocol.png}\n\\caption[Planned confirmatory workflow]{Planned confirmatory workflow: develop, freeze, collect new data, then evaluate continuously and in live use. None of these stages has been carried out yet.}\\label{fig-prospective}\n\\end{widefigure}",
+   "variant": "report",
+   "id": "",
+   "captions": [
+    "08-prospective-protocol/c003"
+   ],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\subsect{Matched sensing and preprocessing comparisons}\\label{matched-sensing-and-preprocessing-comparisons}",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "The smallest useful ablation compares IMU-only, PPG-only and fused inputs on the same corrected source groups, then rolling against median scaling, then the CNN against the engineered-feature trees. All variants should share the selection procedure, false-activation target, input rate, exclusions and matching rules. Each may have its own threshold, chosen the same way on development data and never on test data. Synthetic splices are useful, but real pinches after real movement should be tested as well.",
+   "variant": "report",
+   "id": "08-prospective-protocol/p004",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\subsect{Personalisation and generalisation}\\label{personalisation-and-generalisation}",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Different claims need different splits. A personalised claim needs each person's frozen model tested on new days and after the strap is refitted. A user-independent claim needs whole participants held out. Few-shot adaptation needs a calibration block kept separate from the later test. The number of participants and the amount of exposure should be set from pilot variation and the precision we want. New sessions should include ordinary keyboard and mouse use, wrist turns, different arm support and strap fit, and the quiet conditions the interaction assumes. Pinching while the hand moves should be reported separately if it falls outside the intended still-hand use.",
+   "variant": "report",
+   "id": "08-prospective-protocol/p005",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\subsect{Interaction and physical fault trials}\\label{interaction-and-physical-fault-trials}",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "A counterbalanced task should compare look--pinch--turn with a conventional volume control, using set practice, target and timeout rules. We would measure completion time, final error, retries, missed grabs and releases, unintended actions, and discomfort and workload. Fault trials should cover stale signals, disconnection and reconnection, the head leaving the target, model replacement and a release while a volume write is still queued. Latency should be broken down into sensing, receipt, scoring, event emission, policy acceptance and the completed output, with clock uncertainty and unavailable intervals reported.",
+   "variant": "report",
+   "id": "08-prospective-protocol/p006",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\subsect{Testing in a headset}\\label{testing-in-a-headset}",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "A natural next step is to repeat the selection task inside an AR or VR headset, using the headset's own head or eye tracking for targeting and the watch for pinch-in and pinch-out. Useful comparisons would be the headset's built-in camera pinch alone, the watch pinch alone, and both combined, including trials with the hand deliberately kept out of the cameras' view. The same event-level measures (recall, false activations per hour of no-gesture time, latency) would let the results be compared directly with the desktop study.",
+   "variant": "report",
+   "id": "08-prospective-protocol/p007",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  }
+ ]
+}

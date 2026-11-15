@@ -1,0 +1,366 @@
+{
+ "source": "report/intro-extra.tex",
+ "tex": "% Report-only additions to the Introduction chapter (after the shared intro).\n\\section{Objectives}\n\nThe project set out to:\n\\begin{enumerate}\n\\item build a complete sensing-to-action pipeline in which head orientation from consumer headphones selects an on-screen target and smartwatch signals detect when the user pinches;\n\\item design an interaction that keeps brief gesture events separate from sustained control, so that a missed or false detection cannot leave the system changing the volume on its own;\n\\item record and label a dataset of pinches and everyday activity, including manually corrected labels and camera-based reference labels;\n\\item train a causal pinch detector that runs on the laptop in real time, and evaluate it over whole recordings with event-level measures: catches, misses, latency and false activations per hour;\n\\item check the dataset and the stored results for reproducibility, including duplicate recordings and changing label versions;\n\\item identify what further studies are needed to support stronger claims, including use in AR/VR headsets.\n\\end{enumerate}\n\n\\section{Scope}\n\n\\paragraph{In scope.} The report covers hands-free control of laptop volume by one user, the author, using Sony WH-1000XM5 headphones for head tracking, a Samsung Galaxy Watch4 for PPG and inertial sensing, and an Apple MacBook Air (M3) running the desktop application. It describes the full system as built and evaluates the pinch-in detector on recorded data.\n\n\\paragraph{Out of scope.} Several things are deliberately left out:\n\\begin{itemize}\n\\item \\textbf{Other users.} No multi-participant study has been run, so the results do not describe how the system performs for other people.\n\\item \\textbf{A user study of the interaction.} Task time, error and workload for look--pinch--turn have not yet been measured against a conventional volume control.\n\\item \\textbf{Pinch-out evaluation.} No matched model for pinch release was available for evaluation.\n\\item \\textbf{AR/VR headsets.} Use in a headset is discussed as a prospect only; it was not tested.\n\\item \\textbf{Inference on the watch.} All models run on the laptop; the watch only streams data.\n\\item \\textbf{Other actions.} The codebase also contains a gesture-recipe engine for brightness, scrolling and media keys, and a separate drone-control experiment. Neither is evaluated in this report.\n\\end{itemize}\n\n\\section{Organisation of the Report}\n\nChapter~\\ref{related-work-and-evaluation-context} reviews related work on wrist-based gesture sensing and look-then-act interaction. Chapter~\\ref{ch:requirements} lists the requirements and the hardware and software platform. Chapter~\\ref{system-design} presents the system design, and Chapter~\\ref{ch:implementation} describes how each component is implemented. Chapter~\\ref{reference-annotations-and-source-audit} explains how the reference labels were produced and audits the dataset. Chapter~\\ref{causal-detection-and-event-accounting} describes the detector and the event-level metrics, and Chapter~\\ref{results} reports the results, including software testing. Chapter~\\ref{discussion} discusses what the results show, including prospects for AR and VR, and Chapter~\\ref{limitations-and-reproducibility} sets out the limitations. Chapter~\\ref{prospective-validation-protocol} proposes the studies that should follow, and Chapter~\\ref{conclusion} concludes. The appendices give the dataset inventory and a short user guide.\n",
+ "segments": [
+  {
+   "kind": "kept",
+   "latex": "% Report-only additions to the Introduction chapter (after the shared intro).",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\section{Objectives}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "The project set out to:",
+   "variant": "both",
+   "id": "intro-extra/p001",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\begin{enumerate}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "build a complete sensing-to-action pipeline in which head orientation from consumer headphones selects an on-screen target and smartwatch signals detect when the user pinches;",
+   "variant": "both",
+   "id": "intro-extra/i002",
+   "captions": [],
+   "item_label": "\\item"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "design an interaction that keeps brief gesture events separate from sustained control, so that a missed or false detection cannot leave the system changing the volume on its own;",
+   "variant": "both",
+   "id": "intro-extra/i003",
+   "captions": [],
+   "item_label": "\\item"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "record and label a dataset of pinches and everyday activity, including manually corrected labels and camera-based reference labels;",
+   "variant": "both",
+   "id": "intro-extra/i004",
+   "captions": [],
+   "item_label": "\\item"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "train a causal pinch detector that runs on the laptop in real time, and evaluate it over whole recordings with event-level measures: catches, misses, latency and false activations per hour;",
+   "variant": "both",
+   "id": "intro-extra/i005",
+   "captions": [],
+   "item_label": "\\item"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "check the dataset and the stored results for reproducibility, including duplicate recordings and changing label versions;",
+   "variant": "both",
+   "id": "intro-extra/i006",
+   "captions": [],
+   "item_label": "\\item"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "identify what further studies are needed to support stronger claims, including use in AR/VR headsets.",
+   "variant": "both",
+   "id": "intro-extra/i007",
+   "captions": [],
+   "item_label": "\\item"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\end{enumerate}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\section{Scope}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\paragraph{In scope.} ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "The report covers hands-free control of laptop volume by one user, the author, using Sony WH-1000XM5 headphones for head tracking, a Samsung Galaxy Watch4 for PPG and inertial sensing, and an Apple MacBook Air (M3) running the desktop application. It describes the full system as built and evaluates the pinch-in detector on recorded data.",
+   "variant": "both",
+   "id": "intro-extra/p008",
+   "captions": [],
+   "item_label": "\\paragraph{In scope.}"
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\paragraph{Out of scope.} ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "Several things are deliberately left out:",
+   "variant": "both",
+   "id": "intro-extra/p009",
+   "captions": [],
+   "item_label": "\\paragraph{Out of scope.}"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\begin{itemize}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "\\textbf{Other users.} No multi-participant study has been run, so the results do not describe how the system performs for other people.",
+   "variant": "both",
+   "id": "intro-extra/i010",
+   "captions": [],
+   "item_label": "\\item"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "\\textbf{A user study of the interaction.} Task time, error and workload for look--pinch--turn have not yet been measured against a conventional volume control.",
+   "variant": "both",
+   "id": "intro-extra/i011",
+   "captions": [],
+   "item_label": "\\item"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "\\textbf{Pinch-out evaluation.} No matched model for pinch release was available for evaluation.",
+   "variant": "both",
+   "id": "intro-extra/i012",
+   "captions": [],
+   "item_label": "\\item"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "\\textbf{AR/VR headsets.} Use in a headset is discussed as a prospect only; it was not tested.",
+   "variant": "both",
+   "id": "intro-extra/i013",
+   "captions": [],
+   "item_label": "\\item"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "\\textbf{Inference on the watch.} All models run on the laptop; the watch only streams data.",
+   "variant": "both",
+   "id": "intro-extra/i014",
+   "captions": [],
+   "item_label": "\\item"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "\\textbf{Other actions.} The codebase also contains a gesture-recipe engine for brightness, scrolling and media keys, and a separate drone-control experiment. Neither is evaluated in this report.",
+   "variant": "both",
+   "id": "intro-extra/i015",
+   "captions": [],
+   "item_label": "\\item"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\end{itemize}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\section{Organisation of the Report}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Chapter~\\ref{related-work-and-evaluation-context} reviews related work on wrist-based gesture sensing and look-then-act interaction. Chapter~\\ref{ch:requirements} lists the requirements and the hardware and software platform. Chapter~\\ref{system-design} presents the system design, and Chapter~\\ref{ch:implementation} describes how each component is implemented. Chapter~\\ref{reference-annotations-and-source-audit} explains how the reference labels were produced and audits the dataset. Chapter~\\ref{causal-detection-and-event-accounting} describes the detector and the event-level metrics, and Chapter~\\ref{results} reports the results, including software testing. Chapter~\\ref{discussion} discusses what the results show, including prospects for AR and VR, and Chapter~\\ref{limitations-and-reproducibility} sets out the limitations. Chapter~\\ref{prospective-validation-protocol} proposes the studies that should follow, and Chapter~\\ref{conclusion} concludes. The appendices give the dataset inventory and a short user guide.",
+   "variant": "both",
+   "id": "intro-extra/p016",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  }
+ ]
+}

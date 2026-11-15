@@ -1,0 +1,174 @@
+{
+ "source": "sections/09-limitations.tex",
+ "tex": "% Shared section: used by paper-ieee.tex, paper-lncs.tex and report.tex.\n% Use \\sect / \\subsect for headings (see README), never \\section directly.\n\n\\sect{Limitations and Reproducibility}\\label{limitations-and-reproducibility}\n\n\\iffull\nThe main limitation is that all data come from a single participant, and we have not yet run a confirmatory usability or population study. The latest model's event result was reproduced by replay, but its training configuration had to be reconstructed, and its threshold-selection log and label-version hashes are missing. Some older cohorts cannot be checked because their UUIDs do not map to the stored recordings. Exact stream hashing misses partial overlaps, and we have not measured the reliability of the manual boundaries between annotators.\n\\else\nAll data come from one participant, and no confirmatory or usability study has been run. The current model's training configuration was reconstructed rather than recovered, its threshold-selection log and label-version hashes are missing, exact hashing misses partial overlaps, and the manual labels have not been checked by a second annotator.\n\\fi\n\n\\iffull\nThe input pipeline can be rebuilt from source, but the full training history of the current model cannot. A good manifest score and a matching hash do not show the system is ready for live use. The negative recordings cover a limited range of activities, and synthetic splices cannot tell us about battery life, drift, all-day false activations or safety in real use.\n\\fi\n\n\\iffull\nSource code, audit scripts, the export inventory and figure sources are kept as project artifacts and are available from the author on reasonable request. The analysis refers to source snapshot \\nolinkurl{6709b2a}, and the inventory describes the models and data stored at that point, not a newly trained release. A complete reproduction package would also need label-version hashes tied to the original training run and its per-recording event outcomes. Sharing the physiological recordings depends on access and privacy decisions that are still to be made.\n\n\\else\nSource code, audit scripts and the export inventory are available from the author on reasonable request.\n\\fi",
+ "segments": [
+  {
+   "kind": "kept",
+   "latex": "% Shared section: used by paper-ieee.tex, paper-lncs.tex and report.tex.",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "% Use \\sect / \\subsect for headings (see README), never \\section directly.",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\sect{Limitations and Reproducibility}\\label{limitations-and-reproducibility}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "The main limitation is that all data come from a single participant, and we have not yet run a confirmatory usability or population study. The latest model's event result was reproduced by replay, but its training configuration had to be reconstructed, and its threshold-selection log and label-version hashes are missing. Some older cohorts cannot be checked because their UUIDs do not map to the stored recordings. Exact stream hashing misses partial overlaps, and we have not measured the reliability of the manual boundaries between annotators.",
+   "variant": "report",
+   "id": "09-limitations/p001",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\else",
+   "variant": "paper",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "All data come from one participant, and no confirmatory or usability study has been run. The current model's training configuration was reconstructed rather than recovered, its threshold-selection log and label-version hashes are missing, exact hashing misses partial overlaps, and the manual labels have not been checked by a second annotator.",
+   "variant": "paper",
+   "id": "09-limitations/p002",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "The input pipeline can be rebuilt from source, but the full training history of the current model cannot. A good manifest score and a matching hash do not show the system is ready for live use. The negative recordings cover a limited range of activities, and synthetic splices cannot tell us about battery life, drift, all-day false activations or safety in real use.",
+   "variant": "report",
+   "id": "09-limitations/p003",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Source code, audit scripts, the export inventory and figure sources are kept as project artifacts and are available from the author on reasonable request. The analysis refers to source snapshot \\nolinkurl{6709b2a}, and the inventory describes the models and data stored at that point, not a newly trained release. A complete reproduction package would also need label-version hashes tied to the original training run and its per-recording event outcomes. Sharing the physiological recordings depends on access and privacy decisions that are still to be made.",
+   "variant": "report",
+   "id": "09-limitations/p004",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\else",
+   "variant": "paper",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Source code, audit scripts and the export inventory are available from the author on reasonable request.",
+   "variant": "paper",
+   "id": "09-limitations/p005",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  }
+ ]
+}

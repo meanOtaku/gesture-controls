@@ -1,0 +1,562 @@
+{
+ "source": "sections/04-annotation-audit.tex",
+ "tex": "% Shared section: used by paper-ieee.tex, paper-lncs.tex and report.tex.\n% Use \\sect / \\subsect for headings (see README), never \\section directly.\n\n\\sect{Reference Annotations and Source Audit}\\label{reference-annotations-and-source-audit}\n\n\\iffull\n\\subsect{Evidence cohorts}\\label{evidence-cohorts}\n\\fi\n\n\\iffull\nThe project's data fall into three groups. Older experiments used cue labels or automatic labels from camera landmarks. Later recordings carry manually corrected labels. A future confirmatory test would use new recordings collected only after the model and protocol are frozen. Results from one group cannot stand in for another; adding corrected labels to a folder does not change the labels a historical result was computed with.\n\\else\nRecordings fall into three groups: older ones with cue or automatic camera labels, later ones with manually corrected labels, and future recordings for a frozen confirmatory test. Each sample keeps its original \\nolinkurl{label}; a non-empty \\nolinkurl{manual_label} replaces it, a blank one keeps it, and \\nolinkurl{-} removes it. A script that reads only the original column silently ignores the corrections, so every result must name its loader and label version.\n\\fi\n\n\\iffull\nAll recordings come from one participant, the author, wearing the watch on the left wrist. The audit covers the recordings and models stored in the project, not a wider population. Raw sensor values are never modified; label corrections are stored alongside the original labels.\n\\fi\n\n\\iffull\n\\subsect{Effective-label semantics}\\label{effective-label-semantics}\n\\fi\n\n\\iffull\nEach sample has an original \\nolinkurl{label} and an optional \\nolinkurl{manual_label}. A non-empty manual label replaces the original; a blank one keeps it; the marker \\nolinkurl{-} removes it. The label \\nolinkurl{left_out} marks a stretch that may be excluded, but whether it is excluded depends on the experiment's configuration. It should not quietly turn into a negative example, or vanish from the no-gesture time, without a stated rule.\n\\fi\n\n\\iffull\nThese rules guard against two mistakes. A blank manual field does not mean someone checked the sample and found no gesture. And an older script that reads only the \\nolinkurl{label} column will ignore the corrections even when it runs on a newer file. Every result therefore has to name the loader and evaluator it used as well as the label version. Unit tests confirm that the override and fallback rules work; they cannot tell us whether the human-drawn boundaries are correct.\n\\fi\n\n\\begin{widefigure}\n\\centering\n\\includegraphics[width=1\\linewidth,height=\\textheight,keepaspectratio,alt={Saved optical and gyroscope data with original and effective row-label bands from a manually revised recording.}]{figures/annotation-telemetry.png}\n\\caption[Recorded PPG and gyroscope data with original and corrected labels]{Recorded PPG and gyroscope data from \\nolinkurl{gesture-dataset-pinch_hold-2026-11-03T01-05-59.434Z}, with original and corrected label bands. Time is relative to the first PPG sample on the watch clock. For display only, each PPG channel is centred on its median and scaled by its MAD; gyroscope magnitude is in rad/s. No model output is shown.}\\label{fig-annotation}\n\\end{widefigure}\n\n\\iffull\n\\subsect{Audit method}\\label{audit-method}\n\\fi\n\n\\iffull\nThe audit reads every PPG and IMU file in the hand-labelled folder without changing anything. For each stream it hashes the ordered sensor columns, leaving out the label columns so that relabelled copies of the same data still match. The pair of PPG and IMU hashes identifies a source stream. We then match export names and recording IDs against the training and evaluation lists in each model manifest, and check each model file against its declared SHA-256.\n\\else\nTo find duplicates, we hashed each recording's ordered sensor columns, leaving out the labels, and used the pair of PPG and IMU hashes as the stream's identity. This catches exact copies but not partial overlaps.\n\\fi\n\n\\iffull\nThis finds exact duplicates only. Two crops of the same session, partial overlaps or a file saved in a different format would not match. Grouping by source is necessary for a clean split, but it cannot prove that days or sessions are independent, nor rule out repeated model selection on the evaluation data. The audit scripts, full inventory and figure sources are kept with the project artifacts (Section~\\ref{limitations-and-reproducibility}).\n\\fi\n\n\\iffull\n\\subsect{Dataset identity findings}\\label{dataset-identity-findings}\n\\fi\n\n\\iffull\nThe folder holds 37 exports totalling 127.918 minutes of PPG. Nine pairs of exports contain identical PPG and IMU streams under different names, which leaves 28 distinct streams and 98.080 minutes. This is total recording time after removing duplicates; it is not the same as independently collected sessions or no-gesture exposure. Six of the duplicate pairs carry pinch-hold and pinch-in names, and three carry supported and unlabelled names.\n\\else\nThe hand-labelled folder holds 37 exports (127.918 minutes of PPG), but nine pairs are identical streams under different names, leaving 28 distinct streams (98.080 minutes). Fourteen exports carry manual labels, which change the label of 4,931 PPG samples (Table~\\ref{tab-audit}).\n\\fi\n\n\\iffull\nFourteen exports contain manual labels on PPG samples. Across all 37 exports, 4,931 PPG samples have a corrected label that differs from the original. That is a count of samples, not of editing actions or gesture events. Being in the folder does not prove a recording was reviewed, and an absent override does not prove it was not; reviews were not logged.\n\\fi\n\n\\begin{table}[t]\n\\centering\\small\n\\caption[Hand-labelled folder audit]{Hand-labelled folder audit. Counts refer to exported files or exact stream pairs, not independent sessions.}\\label{tab-audit}\n\\begin{tabularx}{\\linewidth}{@{}>{\\raggedright\\arraybackslash}Xr>{\\raggedright\\arraybackslash}X@{}}\n\\toprule\n\\textbf{Quantity} & \\textbf{Count} & \\textbf{Note} \\\\\n\\midrule\nExported directories & 37 & Includes duplicates \\\\\nDistinct stream pairs & 28 & Exact matches only \\\\\nDuplicate pairs & 9 & Must share a split \\\\\nExports with PPG overrides & 14 & Review coverage unknown \\\\\nPPG samples relabelled & 4,931 & Samples, not events \\\\\n\\bottomrule\n\\end{tabularx}\n\\end{table}\n\n\\iffull\nFor the hand-labelled pinch-in model, all 20 training and 8 evaluation IDs resolve to recordings in the folder. The two sets do not overlap, and no stream appears in both. So the duplicates we found did not leak into this particular split. Other median-model manifests use UUIDs that we could not map to the folder's metadata, so their splits remain unchecked.\n\n\\else\nFor the hand-labelled pinch-in model, the 20 training and 8 evaluation recordings share no stream, so these duplicates did not leak into its split.\n\\fi",
+ "segments": [
+  {
+   "kind": "kept",
+   "latex": "% Shared section: used by paper-ieee.tex, paper-lncs.tex and report.tex.",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "% Use \\sect / \\subsect for headings (see README), never \\section directly.",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\sect{Reference Annotations and Source Audit}\\label{reference-annotations-and-source-audit}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\subsect{Evidence cohorts}\\label{evidence-cohorts}",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "The project's data fall into three groups. Older experiments used cue labels or automatic labels from camera landmarks. Later recordings carry manually corrected labels. A future confirmatory test would use new recordings collected only after the model and protocol are frozen. Results from one group cannot stand in for another; adding corrected labels to a folder does not change the labels a historical result was computed with.",
+   "variant": "report",
+   "id": "04-annotation-audit/p001",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\else",
+   "variant": "paper",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Recordings fall into three groups: older ones with cue or automatic camera labels, later ones with manually corrected labels, and future recordings for a frozen confirmatory test. Each sample keeps its original \\nolinkurl{label}; a non-empty \\nolinkurl{manual_label} replaces it, a blank one keeps it, and \\nolinkurl{-} removes it. A script that reads only the original column silently ignores the corrections, so every result must name its loader and label version.",
+   "variant": "paper",
+   "id": "04-annotation-audit/p002",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "All recordings come from one participant, the author, wearing the watch on the left wrist. The audit covers the recordings and models stored in the project, not a wider population. Raw sensor values are never modified; label corrections are stored alongside the original labels.",
+   "variant": "report",
+   "id": "04-annotation-audit/p003",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\subsect{Effective-label semantics}\\label{effective-label-semantics}",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Each sample has an original \\nolinkurl{label} and an optional \\nolinkurl{manual_label}. A non-empty manual label replaces the original; a blank one keeps it; the marker \\nolinkurl{-} removes it. The label \\nolinkurl{left_out} marks a stretch that may be excluded, but whether it is excluded depends on the experiment's configuration. It should not quietly turn into a negative example, or vanish from the no-gesture time, without a stated rule.",
+   "variant": "report",
+   "id": "04-annotation-audit/p004",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "These rules guard against two mistakes. A blank manual field does not mean someone checked the sample and found no gesture. And an older script that reads only the \\nolinkurl{label} column will ignore the corrections even when it runs on a newer file. Every result therefore has to name the loader and evaluator it used as well as the label version. Unit tests confirm that the override and fallback rules work; they cannot tell us whether the human-drawn boundaries are correct.",
+   "variant": "report",
+   "id": "04-annotation-audit/p005",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "env",
+   "latex": "\\begin{widefigure}\n\\centering\n\\includegraphics[width=1\\linewidth,height=\\textheight,keepaspectratio,alt={Saved optical and gyroscope data with original and effective row-label bands from a manually revised recording.}]{figures/annotation-telemetry.png}\n\\caption[Recorded PPG and gyroscope data with original and corrected labels]{Recorded PPG and gyroscope data from \\nolinkurl{gesture-dataset-pinch_hold-2026-11-03T01-05-59.434Z}, with original and corrected label bands. Time is relative to the first PPG sample on the watch clock. For display only, each PPG channel is centred on its median and scaled by its MAD; gyroscope magnitude is in rad/s. No model output is shown.}\\label{fig-annotation}\n\\end{widefigure}",
+   "variant": "both",
+   "id": "",
+   "captions": [
+    "04-annotation-audit/c006"
+   ],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\subsect{Audit method}\\label{audit-method}",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "The audit reads every PPG and IMU file in the hand-labelled folder without changing anything. For each stream it hashes the ordered sensor columns, leaving out the label columns so that relabelled copies of the same data still match. The pair of PPG and IMU hashes identifies a source stream. We then match export names and recording IDs against the training and evaluation lists in each model manifest, and check each model file against its declared SHA-256.",
+   "variant": "report",
+   "id": "04-annotation-audit/p007",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\else",
+   "variant": "paper",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "To find duplicates, we hashed each recording's ordered sensor columns, leaving out the labels, and used the pair of PPG and IMU hashes as the stream's identity. This catches exact copies but not partial overlaps.",
+   "variant": "paper",
+   "id": "04-annotation-audit/p008",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "This finds exact duplicates only. Two crops of the same session, partial overlaps or a file saved in a different format would not match. Grouping by source is necessary for a clean split, but it cannot prove that days or sessions are independent, nor rule out repeated model selection on the evaluation data. The audit scripts, full inventory and figure sources are kept with the project artifacts (Section~\\ref{limitations-and-reproducibility}).",
+   "variant": "report",
+   "id": "04-annotation-audit/p009",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\subsect{Dataset identity findings}\\label{dataset-identity-findings}",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "The folder holds 37 exports totalling 127.918 minutes of PPG. Nine pairs of exports contain identical PPG and IMU streams under different names, which leaves 28 distinct streams and 98.080 minutes. This is total recording time after removing duplicates; it is not the same as independently collected sessions or no-gesture exposure. Six of the duplicate pairs carry pinch-hold and pinch-in names, and three carry supported and unlabelled names.",
+   "variant": "report",
+   "id": "04-annotation-audit/p010",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\else",
+   "variant": "paper",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "The hand-labelled folder holds 37 exports (127.918 minutes of PPG), but nine pairs are identical streams under different names, leaving 28 distinct streams (98.080 minutes). Fourteen exports carry manual labels, which change the label of 4,931 PPG samples (Table~\\ref{tab-audit}).",
+   "variant": "paper",
+   "id": "04-annotation-audit/p011",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Fourteen exports contain manual labels on PPG samples. Across all 37 exports, 4,931 PPG samples have a corrected label that differs from the original. That is a count of samples, not of editing actions or gesture events. Being in the folder does not prove a recording was reviewed, and an absent override does not prove it was not; reviews were not logged.",
+   "variant": "report",
+   "id": "04-annotation-audit/p012",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "env",
+   "latex": "\\begin{table}[t]\n\\centering\\small\n\\caption[Hand-labelled folder audit]{Hand-labelled folder audit. Counts refer to exported files or exact stream pairs, not independent sessions.}\\label{tab-audit}\n\\begin{tabularx}{\\linewidth}{@{}>{\\raggedright\\arraybackslash}Xr>{\\raggedright\\arraybackslash}X@{}}\n\\toprule\n\\textbf{Quantity} & \\textbf{Count} & \\textbf{Note} \\\\\n\\midrule\nExported directories & 37 & Includes duplicates \\\\\nDistinct stream pairs & 28 & Exact matches only \\\\\nDuplicate pairs & 9 & Must share a split \\\\\nExports with PPG overrides & 14 & Review coverage unknown \\\\\nPPG samples relabelled & 4,931 & Samples, not events \\\\\n\\bottomrule\n\\end{tabularx}\n\\end{table}",
+   "variant": "both",
+   "id": "",
+   "captions": [
+    "04-annotation-audit/c013"
+   ],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "For the hand-labelled pinch-in model, all 20 training and 8 evaluation IDs resolve to recordings in the folder. The two sets do not overlap, and no stream appears in both. So the duplicates we found did not leak into this particular split. Other median-model manifests use UUIDs that we could not map to the folder's metadata, so their splits remain unchecked.",
+   "variant": "report",
+   "id": "04-annotation-audit/p014",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\else",
+   "variant": "paper",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "For the hand-labelled pinch-in model, the 20 training and 8 evaluation recordings share no stream, so these duplicates did not leak into its split.",
+   "variant": "paper",
+   "id": "04-annotation-audit/p015",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  }
+ ]
+}

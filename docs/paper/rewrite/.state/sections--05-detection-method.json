@@ -1,0 +1,598 @@
+{
+ "source": "sections/05-detection-method.tex",
+ "tex": "% Shared section: used by paper-ieee.tex, paper-lncs.tex and report.tex.\n% Use \\sect / \\subsect for headings (see README), never \\section directly.\n\n\\sect{Causal Detection and Event Accounting}\\label{causal-detection-and-event-accounting}\n\n\\iffull\n\\subsect{Median-scaled optical--inertial input}\\label{median-scaled-opticalinertial-input}\n\\fi\n\nThe model takes nine channels: three axes each of acceleration and angular velocity, and three PPG wavelengths. At decision time \\(T\\), each channel is placed on a 20\\,ms grid by zero-order hold, using only samples recorded at or before each tick. The grid has 549 ticks ending at \\(T\\), spanning 10.96\\,s of an 11\\,s history window. The last 50 ticks form the model input, flattened channel by channel into 450 values.\n\nLet \\(G_T\\) be the grid, \\(W_T\\) its last 50 ticks, and \\(c\\) a channel. We define\n\\[\nm_c(T)=\\operatorname{median}_{j\\in G_T}x_{c,j},\n\\]\n\\[\ns_c(T)=1.4826\\operatorname{median}_{j\\in G_T}|x_{c,j}-m_c(T)|,\n\\]\n\\[\nu_{c,t}=\\sigma\\left(\\operatorname{clip}\\left(\\frac{x_{c,t}-m_c(T)}{s_c(T)+\\epsilon_c(T)},-500,500\\right)\\right),\\quad t\\in W_T.\n\\]\n\n\\iffull\nThe floor \\(\\epsilon_c\\) is 0.02\\,m/s² for acceleration, 0.01\\,rad/s for angular velocity and \\(0.001(|m_c(T)|+1)\\) for PPG. A single centre and spread is computed over the whole grid at each decision, so the transform uses only past data. If the history is too short or contains a large gap, the input is marked unavailable instead of being scored as a negative. The scaling used for display in Fig.~\\ref{fig-annotation} is different and should not be confused with this transform.\n\\else\nThe floor \\(\\epsilon_c\\) is 0.02\\,m/s² for acceleration, 0.01\\,rad/s for angular velocity and \\(0.001(|m_c(T)|+1)\\) for PPG. The transform uses only past data, and an input with too little history or a large gap is marked unavailable rather than scored as a negative.\n\\fi\n\n\\iffull\nEarlier models used a rolling ten-second mean and standard deviation ending at each tick. Each model declares its preprocessing type, and that declaration, not the free-text description, decides which transform applies. Some median-model manifests still describe the rolling pipeline in their provenance text; this is an exporter bug that needs fixing, and we have not relabelled the old results.\n\\fi\n\n\\iffull\n\\subsect{Models and learning configuration}\\label{models-and-learning-configuration}\n\\fi\n\n\\iffull\nThe CNN, written in PyTorch \\cite{pytorch}, has three dilated convolutions \\cite{yu2016dilated,bai2018tcn} with 32, 32 and 64 channels, kernel width five and dilations of one, two and four. Batch normalisation \\cite{ioffe2015batchnorm} is followed by max and mean pooling, a 32-unit dense layer and a single binary output. The trainer can average three models trained with different seeds. Its default configuration trains for twelve epochs with Adam \\cite{kingma2015adam} (learning rate 0.001, weight decay 0.0001) in batches of 256. Positive training examples are taken 0.4--0.6\\,s after an annotated pinch start; negatives and class weights follow the trainer configuration.\n\\else\nThe CNN, written in PyTorch \\cite{pytorch}, has three dilated convolutions \\cite{yu2016dilated,bai2018tcn} (32, 32 and 64 channels, kernel width five, dilations one, two and four), batch normalisation \\cite{ioffe2015batchnorm}, max and mean pooling, a 32-unit dense layer and a binary output. It is trained for twelve epochs with Adam \\cite{kingma2015adam} (learning rate 0.001, weight decay 0.0001, batches of 256), with positive examples taken 0.4--0.6\\,s after an annotated start. An ExtraTrees model on engineered features \\cite{geurts2006extra,sklearn} also exists but has not yet been compared on the corrected labels.\n\\fi\n\n\\iffull\nThis is the documented default, not a full training log for every model. The hand-labelled model records twelve epochs, seed 17 and its convolution widths, but not its complete sampling or ensemble-selection history. The project also includes an ExtraTrees model on engineered features \\cite{geurts2006extra,sklearn}; we have not yet compared it with the CNN on the corrected labels.\n\\fi\n\n\\iffull\n\\subsect{From scores to emitted events}\\label{from-scores-to-emitted-events}\n\\fi\n\n\\iffull\nThe detector turns the score stream into events using an activation threshold and a lower release threshold. Once the score passes the activation threshold, an event is emitted at the first decision where the score falls, so the event time is when the peak was confirmed, not the peak itself. The detection ends when the score drops below the release threshold, and a cooldown then blocks an immediate retrigger. Latency is measured from the emitted time.\n\\else\nEvents come from hysteresis on the score. Once it passes the activation threshold, an event is emitted at the first decision where the score falls; the detection ends below the release threshold, and a cooldown blocks retriggering. For the hand-labelled model these are 0.99, 0.84 and 1,500\\,ms, with a nominal decision delay of 500\\,ms. Latency is measured from the emitted time.\n\\fi\n\n\\iffull\nFor the hand-labelled pinch-in model, the activation threshold is 0.99, the release threshold 0.84 and the cooldown 1,500\\,ms. Its nominal decision delay of 500\\,ms is a training and scoring setting, not a measured sensor-to-action latency. These values belong to this model and should not be carried over to the historical comparisons.\n\\fi\n\n\\iffull\n\\subsect{Continuous metrics and eligibility}\\label{continuous-metrics-and-eligibility}\n\\fi\n\n\\iffull\nWe score each detector over whole recordings. An event that falls within the match window of an eligible annotated start is matched to it one-to-one. A second event during a gesture that was already caught is a repeat. An event during an uncaught gesture but outside its match window, whether too early or too late, is counted as outside the match window. An event while no gesture is under way is a false activation. For the 500\\,ms CNN delay, the match window runs from 300 to 900\\,ms after the annotated start. Exclusions and event-merging rules are reported with each experiment.\n\\else\nAn event within 300--900\\,ms after an eligible annotated start is matched to it one-to-one. A second event during a caught gesture is a repeat, an event during an uncaught gesture but outside its window, early or late, is outside the match window, and any event while no gesture is under way is a false activation.\n\\fi\n\nEvent recall and false-activation rate are\n\\[\nR_e=\\frac{N_{\\mathrm{caught}}}{N_{\\mathrm{eligible\\ starts}}},\\qquad\n\\lambda_{\\mathrm{FA}}=\\frac{N_{\\mathrm{false\\ events}}}{T_{\\mathrm{eligible\\ no\\ gesture}}/3600},\n\\]\nwith time in seconds. We also report misses, repeats, events outside the match window, and latency. Window ROC AUC and window F1 are kept as diagnostics; they are not event-level measures.\n\n\\iffull\nThe exposure calculation needs care. The evaluator takes the span from the first to the last eligible decision and subtracts gesture and excluded intervals, but it does not subtract gaps inside that span where no decisions were made. Such gaps would inflate the no-gesture time. For the hand-labelled model we rebuilt the decision timeline: decisions arrive every 40\\,ms in all eight evaluation recordings, with no gap longer than 250\\,ms, so its exposure is not inflated. The evaluator should still report coverage directly.\n\n\\else\nWe checked that gaps in the decision stream do not inflate the no-gesture time: decisions arrive every 40\\,ms in all eight evaluation recordings, with no gap longer than 250\\,ms.\n\\fi",
+ "segments": [
+  {
+   "kind": "kept",
+   "latex": "% Shared section: used by paper-ieee.tex, paper-lncs.tex and report.tex.",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "% Use \\sect / \\subsect for headings (see README), never \\section directly.",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\sect{Causal Detection and Event Accounting}\\label{causal-detection-and-event-accounting}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\subsect{Median-scaled optical--inertial input}\\label{median-scaled-opticalinertial-input}",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "The model takes nine channels: three axes each of acceleration and angular velocity, and three PPG wavelengths. At decision time \\(T\\), each channel is placed on a 20\\,ms grid by zero-order hold, using only samples recorded at or before each tick. The grid has 549 ticks ending at \\(T\\), spanning 10.96\\,s of an 11\\,s history window. The last 50 ticks form the model input, flattened channel by channel into 450 values.",
+   "variant": "both",
+   "id": "05-detection-method/p001",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Let \\(G_T\\) be the grid, \\(W_T\\) its last 50 ticks, and \\(c\\) a channel. We define",
+   "variant": "both",
+   "id": "05-detection-method/p002",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\[\nm_c(T)=\\operatorname{median}_{j\\in G_T}x_{c,j},\n\\]",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\[\ns_c(T)=1.4826\\operatorname{median}_{j\\in G_T}|x_{c,j}-m_c(T)|,\n\\]",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\[\nu_{c,t}=\\sigma\\left(\\operatorname{clip}\\left(\\frac{x_{c,t}-m_c(T)}{s_c(T)+\\epsilon_c(T)},-500,500\\right)\\right),\\quad t\\in W_T.\n\\]",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "The floor \\(\\epsilon_c\\) is 0.02\\,m/s² for acceleration, 0.01\\,rad/s for angular velocity and \\(0.001(|m_c(T)|+1)\\) for PPG. A single centre and spread is computed over the whole grid at each decision, so the transform uses only past data. If the history is too short or contains a large gap, the input is marked unavailable instead of being scored as a negative. The scaling used for display in Fig.~\\ref{fig-annotation} is different and should not be confused with this transform.",
+   "variant": "report",
+   "id": "05-detection-method/p003",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\else",
+   "variant": "paper",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "The floor \\(\\epsilon_c\\) is 0.02\\,m/s² for acceleration, 0.01\\,rad/s for angular velocity and \\(0.001(|m_c(T)|+1)\\) for PPG. The transform uses only past data, and an input with too little history or a large gap is marked unavailable rather than scored as a negative.",
+   "variant": "paper",
+   "id": "05-detection-method/p004",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Earlier models used a rolling ten-second mean and standard deviation ending at each tick. Each model declares its preprocessing type, and that declaration, not the free-text description, decides which transform applies. Some median-model manifests still describe the rolling pipeline in their provenance text; this is an exporter bug that needs fixing, and we have not relabelled the old results.",
+   "variant": "report",
+   "id": "05-detection-method/p005",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\subsect{Models and learning configuration}\\label{models-and-learning-configuration}",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "The CNN, written in PyTorch \\cite{pytorch}, has three dilated convolutions \\cite{yu2016dilated,bai2018tcn} with 32, 32 and 64 channels, kernel width five and dilations of one, two and four. Batch normalisation \\cite{ioffe2015batchnorm} is followed by max and mean pooling, a 32-unit dense layer and a single binary output. The trainer can average three models trained with different seeds. Its default configuration trains for twelve epochs with Adam \\cite{kingma2015adam} (learning rate 0.001, weight decay 0.0001) in batches of 256. Positive training examples are taken 0.4--0.6\\,s after an annotated pinch start; negatives and class weights follow the trainer configuration.",
+   "variant": "report",
+   "id": "05-detection-method/p006",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\else",
+   "variant": "paper",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "The CNN, written in PyTorch \\cite{pytorch}, has three dilated convolutions \\cite{yu2016dilated,bai2018tcn} (32, 32 and 64 channels, kernel width five, dilations one, two and four), batch normalisation \\cite{ioffe2015batchnorm}, max and mean pooling, a 32-unit dense layer and a binary output. It is trained for twelve epochs with Adam \\cite{kingma2015adam} (learning rate 0.001, weight decay 0.0001, batches of 256), with positive examples taken 0.4--0.6\\,s after an annotated start. An ExtraTrees model on engineered features \\cite{geurts2006extra,sklearn} also exists but has not yet been compared on the corrected labels.",
+   "variant": "paper",
+   "id": "05-detection-method/p007",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "This is the documented default, not a full training log for every model. The hand-labelled model records twelve epochs, seed 17 and its convolution widths, but not its complete sampling or ensemble-selection history. The project also includes an ExtraTrees model on engineered features \\cite{geurts2006extra,sklearn}; we have not yet compared it with the CNN on the corrected labels.",
+   "variant": "report",
+   "id": "05-detection-method/p008",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\subsect{From scores to emitted events}\\label{from-scores-to-emitted-events}",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "The detector turns the score stream into events using an activation threshold and a lower release threshold. Once the score passes the activation threshold, an event is emitted at the first decision where the score falls, so the event time is when the peak was confirmed, not the peak itself. The detection ends when the score drops below the release threshold, and a cooldown then blocks an immediate retrigger. Latency is measured from the emitted time.",
+   "variant": "report",
+   "id": "05-detection-method/p009",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\else",
+   "variant": "paper",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Events come from hysteresis on the score. Once it passes the activation threshold, an event is emitted at the first decision where the score falls; the detection ends below the release threshold, and a cooldown blocks retriggering. For the hand-labelled model these are 0.99, 0.84 and 1,500\\,ms, with a nominal decision delay of 500\\,ms. Latency is measured from the emitted time.",
+   "variant": "paper",
+   "id": "05-detection-method/p010",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "For the hand-labelled pinch-in model, the activation threshold is 0.99, the release threshold 0.84 and the cooldown 1,500\\,ms. Its nominal decision delay of 500\\,ms is a training and scoring setting, not a measured sensor-to-action latency. These values belong to this model and should not be carried over to the historical comparisons.",
+   "variant": "report",
+   "id": "05-detection-method/p011",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\subsect{Continuous metrics and eligibility}\\label{continuous-metrics-and-eligibility}",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "We score each detector over whole recordings. An event that falls within the match window of an eligible annotated start is matched to it one-to-one. A second event during a gesture that was already caught is a repeat. An event during an uncaught gesture but outside its match window, whether too early or too late, is counted as outside the match window. An event while no gesture is under way is a false activation. For the 500\\,ms CNN delay, the match window runs from 300 to 900\\,ms after the annotated start. Exclusions and event-merging rules are reported with each experiment.",
+   "variant": "report",
+   "id": "05-detection-method/p012",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\else",
+   "variant": "paper",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "An event within 300--900\\,ms after an eligible annotated start is matched to it one-to-one. A second event during a caught gesture is a repeat, an event during an uncaught gesture but outside its window, early or late, is outside the match window, and any event while no gesture is under way is a false activation.",
+   "variant": "paper",
+   "id": "05-detection-method/p013",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Event recall and false-activation rate are",
+   "variant": "both",
+   "id": "05-detection-method/p014",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\[\nR_e=\\frac{N_{\\mathrm{caught}}}{N_{\\mathrm{eligible\\ starts}}},\\qquad\n\\lambda_{\\mathrm{FA}}=\\frac{N_{\\mathrm{false\\ events}}}{T_{\\mathrm{eligible\\ no\\ gesture}}/3600},\n\\]",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "with time in seconds. We also report misses, repeats, events outside the match window, and latency. Window ROC AUC and window F1 are kept as diagnostics; they are not event-level measures.",
+   "variant": "both",
+   "id": "05-detection-method/p015",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\iffull",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "The exposure calculation needs care. The evaluator takes the span from the first to the last eligible decision and subtracts gesture and excluded intervals, but it does not subtract gaps inside that span where no decisions were made. Such gaps would inflate the no-gesture time. For the hand-labelled model we rebuilt the decision timeline: decisions arrive every 40\\,ms in all eight evaluation recordings, with no gap longer than 250\\,ms, so its exposure is not inflated. The evaluator should still report coverage directly.",
+   "variant": "report",
+   "id": "05-detection-method/p016",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "report",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\else",
+   "variant": "paper",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "We checked that gaps in the decision stream do not inflate the no-gesture time: decisions arrive every 40\\,ms in all eight evaluation recordings, with no gap longer than 250\\,ms.",
+   "variant": "paper",
+   "id": "05-detection-method/p017",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\fi",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  }
+ ]
+}

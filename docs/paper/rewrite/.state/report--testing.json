@@ -1,0 +1,328 @@
+{
+ "source": "report/testing.tex",
+ "tex": "% Report-only section of the Results chapter: software testing.\n% Sources: docs/architecture/components-and-deployment.md §5–6, .github/workflows,\n% test counts taken from the repository on 14 Nov 2026.\n\\section{Software Testing}\\label{sec:software-testing}\n\nAlongside the detection results above, the software is checked by automated tests at several levels. This section describes what those tests cover, how they are run, and what they cannot show.\n\n\\subsection{Test suites}\n\nTable~\\ref{tab:tests} lists the automated tests by component. The counts are the number of test functions or test cases in the repository at the time of writing.\n\n\\begin{table}[htbp]\n\\centering\n\\caption{Automated tests by component.}\\label{tab:tests}\n\\begin{tabularx}{\\linewidth}{@{}>{\\raggedright\\arraybackslash}X r l@{}}\n\\toprule\n\\textbf{Component} & \\textbf{Tests} & \\textbf{Language} \\\\\n\\midrule\nDesktop backend (Tauri) & 368 & Rust \\\\\nLabel inference (bundle validation, trees, CNN) & 122 & Rust \\\\\nGesture recipe engine & 88 & Rust \\\\\nInteraction engine (calibration, dwell, wrist mapper, gesture policy) & 71 & Rust \\\\\nModel Lab domain & 46 & Rust \\\\\nWatch transport (BLE, WebSocket, framing) & 45 & Rust \\\\\nVolume and system control & 47 & Rust \\\\\nHead tracking (native and UDP providers) & 23 & Rust \\\\\nProtocol and pinch inference & 23 & Rust \\\\\nDesktop front end (158 test files) & 1,002 & TypeScript \\\\\nLabel trainer and replay & 93 & Python \\\\\nWatch application & 78 & Kotlin \\\\\n\\bottomrule\n\\end{tabularx}\n\\end{table}\n\nThe Rust total, 950 tests, also includes 117 tests for the separate drone-control crate, which is outside the scope of this report and left out of the table.\n\n\\subsection{What the tests check}\n\n\\paragraph{Fail-closed behaviour.} Many of the backend tests feed the decision chain with bad input (out-of-order timestamps, stale orientation, a different device, non-finite values, a model that returns something other than a probability) and check that an open grab is released and no volume change is made. The gesture policy has tests for its cancellation paths and for the rule that a simultaneous release beats a start.\n\n\\paragraph{Model integrity.} The label-inference tests try to load bundles that are malformed, oversized, carry the wrong hash, declare the wrong features or contain non-finite weights, and check that each one is refused.\n\n\\paragraph{Training--runtime parity.} The features are computed twice, by the Python trainer and by the Rust runtime. Four shared fixture files hold reference cases for the pulse features, the motion features, the CNN input and the detection rule. Both implementations are tested against the same fixtures, so a change on one side that is not made on the other fails the tests. This is what allows a model trained in Python to be trusted when it runs in Rust.\n\n\\paragraph{Transport and protocol.} The watch-bridge and watch tests cover message framing and reassembly over Bluetooth, sequence handling, device identity, the default transport choice and the watch's sensor-clock rebasing.\n\n\\paragraph{Label handling.} The trainer tests confirm that a non-empty \\texttt{manual\\_label} overrides the original label, that a blank one keeps it and that \\texttt{-} removes it.\n\n\\subsection{Continuous integration}\n\nTwo GitHub Actions workflows run on every change. They check Rust formatting, run Clippy with warnings treated as errors, and run the full Rust test suite on Ubuntu, macOS 14 and Windows Server 2022. They also run the front-end tests, type checks and production build, the native head-tracking tests on macOS and Windows, and a package build for each platform. The Python trainer tests and the watch unit tests are not yet part of continuous integration and are run by hand.\n\n\\subsection{Limits of the automated tests}\n\nThe automated tests run without physical devices. They show that the code behaves as intended on the inputs they supply; they do not show that the system works with a real watch, real headphones or every operating system's volume control. A successful package build in CI is evidence that the application builds, not that it installs and runs on a clean machine. Testing with real hardware was done by hand during development: recording sessions with the watch and headphones, the Bluetooth load measurements in Chapter~\\ref{ch:implementation}, and the detection results reported earlier in this chapter. A structured hardware test against the project's release checklist is still to be done. \\todo{add any manual hardware test results you want to report, e.g. a short table of scenarios tried and outcomes.}\n",
+ "segments": [
+  {
+   "kind": "kept",
+   "latex": "% Report-only section of the Results chapter: software testing.",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "% Sources: docs/architecture/components-and-deployment.md §5–6, .github/workflows,",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "% test counts taken from the repository on 14 Nov 2026.",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\section{Software Testing}\\label{sec:software-testing}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Alongside the detection results above, the software is checked by automated tests at several levels. This section describes what those tests cover, how they are run, and what they cannot show.",
+   "variant": "both",
+   "id": "testing/p001",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\subsection{Test suites}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Table~\\ref{tab:tests} lists the automated tests by component. The counts are the number of test functions or test cases in the repository at the time of writing.",
+   "variant": "both",
+   "id": "testing/p002",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "env",
+   "latex": "\\begin{table}[htbp]\n\\centering\n\\caption{Automated tests by component.}\\label{tab:tests}\n\\begin{tabularx}{\\linewidth}{@{}>{\\raggedright\\arraybackslash}X r l@{}}\n\\toprule\n\\textbf{Component} & \\textbf{Tests} & \\textbf{Language} \\\\\n\\midrule\nDesktop backend (Tauri) & 368 & Rust \\\\\nLabel inference (bundle validation, trees, CNN) & 122 & Rust \\\\\nGesture recipe engine & 88 & Rust \\\\\nInteraction engine (calibration, dwell, wrist mapper, gesture policy) & 71 & Rust \\\\\nModel Lab domain & 46 & Rust \\\\\nWatch transport (BLE, WebSocket, framing) & 45 & Rust \\\\\nVolume and system control & 47 & Rust \\\\\nHead tracking (native and UDP providers) & 23 & Rust \\\\\nProtocol and pinch inference & 23 & Rust \\\\\nDesktop front end (158 test files) & 1,002 & TypeScript \\\\\nLabel trainer and replay & 93 & Python \\\\\nWatch application & 78 & Kotlin \\\\\n\\bottomrule\n\\end{tabularx}\n\\end{table}",
+   "variant": "both",
+   "id": "",
+   "captions": [
+    "testing/c003"
+   ],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "The Rust total, 950 tests, also includes 117 tests for the separate drone-control crate, which is outside the scope of this report and left out of the table.",
+   "variant": "both",
+   "id": "testing/p004",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\subsection{What the tests check}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\paragraph{Fail-closed behaviour.} ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "Many of the backend tests feed the decision chain with bad input (out-of-order timestamps, stale orientation, a different device, non-finite values, a model that returns something other than a probability) and check that an open grab is released and no volume change is made. The gesture policy has tests for its cancellation paths and for the rule that a simultaneous release beats a start.",
+   "variant": "both",
+   "id": "testing/p005",
+   "captions": [],
+   "item_label": "\\paragraph{Fail-closed behaviour.}"
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\paragraph{Model integrity.} ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "The label-inference tests try to load bundles that are malformed, oversized, carry the wrong hash, declare the wrong features or contain non-finite weights, and check that each one is refused.",
+   "variant": "both",
+   "id": "testing/p006",
+   "captions": [],
+   "item_label": "\\paragraph{Model integrity.}"
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\paragraph{Training--runtime parity.} ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "The features are computed twice, by the Python trainer and by the Rust runtime. Four shared fixture files hold reference cases for the pulse features, the motion features, the CNN input and the detection rule. Both implementations are tested against the same fixtures, so a change on one side that is not made on the other fails the tests. This is what allows a model trained in Python to be trusted when it runs in Rust.",
+   "variant": "both",
+   "id": "testing/p007",
+   "captions": [],
+   "item_label": "\\paragraph{Training--runtime parity.}"
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\paragraph{Transport and protocol.} ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "The watch-bridge and watch tests cover message framing and reassembly over Bluetooth, sequence handling, device identity, the default transport choice and the watch's sensor-clock rebasing.",
+   "variant": "both",
+   "id": "testing/p008",
+   "captions": [],
+   "item_label": "\\paragraph{Transport and protocol.}"
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\paragraph{Label handling.} ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "The trainer tests confirm that a non-empty \\texttt{manual\\_label} overrides the original label, that a blank one keeps it and that \\texttt{-} removes it.",
+   "variant": "both",
+   "id": "testing/p009",
+   "captions": [],
+   "item_label": "\\paragraph{Label handling.}"
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\subsection{Continuous integration}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Two GitHub Actions workflows run on every change. They check Rust formatting, run Clippy with warnings treated as errors, and run the full Rust test suite on Ubuntu, macOS 14 and Windows Server 2022. They also run the front-end tests, type checks and production build, the native head-tracking tests on macOS and Windows, and a package build for each platform. The Python trainer tests and the watch unit tests are not yet part of continuous integration and are run by hand.",
+   "variant": "both",
+   "id": "testing/p010",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\subsection{Limits of the automated tests}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "The automated tests run without physical devices. They show that the code behaves as intended on the inputs they supply; they do not show that the system works with a real watch, real headphones or every operating system's volume control. A successful package build in CI is evidence that the application builds, not that it installs and runs on a clean machine. Testing with real hardware was done by hand during development: recording sessions with the watch and headphones, the Bluetooth load measurements in Chapter~\\ref{ch:implementation}, and the detection results reported earlier in this chapter. A structured hardware test against the project's release checklist is still to be done. \\todo{add any manual hardware test results you want to report, e.g. a short table of scenarios tried and outcomes.}",
+   "variant": "both",
+   "id": "testing/p011",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  }
+ ]
+}

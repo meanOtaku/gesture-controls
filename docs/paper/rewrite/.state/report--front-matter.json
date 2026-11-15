@@ -1,0 +1,574 @@
+{
+ "source": "report/front-matter.tex",
+ "tex": "% Report-only: title page, declaration, acknowledgements, abstract, lists.\n% If your institution prescribes an order or wording, follow it and adjust here.\n\n% ---------------------------------------------------------------- Title page\n% Layout follows the mid-term dissertation progress report.\n\\newcommand{\\institute}{Maulana Azad National Institute of Technology, Bhopal}\n\\newcommand{\\department}{Department of Mechanical Engineering}\n\\newcommand{\\degree}{Master of Technology in Robotics and Automation}\n\\newcommand{\\scholarNo}{25216061107}\n\\newcommand{\\supervisorA}{Dr.\\ Vijay Bhaskar Semwal}\n\\newcommand{\\supervisorB}{Dr.\\ Jitendra Adhikari}\n\\newcommand{\\submissionDate}{\\todo{month year}}\n\n\\begin{titlepage}\n\\centering\n\\definecolor{manitblue}{RGB}{31,56,100}\n{\\normalsize\\bfseries\\color{manitblue} \\MakeUppercase{\\institute}\\par}\n\\vspace{0.2cm}\n{\\normalsize \\department{} --- M.Tech (Robotics and Automation)\\par}\n\\vspace{1.2cm}\n\\includegraphics[width=3.2cm]{figures/manit-logo.jpg}\\par\n\\vspace{1.2cm}\n{\\Large\\bfseries\\color{manitblue} M.TECH DISSERTATION REPORT\\par}\n\\vspace{1.2cm}\n{\\Large\\bfseries\\itshape\\color{manitblue} \\reportTitle\\par}\n\\vspace{1.2cm}\n{\\normalsize Submitted in partial fulfilment of the requirements for the award of the degree of\\par}\n{\\normalsize\\bfseries \\degree\\par}\n\\vspace{1.2cm}\n\\renewcommand{\\arraystretch}{1.5}\n\\begin{tabular}{|p{4cm}|p{6.5cm}|}\n\\hline\n\\textbf{Submitted by:} & \\authorName \\\\ \\hline\n\\textbf{Scholar No.:} & \\scholarNo \\\\ \\hline\n\\textbf{Supervisors:} & \\supervisorA{} \\newline \\supervisorB \\\\ \\hline\n\\end{tabular}\n\\vfill\n{\\normalsize \\submissionDate\\par}\n\\end{titlepage}\n\n% ---------------------------------------------------------------- Certificate\n\\chapter*{Certificate}\n\\addcontentsline{toc}{chapter}{Certificate}\n\nThis is to certify that the dissertation entitled ``\\reportTitle'', submitted by \\authorName{} (Scholar No.\\ \\scholarNo) in partial fulfilment of the requirements for the award of the degree of \\degree{}, \\department, \\institute, is a record of the candidate's own work, carried out under our supervision.\n\\todo{replace with MANIT's prescribed certificate wording if there is one}\n\n\\vspace{3cm}\n\\noindent\n\\begin{minipage}[t]{0.45\\linewidth}\n\\supervisorA\\\\\nSupervisor\\\\\n\\department\\\\\nMANIT Bhopal\n\\end{minipage}\\hfill\n\\begin{minipage}[t]{0.45\\linewidth}\n\\supervisorB\\\\\nSupervisor\\\\\n\\department\\\\\nMANIT Bhopal\n\\end{minipage}\n\n% ---------------------------------------------------------------- Declaration\n\\chapter*{Declaration}\n\\addcontentsline{toc}{chapter}{Declaration}\n\nI hereby declare that the work presented in this dissertation, entitled ``\\reportTitle'', submitted in partial fulfilment of the requirements for the award of the degree of \\degree{} in the \\department, \\institute, is my own work, carried out under the supervision of \\supervisorA{} and \\supervisorB.\n\nWhere I have used the work of others, it is acknowledged and cited. The system described was designed and built by me, and all recordings were made by me as the only participant. Claude (Anthropic) and ChatGPT (OpenAI) were used to assist with research, coding, and drafting and editing this report; they did not generate any measurements or data. The design, results and conclusions are my own, and I take full responsibility for them. This work has not been submitted, in part or in full, for any other degree or diploma.\n\n\\vspace{2.5cm}\n\\noindent\\authorName\\\\\nScholar No.\\ \\scholarNo\\\\\nDate: \\todo{date}\\\\\nPlace: Bhopal\n\n% ---------------------------------------------------------------- Acknowledgements\n\\chapter*{Acknowledgements}\n\\addcontentsline{toc}{chapter}{Acknowledgements}\n\nI am deeply grateful to my supervisor, \\supervisorA, who inspired this project and set its direction. Dr.\\ Semwal's guidance and encouragement kept the work moving through every stage, from the first prototype to this report.\n\nI also thank my supervisor \\supervisorB{} for the support and advice given throughout the project, and the faculty and staff of the \\department{} at MANIT Bhopal for the facilities and help they provided.\n\nThis project builds on open-source work, and I thank the developers of sony-head-tracker, MediaPipe, Tauri, btleplug, PyTorch and scikit-learn for making their tools freely available.\n\nFinally, I thank my family and friends for their patience and support throughout.\n\n\\vspace{1.5cm}\n\\noindent\\authorName\n\n% ---------------------------------------------------------------- Abstract\n\\chapter*{Abstract}\n\\addcontentsline{toc}{chapter}{Abstract}\n\\input{abstract}\n\n\\vspace{1em}\n\\noindent\\textbf{Keywords:} smartwatch, photoplethysmography, inertial sensing, head-directed selection, pinch gestures, continuous gesture detection, augmented reality, virtual reality.\n\n% ---------------------------------------------------------------- Lists\n\\tableofcontents\n\\listoffigures\n\\listoftables\n\n% ---------------------------------------------------------------- Abbreviations\n\\chapter*{List of Abbreviations}\n\\addcontentsline{toc}{chapter}{List of Abbreviations}\n\n\\begin{tabular}{@{}ll@{}}\nAR/VR & Augmented reality / virtual reality \\\\\nAUC & Area under the (receiver-operating-characteristic) curve \\\\\nBLE & Bluetooth Low Energy \\\\\nCI & Continuous integration \\\\\nCNN & Convolutional neural network \\\\\nFAR & False-activation rate (false events per hour of no-gesture time) \\\\\nGATT & Generic Attribute Profile (Bluetooth) \\\\\nIMU & Inertial measurement unit (accelerometer and gyroscope) \\\\\nIQR & Interquartile range \\\\\nMAD & Median absolute deviation \\\\\nmDNS & Multicast DNS \\\\\nMTU & Maximum transmission unit \\\\\nPPG & Photoplethysmography \\\\\nROC & Receiver operating characteristic \\\\\nSDK & Software development kit \\\\\nSHA-256 & Secure Hash Algorithm, 256-bit \\\\\n\\end{tabular}\n",
+ "segments": [
+  {
+   "kind": "kept",
+   "latex": "% Report-only: title page, declaration, acknowledgements, abstract, lists.",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "% If your institution prescribes an order or wording, follow it and adjust here.",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "% ---------------------------------------------------------------- Title page",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "% Layout follows the mid-term dissertation progress report.",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\newcommand{\\institute}{Maulana Azad National Institute of Technology, Bhopal}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\newcommand{\\department}{Department of Mechanical Engineering}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\newcommand{\\degree}{Master of Technology in Robotics and Automation}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\newcommand{\\scholarNo}{25216061107}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\newcommand{\\supervisorA}{Dr.\\ Vijay Bhaskar Semwal}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\newcommand{\\supervisorB}{Dr.\\ Jitendra Adhikari}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\newcommand{\\submissionDate}{\\todo{month year}}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\begin{titlepage}\n\\centering\n\\definecolor{manitblue}{RGB}{31,56,100}\n{\\normalsize\\bfseries\\color{manitblue} \\MakeUppercase{\\institute}\\par}\n\\vspace{0.2cm}\n{\\normalsize \\department{} --- M.Tech (Robotics and Automation)\\par}\n\\vspace{1.2cm}\n\\includegraphics[width=3.2cm]{figures/manit-logo.jpg}\\par\n\\vspace{1.2cm}\n{\\Large\\bfseries\\color{manitblue} M.TECH DISSERTATION REPORT\\par}\n\\vspace{1.2cm}\n{\\Large\\bfseries\\itshape\\color{manitblue} \\reportTitle\\par}\n\\vspace{1.2cm}\n{\\normalsize Submitted in partial fulfilment of the requirements for the award of the degree of\\par}\n{\\normalsize\\bfseries \\degree\\par}\n\\vspace{1.2cm}\n\\renewcommand{\\arraystretch}{1.5}\n\\begin{tabular}{|p{4cm}|p{6.5cm}|}\n\\hline\n\\textbf{Submitted by:} & \\authorName \\\\ \\hline\n\\textbf{Scholar No.:} & \\scholarNo \\\\ \\hline\n\\textbf{Supervisors:} & \\supervisorA{} \\newline \\supervisorB \\\\ \\hline\n\\end{tabular}\n\\vfill\n{\\normalsize \\submissionDate\\par}\n\\end{titlepage}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "% ---------------------------------------------------------------- Certificate",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\chapter*{Certificate}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\addcontentsline{toc}{chapter}{Certificate}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "This is to certify that the dissertation entitled ``\\reportTitle'', submitted by \\authorName{} (Scholar No.\\ \\scholarNo) in partial fulfilment of the requirements for the award of the degree of \\degree{}, \\department, \\institute, is a record of the candidate's own work, carried out under our supervision.\n\\todo{replace with MANIT's prescribed certificate wording if there is one}",
+   "variant": "both",
+   "id": "front-matter/p001",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\vspace{3cm}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "\\noindent",
+   "variant": "both",
+   "id": "front-matter/p002",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\begin{minipage}[t]{0.45\\linewidth}\n\\supervisorA\\\\\nSupervisor\\\\\n\\department\\\\\nMANIT Bhopal\n\\end{minipage}\\hfill",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\begin{minipage}[t]{0.45\\linewidth}\n\\supervisorB\\\\\nSupervisor\\\\\n\\department\\\\\nMANIT Bhopal\n\\end{minipage}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "% ---------------------------------------------------------------- Declaration",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\chapter*{Declaration}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\addcontentsline{toc}{chapter}{Declaration}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "I hereby declare that the work presented in this dissertation, entitled ``\\reportTitle'', submitted in partial fulfilment of the requirements for the award of the degree of \\degree{} in the \\department, \\institute, is my own work, carried out under the supervision of \\supervisorA{} and \\supervisorB.",
+   "variant": "both",
+   "id": "front-matter/p003",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Where I have used the work of others, it is acknowledged and cited. The system described was designed and built by me, and all recordings were made by me as the only participant. Claude (Anthropic) and ChatGPT (OpenAI) were used to assist with research, coding, and drafting and editing this report; they did not generate any measurements or data. The design, results and conclusions are my own, and I take full responsibility for them. This work has not been submitted, in part or in full, for any other degree or diploma.",
+   "variant": "both",
+   "id": "front-matter/p004",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\vspace{2.5cm}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "\\noindent\\authorName\\\\\nScholar No.\\ \\scholarNo\\\\\nDate: \\todo{date}\\\\\nPlace: Bhopal",
+   "variant": "both",
+   "id": "front-matter/p005",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "% ---------------------------------------------------------------- Acknowledgements",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\chapter*{Acknowledgements}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\addcontentsline{toc}{chapter}{Acknowledgements}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "I am deeply grateful to my supervisor, \\supervisorA, who inspired this project and set its direction. Dr.\\ Semwal's guidance and encouragement kept the work moving through every stage, from the first prototype to this report.",
+   "variant": "both",
+   "id": "front-matter/p006",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "I also thank my supervisor \\supervisorB{} for the support and advice given throughout the project, and the faculty and staff of the \\department{} at MANIT Bhopal for the facilities and help they provided.",
+   "variant": "both",
+   "id": "front-matter/p007",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "This project builds on open-source work, and I thank the developers of sony-head-tracker, MediaPipe, Tauri, btleplug, PyTorch and scikit-learn for making their tools freely available.",
+   "variant": "both",
+   "id": "front-matter/p008",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Finally, I thank my family and friends for their patience and support throughout.",
+   "variant": "both",
+   "id": "front-matter/p009",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\vspace{1.5cm}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "\\noindent\\authorName",
+   "variant": "both",
+   "id": "front-matter/p010",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "% ---------------------------------------------------------------- Abstract",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\chapter*{Abstract}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\addcontentsline{toc}{chapter}{Abstract}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\input{abstract}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\vspace{1em}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "\\noindent\\textbf{Keywords:} smartwatch, photoplethysmography, inertial sensing, head-directed selection, pinch gestures, continuous gesture detection, augmented reality, virtual reality.",
+   "variant": "both",
+   "id": "front-matter/p011",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "% ---------------------------------------------------------------- Lists",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\tableofcontents",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\listoffigures",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\listoftables",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "% ---------------------------------------------------------------- Abbreviations",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\chapter*{List of Abbreviations}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\addcontentsline{toc}{chapter}{List of Abbreviations}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\begin{tabular}{@{}ll@{}}\nAR/VR & Augmented reality / virtual reality \\\\\nAUC & Area under the (receiver-operating-characteristic) curve \\\\\nBLE & Bluetooth Low Energy \\\\\nCI & Continuous integration \\\\\nCNN & Convolutional neural network \\\\\nFAR & False-activation rate (false events per hour of no-gesture time) \\\\\nGATT & Generic Attribute Profile (Bluetooth) \\\\\nIMU & Inertial measurement unit (accelerometer and gyroscope) \\\\\nIQR & Interquartile range \\\\\nMAD & Median absolute deviation \\\\\nmDNS & Multicast DNS \\\\\nMTU & Maximum transmission unit \\\\\nPPG & Photoplethysmography \\\\\nROC & Receiver operating characteristic \\\\\nSDK & Software development kit \\\\\nSHA-256 & Secure Hash Algorithm, 256-bit \\\\\n\\end{tabular}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  }
+ ]
+}

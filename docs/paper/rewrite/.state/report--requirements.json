@@ -1,0 +1,530 @@
+{
+ "source": "report/requirements.tex",
+ "tex": "% Report-only chapter: requirements and hardware/software platform.\n% Sources: docs/architecture/project-brief.md, components-and-deployment.md,\n% safety-and-fail-closed-behavior.md, crates/interaction-engine defaults.\n\\chapter{Requirements and Platform}\\label{ch:requirements}\n\nThis chapter sets out what the system has to do, the constraints it has to respect, and the hardware and software it runs on. The requirements come from the project brief written at the start of the work and were refined as the prototype developed.\n\n\\section{Functional Requirements}\n\n\\begin{description}\n\\item[FR1 Head-directed targeting.] The system shall map head orientation to on-screen targets. The user calibrates by facing the screen centre and then the volume target, and each target is stored as a quaternion. At run time the nearest target is found by quaternion angular distance, $2\\arccos(|\\langle q, q_t\\rangle|)$, rather than fixed yaw and pitch limits. A target becomes active when the head stays within 12° of it for 400\\,ms; both values are configurable.\n\\item[FR2 Pinch detection.] The system shall detect the start of a pinch (pinch-in) and its release (pinch-out) from smartwatch PPG and inertial signals, as separate events.\n\\item[FR3 Grab and release.] A pinch-in while the volume target is active shall start a grab; a pinch-out, or any cancellation condition, shall end it.\n\\item[FR4 Wrist-rotation control.] During a grab, wrist roll relative to the angle at grab time shall set the system volume.\n\\item[FR5 Operating modes.] The user shall be able to switch between Off (no inference), Monitor (inference and feedback without any effect on the system) and Live (inference that can change the volume).\n\\item[FR6 Recording.] The system shall record synchronised watch, head-tracker and optional camera data as immutable recording bundles.\n\\item[FR7 Labelling.] The user shall be able to label recordings by hand, or from camera hand landmarks, while keeping the original labels.\n\\item[FR8 Training and model management.] The user shall be able to train per-label models from recordings, inspect their evaluation, and activate, monitor or roll back a model.\n\\item[FR9 Watch transport.] The watch shall connect over Bluetooth Low Energy by default, with Wi-Fi as an alternative selectable on both sides.\n\\end{description}\n\n\\section{Non-functional Requirements}\n\n\\begin{description}\n\\item[NFR1 Fail closed.] Any stage that rejects input (out-of-order data, poor signal quality, stale orientation, an unloadable model, a non-probability output) shall end an open grab rather than let it continue. A held grab whose model data have been silent for 750\\,ms shall be released.\n\\item[NFR2 No surprise actuation.] The system shall never start in Live mode: a saved Live setting is lowered to Monitor at startup.\n\\item[NFR3 Bounded output.] Volume shall change only through the interaction policy, within its valid range and at a bounded rate.\n\\item[NFR4 Responsiveness.] A pinch should be recognised within roughly half a second, and volume changes should follow the wrist smoothly.\n\\item[NFR5 Low false activation.] The detector should rarely fire during ordinary activity such as typing or using a mouse.\n\\item[NFR6 Local processing and privacy.] All processing shall run on the user's own computer. Camera frames are never stored, only hand landmarks, and nothing is sent over the network.\n\\item[NFR7 Integrity.] A model shall be loaded only if its file matches the hash in its manifest and its declared input contract matches the runtime's.\n\\item[NFR8 Watch battery.] The watch app should release its sensors and wake lock whenever no desktop is receiving data.\n\\item[NFR9 Portability.] The desktop application should run on macOS and Windows, with Linux supported for development.\n\\end{description}\n\n\\section{Hardware}\n\n\\begin{table}[htbp]\n\\centering\n\\caption{Hardware used in the prototype.}\\label{tab:hardware}\n\\begin{tabularx}{\\linewidth}{@{}l>{\\raggedright\\arraybackslash}X@{}}\n\\toprule\n\\textbf{Device} & \\textbf{Role and sensors} \\\\\n\\midrule\nSamsung Galaxy Watch4 & Raw green, red and infrared PPG through the Samsung Health Sensor SDK; accelerometer, gyroscope and rotation vector through Android's sensor API. Wear OS 3 or later. The public motion sensors run at up to 100\\,Hz. \\\\\nSony WH-1000XM5 headphones & Head orientation from the headphones' built-in motion sensors, read through the open-source sony-head-tracker interface. \\\\\nApple MacBook Air (M3, 16\\,GB RAM, macOS 26) & Runs the desktop application: transport, inference, interaction policy and volume control. Its built-in camera captures reference hand landmarks during recording. \\\\\n\\bottomrule\n\\end{tabularx}\n\\end{table}\n\nBoth wearables act only as sensors. Nothing is trained or inferred on the watch or the headphones, which keeps the watch app simple and lets models be changed without reinstalling it.\n\n\\section{Software Stack}\n\n\\begin{table}[htbp]\n\\centering\n\\caption{Main software components and the technologies they use.}\\label{tab:stack}\n\\begin{tabularx}{\\linewidth}{@{}l>{\\raggedright\\arraybackslash}X@{}}\n\\toprule\n\\textbf{Component} & \\textbf{Technology} \\\\\n\\midrule\nDesktop application & Tauri 2 with a Rust backend and a React/TypeScript front end built with Vite \\\\\nRust crates & Head tracking, watch transport (btleplug for Bluetooth, Axum for the WebSocket server), feature extraction and inference, interaction engine, native volume control \\\\\nWatch application & Kotlin on Wear OS, built with Gradle; OkHttp for the WebSocket transport \\\\\nModel training & Python 3.11 with scikit-learn (ExtraTrees) and PyTorch (CNN), run through \\texttt{uv} \\\\\nCamera landmarks & MediaPipe Hand Landmarker running inside the application's web view \\\\\n\\bottomrule\n\\end{tabularx}\n\\end{table}\n\nThe desktop application targets macOS 14 or later and Windows 11 (x64), with Linux used for development. The watch application requires Wear OS 3 (API level 30) or later, and a Galaxy Watch4 or newer for raw PPG.\n",
+ "segments": [
+  {
+   "kind": "kept",
+   "latex": "% Report-only chapter: requirements and hardware/software platform.",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "% Sources: docs/architecture/project-brief.md, components-and-deployment.md,",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "% safety-and-fail-closed-behavior.md, crates/interaction-engine defaults.",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\chapter{Requirements and Platform}\\label{ch:requirements}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "This chapter sets out what the system has to do, the constraints it has to respect, and the hardware and software it runs on. The requirements come from the project brief written at the start of the work and were refined as the prototype developed.",
+   "variant": "both",
+   "id": "requirements/p001",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\section{Functional Requirements}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\begin{description}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item[FR1 Head-directed targeting.] ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "The system shall map head orientation to on-screen targets. The user calibrates by facing the screen centre and then the volume target, and each target is stored as a quaternion. At run time the nearest target is found by quaternion angular distance, $2\\arccos(|\\langle q, q_t\\rangle|)$, rather than fixed yaw and pitch limits. A target becomes active when the head stays within 12° of it for 400\\,ms; both values are configurable.",
+   "variant": "both",
+   "id": "requirements/i002",
+   "captions": [],
+   "item_label": "\\item[FR1 Head-directed targeting.]"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item[FR2 Pinch detection.] ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "The system shall detect the start of a pinch (pinch-in) and its release (pinch-out) from smartwatch PPG and inertial signals, as separate events.",
+   "variant": "both",
+   "id": "requirements/i003",
+   "captions": [],
+   "item_label": "\\item[FR2 Pinch detection.]"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item[FR3 Grab and release.] ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "A pinch-in while the volume target is active shall start a grab; a pinch-out, or any cancellation condition, shall end it.",
+   "variant": "both",
+   "id": "requirements/i004",
+   "captions": [],
+   "item_label": "\\item[FR3 Grab and release.]"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item[FR4 Wrist-rotation control.] ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "During a grab, wrist roll relative to the angle at grab time shall set the system volume.",
+   "variant": "both",
+   "id": "requirements/i005",
+   "captions": [],
+   "item_label": "\\item[FR4 Wrist-rotation control.]"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item[FR5 Operating modes.] ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "The user shall be able to switch between Off (no inference), Monitor (inference and feedback without any effect on the system) and Live (inference that can change the volume).",
+   "variant": "both",
+   "id": "requirements/i006",
+   "captions": [],
+   "item_label": "\\item[FR5 Operating modes.]"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item[FR6 Recording.] ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "The system shall record synchronised watch, head-tracker and optional camera data as immutable recording bundles.",
+   "variant": "both",
+   "id": "requirements/i007",
+   "captions": [],
+   "item_label": "\\item[FR6 Recording.]"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item[FR7 Labelling.] ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "The user shall be able to label recordings by hand, or from camera hand landmarks, while keeping the original labels.",
+   "variant": "both",
+   "id": "requirements/i008",
+   "captions": [],
+   "item_label": "\\item[FR7 Labelling.]"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item[FR8 Training and model management.] ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "The user shall be able to train per-label models from recordings, inspect their evaluation, and activate, monitor or roll back a model.",
+   "variant": "both",
+   "id": "requirements/i009",
+   "captions": [],
+   "item_label": "\\item[FR8 Training and model management.]"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item[FR9 Watch transport.] ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "The watch shall connect over Bluetooth Low Energy by default, with Wi-Fi as an alternative selectable on both sides.",
+   "variant": "both",
+   "id": "requirements/i010",
+   "captions": [],
+   "item_label": "\\item[FR9 Watch transport.]"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\end{description}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\section{Non-functional Requirements}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\begin{description}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item[NFR1 Fail closed.] ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "Any stage that rejects input (out-of-order data, poor signal quality, stale orientation, an unloadable model, a non-probability output) shall end an open grab rather than let it continue. A held grab whose model data have been silent for 750\\,ms shall be released.",
+   "variant": "both",
+   "id": "requirements/i011",
+   "captions": [],
+   "item_label": "\\item[NFR1 Fail closed.]"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item[NFR2 No surprise actuation.] ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "The system shall never start in Live mode: a saved Live setting is lowered to Monitor at startup.",
+   "variant": "both",
+   "id": "requirements/i012",
+   "captions": [],
+   "item_label": "\\item[NFR2 No surprise actuation.]"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item[NFR3 Bounded output.] ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "Volume shall change only through the interaction policy, within its valid range and at a bounded rate.",
+   "variant": "both",
+   "id": "requirements/i013",
+   "captions": [],
+   "item_label": "\\item[NFR3 Bounded output.]"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item[NFR4 Responsiveness.] ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "A pinch should be recognised within roughly half a second, and volume changes should follow the wrist smoothly.",
+   "variant": "both",
+   "id": "requirements/i014",
+   "captions": [],
+   "item_label": "\\item[NFR4 Responsiveness.]"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item[NFR5 Low false activation.] ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "The detector should rarely fire during ordinary activity such as typing or using a mouse.",
+   "variant": "both",
+   "id": "requirements/i015",
+   "captions": [],
+   "item_label": "\\item[NFR5 Low false activation.]"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item[NFR6 Local processing and privacy.] ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "All processing shall run on the user's own computer. Camera frames are never stored, only hand landmarks, and nothing is sent over the network.",
+   "variant": "both",
+   "id": "requirements/i016",
+   "captions": [],
+   "item_label": "\\item[NFR6 Local processing and privacy.]"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item[NFR7 Integrity.] ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "A model shall be loaded only if its file matches the hash in its manifest and its declared input contract matches the runtime's.",
+   "variant": "both",
+   "id": "requirements/i017",
+   "captions": [],
+   "item_label": "\\item[NFR7 Integrity.]"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item[NFR8 Watch battery.] ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "The watch app should release its sensors and wake lock whenever no desktop is receiving data.",
+   "variant": "both",
+   "id": "requirements/i018",
+   "captions": [],
+   "item_label": "\\item[NFR8 Watch battery.]"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\item[NFR9 Portability.] ",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "item",
+   "latex": "The desktop application should run on macOS and Windows, with Linux supported for development.",
+   "variant": "both",
+   "id": "requirements/i019",
+   "captions": [],
+   "item_label": "\\item[NFR9 Portability.]"
+  },
+  {
+   "kind": "kept",
+   "latex": "\\end{description}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\section{Hardware}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "env",
+   "latex": "\\begin{table}[htbp]\n\\centering\n\\caption{Hardware used in the prototype.}\\label{tab:hardware}\n\\begin{tabularx}{\\linewidth}{@{}l>{\\raggedright\\arraybackslash}X@{}}\n\\toprule\n\\textbf{Device} & \\textbf{Role and sensors} \\\\\n\\midrule\nSamsung Galaxy Watch4 & Raw green, red and infrared PPG through the Samsung Health Sensor SDK; accelerometer, gyroscope and rotation vector through Android's sensor API. Wear OS 3 or later. The public motion sensors run at up to 100\\,Hz. \\\\\nSony WH-1000XM5 headphones & Head orientation from the headphones' built-in motion sensors, read through the open-source sony-head-tracker interface. \\\\\nApple MacBook Air (M3, 16\\,GB RAM, macOS 26) & Runs the desktop application: transport, inference, interaction policy and volume control. Its built-in camera captures reference hand landmarks during recording. \\\\\n\\bottomrule\n\\end{tabularx}\n\\end{table}",
+   "variant": "both",
+   "id": "",
+   "captions": [
+    "requirements/c020"
+   ],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "Both wearables act only as sensors. Nothing is trained or inferred on the watch or the headphones, which keeps the watch app simple and lets models be changed without reinstalling it.",
+   "variant": "both",
+   "id": "requirements/p021",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "\\section{Software Stack}",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "env",
+   "latex": "\\begin{table}[htbp]\n\\centering\n\\caption{Main software components and the technologies they use.}\\label{tab:stack}\n\\begin{tabularx}{\\linewidth}{@{}l>{\\raggedright\\arraybackslash}X@{}}\n\\toprule\n\\textbf{Component} & \\textbf{Technology} \\\\\n\\midrule\nDesktop application & Tauri 2 with a Rust backend and a React/TypeScript front end built with Vite \\\\\nRust crates & Head tracking, watch transport (btleplug for Bluetooth, Axum for the WebSocket server), feature extraction and inference, interaction engine, native volume control \\\\\nWatch application & Kotlin on Wear OS, built with Gradle; OkHttp for the WebSocket transport \\\\\nModel training & Python 3.11 with scikit-learn (ExtraTrees) and PyTorch (CNN), run through \\texttt{uv} \\\\\nCamera landmarks & MediaPipe Hand Landmarker running inside the application's web view \\\\\n\\bottomrule\n\\end{tabularx}\n\\end{table}",
+   "variant": "both",
+   "id": "",
+   "captions": [
+    "requirements/c022"
+   ],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "prose",
+   "latex": "The desktop application targets macOS 14 or later and Windows 11 (x64), with Linux used for development. The watch application requires Wear OS 3 (API level 30) or later, and a Galaxy Watch4 or newer for raw PPG.",
+   "variant": "both",
+   "id": "requirements/p023",
+   "captions": [],
+   "item_label": ""
+  },
+  {
+   "kind": "kept",
+   "latex": "",
+   "variant": "both",
+   "id": "",
+   "captions": [],
+   "item_label": ""
+  }
+ ]
+}
