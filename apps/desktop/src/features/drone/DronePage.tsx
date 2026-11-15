@@ -360,20 +360,27 @@ export function DronePage() {
             ? <Button variant="outline" onClick={() => run("drone_disconnect")}>Disconnect</Button>
             : <Button disabled={!state} onClick={() => run("drone_connect")}>Connect</Button>}
           {state && (
-            <p className="subtitle">
-              {state.firmware && <>Firmware {state.firmware}. </>}Video <AnimatedText>{String(frameRate ?? "–")}</AnimatedText> frames a second, total {<AnimatedNumber value={state.videoFrames} />}, skipped {<AnimatedNumber value={state.videoSkipped} />}, damaged {<AnimatedNumber value={state.videoDamaged} />}, restarts {<AnimatedNumber value={state.videoRestarts} />}, repeats {<AnimatedNumber value={state.videoRepeats} />}, unknown packets {<AnimatedNumber value={state.unknownPackets} />}, commands sent {<AnimatedNumber value={state.framesSent} />}, send errors {<AnimatedNumber value={state.sendErrors} />}, watch {state.watchStreaming ? "streaming" : "not streaming"}
-            </p>
-          )}
-          {state?.report && (
-            <p className="subtitle" role="status" aria-label="Drone report">
-              The drone reports fly state {<AnimatedNumber value={state.report.flyState} />}, battery {<AnimatedNumber value={state.report.battery} />} (raw, scale not yet known), speed {<AnimatedNumber value={state.report.speed} />}{state.report.headless ? ", headless on" : ""}{state.report.light ? ", light on" : ""}. {<AnimatedNumber value={state.statusMessages} />} {state.statusMessages === 1 ? "report" : "reports"} so far.
-            </p>
-          )}
-          {state && state.unknownPackets > 0 && (
-            <p className="subtitle" role="status">
-              The drone sent {<AnimatedNumber value={state.unknownPackets} />} {state.unknownPackets === 1 ? "packet" : "packets"} the app does not understand, possibly status or sensor data.
-              {state.unknownPacketsFile ? <> The first 200 are saved in {state.unknownPacketsFile}.</> : null}
-            </p>
+            <details className="inline-menu basis-full">
+              <summary>Link details{state.unknownPackets > 0 ? " (unknown packets)" : ""}</summary>
+              <div className="inline-menu-body flex-col items-start">
+              {state && (
+                <p className="subtitle">
+                  {state.firmware && <>Firmware {state.firmware}. </>}Video <AnimatedText>{String(frameRate ?? "–")}</AnimatedText> frames a second, total {<AnimatedNumber value={state.videoFrames} />}, skipped {<AnimatedNumber value={state.videoSkipped} />}, damaged {<AnimatedNumber value={state.videoDamaged} />}, restarts {<AnimatedNumber value={state.videoRestarts} />}, repeats {<AnimatedNumber value={state.videoRepeats} />}, unknown packets {<AnimatedNumber value={state.unknownPackets} />}, commands sent {<AnimatedNumber value={state.framesSent} />}, send errors {<AnimatedNumber value={state.sendErrors} />}, watch {state.watchStreaming ? "streaming" : "not streaming"}
+                </p>
+              )}
+              {state?.report && (
+                <p className="subtitle" role="status" aria-label="Drone report">
+                  The drone reports fly state {<AnimatedNumber value={state.report.flyState} />}, battery {<AnimatedNumber value={state.report.battery} />} (raw, scale not yet known), speed {<AnimatedNumber value={state.report.speed} />}{state.report.headless ? ", headless on" : ""}{state.report.light ? ", light on" : ""}. {<AnimatedNumber value={state.statusMessages} />} {state.statusMessages === 1 ? "report" : "reports"} so far.
+                </p>
+              )}
+              {state && state.unknownPackets > 0 && (
+                <p className="subtitle" role="status">
+                  The drone sent {<AnimatedNumber value={state.unknownPackets} />} {state.unknownPackets === 1 ? "packet" : "packets"} the app does not understand, possibly status or sensor data.
+                  {state.unknownPacketsFile ? <> The first 200 are saved in {state.unknownPacketsFile}.</> : null}
+                </p>
+              )}
+              </div>
+            </details>
           )}
         </CardContent>
       </Card>
@@ -441,54 +448,65 @@ export function DronePage() {
           <Button variant="destructive" disabled={!linked} onClick={() => run("drone_stop")}>Stop</Button>
           {state?.flightLog && <p className="subtitle">Recording this flight to {state.flightLog}</p>}
         </CardContent>
-        <CardContent className="flex flex-col gap-2" role="group" aria-label="Headless and return">
-          <label>
-            <input type="checkbox" checked={state?.headless ?? false} disabled={!connected} onChange={() => runMode("drone_set_headless", !state?.headless)} /> Headless mode
-          </label>
-          <p className="subtitle">In headless mode the drone steers by the direction it faced when the mode began, not by where its nose points, so point it away from you first. Sent only while armed; Stop turns it off.</p>
-          <div className="flex flex-wrap items-center gap-2">
-            {state?.returning
-              ? <Button variant="outline" onClick={() => runMode("drone_set_return", false)}>Cancel return</Button>
-              : confirmingReturn
-                ? <>
-                    <Button variant="destructive" onClick={() => { setConfirmingReturn(false); runMode("drone_set_return", true); }}>Confirm return</Button>
-                    <Button variant="outline" onClick={() => setConfirmingReturn(false)}>Keep flying</Button>
-                  </>
-                : <Button variant="outline" disabled={!state?.armed || !state?.tookOff} onClick={() => setConfirmingReturn(true)}>Return home</Button>}
-          </div>
-          <p className="subtitle">
-            {state?.returning
-              ? "Returning. It ends by itself after 10 seconds, or with Cancel return, Land or Stop. Hold is off while it returns."
-              : "The drone's advertised one-key return has never been tried from this app. With no GPS it can only fly back the way it faced at takeoff, and may not stop by itself, so use it only in open space with room behind it. It is sent for at most 10 seconds, and ends hold."}
-          </p>
-        </CardContent>
         <CardContent className="flex flex-col gap-2">
-          <p className="subtitle">Steer with these buttons or the arrow keys. Steering ends hold. Which way each goes has not been checked on this drone, so nudge gently first and reverse it if needed.</p>
+          <p className="subtitle">Steer with these buttons or the arrow keys; steering ends hold. Nudge gently first: the directions are unchecked on this drone (reverse them under Flight options).</p>
           <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Steering">
             {holdButton("Left", "aileron", -NUDGE)}
             {holdButton("Forward", "elevator", NUDGE)}
             {holdButton("Back", "elevator", -NUDGE)}
             {holdButton("Right", "aileron", NUDGE)}
           </div>
-          <div className="flex flex-wrap items-center gap-4">
-            <label><input type="checkbox" checked={reverse.aileron} onChange={() => flip("aileron")} /> Reverse left and right</label>
-            <label><input type="checkbox" checked={reverse.elevator} onChange={() => flip("elevator")} /> Reverse forward and back</label>
-          </div>
         </CardContent>
-        <CardContent className="flex flex-col gap-2">
-          <p className="subtitle">Trim cancels a drift the drone always has, so its own stabilising has less to fight. If it always slides one way after takeoff, nudge that axis the other way a step at a time. Trim is remembered, and works with hold and steering.</p>
-          {trimRow("Sideways", "aileron", "left", "right")}
-          {trimRow("Forward", "elevator", "back", "forward")}
-          {trimRow("Turning", "rudder", "left", "right")}
-          <div><Button variant="outline" onClick={resetTrim}>Reset trim</Button></div>
-        </CardContent>
-        <CardContent className="flex flex-col gap-2">
-          <label><input type="checkbox" checked={autoHold} onChange={toggleAutoHold} /> Hold position after takeoff</label>
-          <p className="subtitle">
-            {state?.hasHoldCalibration
-              ? "Three seconds after Take off, once the drone has finished its own climb, the app holds that spot using the saved measurement, with no test pushes."
-              : "Needs one measurement first: take off in an open space and choose Hold position once. Its result is saved for later flights."}
-          </p>
+        <CardContent>
+          {/* Folded, but always drawn: trim, reversal and hold-after-takeoff apply whether it is open or not. */}
+          <details className="advanced-section">
+            <summary>
+              <span className="advanced-title">Flight options</span>
+              <span className="advanced-summary">Headless mode, return home, reversing the steering, trim, and holding after takeoff</span>
+            </summary>
+            <div className="flex flex-col gap-4 advanced-body">
+              <div className="flex flex-col gap-2" role="group" aria-label="Headless and return">
+                <label>
+                  <input type="checkbox" checked={state?.headless ?? false} disabled={!connected} onChange={() => runMode("drone_set_headless", !state?.headless)} /> Headless mode
+                </label>
+                <p className="subtitle">Steers by the direction it faced when the mode began, not by its nose: point it away from you first. Sent only while armed; Stop turns it off.</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {state?.returning
+                    ? <Button variant="outline" onClick={() => runMode("drone_set_return", false)}>Cancel return</Button>
+                    : confirmingReturn
+                      ? <>
+                          <Button variant="destructive" onClick={() => { setConfirmingReturn(false); runMode("drone_set_return", true); }}>Confirm return</Button>
+                          <Button variant="outline" onClick={() => setConfirmingReturn(false)}>Keep flying</Button>
+                        </>
+                      : <Button variant="outline" disabled={!state?.armed || !state?.tookOff} onClick={() => setConfirmingReturn(true)}>Return home</Button>}
+                </div>
+                <p className="subtitle">
+                  {state?.returning
+                    ? "Returning. It ends by itself after 10 seconds, or with Cancel return, Land or Stop. Hold is off while it returns."
+                    : "The drone's advertised one-key return has never been tried from this app. With no GPS it can only fly back the way it faced at takeoff, and may not stop by itself, so use it only in open space with room behind it. It is sent for at most 10 seconds, and ends hold."}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-4" role="group" aria-label="Reverse the steering">
+                <label><input type="checkbox" checked={reverse.aileron} onChange={() => flip("aileron")} /> Reverse left and right</label>
+                <label><input type="checkbox" checked={reverse.elevator} onChange={() => flip("elevator")} /> Reverse forward and back</label>
+              </div>
+              <div className="flex flex-col gap-2">
+                <p className="subtitle">Trim cancels a steady drift: if it always slides one way after takeoff, nudge that axis the other way a step at a time. Remembered.</p>
+                {trimRow("Sideways", "aileron", "left", "right")}
+                {trimRow("Forward", "elevator", "back", "forward")}
+                {trimRow("Turning", "rudder", "left", "right")}
+                <div><Button variant="outline" onClick={resetTrim}>Reset trim</Button></div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <label><input type="checkbox" checked={autoHold} onChange={toggleAutoHold} /> Hold position after takeoff</label>
+                <p className="subtitle">
+                  {state?.hasHoldCalibration
+                    ? "Three seconds after Take off, once the drone has finished its own climb, the app holds that spot using the saved measurement, with no test pushes."
+                    : "Needs one measurement first: take off in an open space and choose Hold position once. Its result is saved for later flights."}
+                </p>
+              </div>
+            </div>
+          </details>
         </CardContent>
       </Card>
     </main>

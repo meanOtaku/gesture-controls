@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DronePage, parseFrame, type DroneState } from "./DronePage";
 
@@ -382,5 +382,15 @@ describe("DronePage", () => {
     await act(async () => { await Promise.resolve(); });
     expect(invoke).not.toHaveBeenCalled();
     expect(button("Connect").disabled).toBe(true);
+  });
+
+  it("keeps the flying controls in view and folds the options, which still apply while folded", async () => {
+    await show({ phase: "open" });
+    const flight = within(screen.getByRole("region", { name: "Flight" }));
+    for (const name of ["Arm", "Take off", "Land", "Stop", "Left", "Forward"]) expect(flight.getByRole("button", { name })).toBeInTheDocument();
+    const options = flight.getByText("Flight options").closest("details");
+    expect(options).not.toBeNull();
+    expect(options).not.toHaveAttribute("open");
+    expect(within(options as HTMLElement).getByRole("button", { name: "Reset trim" })).toBeInTheDocument();
   });
 });
