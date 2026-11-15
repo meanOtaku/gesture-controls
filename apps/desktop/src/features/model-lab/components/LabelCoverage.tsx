@@ -15,7 +15,7 @@ import { labelIdFromName, type LabelModel } from "../labelModels";
 import type { DatasetLabel } from "../types";
 
 /** The tabs a label's uses live in. */
-export type UsageTab = "recordings" | "datasets" | "gestureLibrary" | "modelLab" | "recipes";
+export type UsageTab = "datasets" | "gestureLibrary" | "modelLab" | "recipes";
 
 export interface NewLabel {
   id: string;
@@ -267,8 +267,8 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
 
 const GROUPS: { key: "recordings" | "trainingRecordings" | "gestures" | "models" | "recipes"; title: string; tab: UsageTab; open: string }[] = [
   { key: "gestures", title: "Gesture library", tab: "gestureLibrary", open: "Open Gesture library" },
-  { key: "recordings", title: "Recorder recordings", tab: "recordings", open: "Open Recordings" },
-  { key: "trainingRecordings", title: "Datasets", tab: "datasets", open: "Open Datasets" },
+  { key: "recordings", title: "Saved sessions", tab: "datasets", open: "Look inside" },
+  { key: "trainingRecordings", title: "Recordings", tab: "datasets", open: "Open Recordings" },
   { key: "models", title: "Models", tab: "modelLab", open: "Open Model Lab" },
   { key: "recipes", title: "Recipes", tab: "recipes", open: "Open Recipes" },
 ];

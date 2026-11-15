@@ -89,7 +89,6 @@ const Dashboard = lazy(() => import("../features/dashboard/components/Dashboard"
 // registry, lifecycle controls) re-rendered 15 times a second while merely open.
 const LiveSignalsPage = memo(lazy(() => import("../features/telemetry/components/LiveSignalsPage").then((m) => ({ default: m.LiveSignalsPage }))));
 const RecorderPage = memo(lazy(() => import("../features/telemetry/components/RecorderPage").then((m) => ({ default: m.RecorderPage }))));
-const RecordingsPage = memo(lazy(() => import("../features/telemetry/components/RecordingsPage").then((m) => ({ default: m.RecordingsPage }))));
 const LabellingPage = memo(lazy(() => import("../features/labelling/LabellingPage").then((m) => ({ default: m.LabellingPage }))));
 const DatasetsPage = memo(lazy(() => import("../features/model-lab/components/DatasetsPage").then((m) => ({ default: m.DatasetsPage }))));
 const ModelLab = memo(lazy(() => import("../features/model-lab/components/ModelLab").then((m) => ({ default: m.ModelLab }))));
@@ -725,7 +724,6 @@ function MainApp() {
     )}
     {activeTab === "signals" && <LiveSignalsPage />}
     {activeTab === "recorder" && <RecorderPage />}
-    {activeTab === "recordings" && <RecordingsPage />}
     {activeTab === "datasets" && <DatasetsPage />}
     {activeTab === "labelling" && <LabellingPage />}
     {activeTab === "labels" && <LabelsPage onOpen={setActiveTab} />}

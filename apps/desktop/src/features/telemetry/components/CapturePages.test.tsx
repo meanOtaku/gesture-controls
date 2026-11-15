@@ -2,7 +2,6 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveSignalsPage } from "./LiveSignalsPage";
 import { RecorderPage } from "./RecorderPage";
-import { RecordingsPage } from "./RecordingsPage";
 import { telemetryStore } from "../store/telemetryStore";
 import { resetFeedbackForTests } from "../../../components/app/OperationFeedback";
 
@@ -39,12 +38,6 @@ describe("Live telemetry", () => {
     for (const gone of ["Timeline recorder", "Guided session", "Exports", "Signal monitor"]) {
       expect(screen.queryByRole("region", { name: gone })).not.toBeInTheDocument();
     }
-  });
-
-  it("explains that saved recordings need the desktop app, in browser preview", () => {
-    render(<RecordingsPage />);
-    expect(screen.getByRole("heading", { name: "Recordings" })).toBeInTheDocument();
-    expect(screen.getByText(/unavailable in browser preview/)).toBeInTheDocument();
   });
 
   it("shows whether the headphones and the watch are connected on the pages that need them", () => {

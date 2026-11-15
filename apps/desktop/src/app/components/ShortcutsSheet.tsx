@@ -10,7 +10,7 @@ export function shortcutGroups(mac: boolean): { title: string; keys: [string, st
     {
       title: "Anywhere",
       keys: [
-        [`${cmd}1 … ${cmd}9`, "Go to Overview, Recorder, Labelling, Model Lab, Datasets, Gestures, Recipes, Watch, Headphones"],
+        [`${cmd}1 … ${cmd}9`, "Go to Overview, Recorder, Labelling, Model Lab, Recordings, Gestures, Recipes, Watch, Headphones"],
         [`${cmd}K`, "Find a page or an action by typing"],
         [`${cmd},`, "Settings"],
         ["?", "This list"],

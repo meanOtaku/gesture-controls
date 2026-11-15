@@ -138,7 +138,7 @@ export function DetectionActivity({ desktopAvailable }: { desktopAvailable: bool
           <CameraQuickControl compact initiallyShown />
           <p className="hint">
             Turn the camera on to watch your hand beside what the models say. When they disagree with what you see, mark it:
-            the last 45 seconds are saved to Datasets under “Misses”, with the camera's view of your hand, so you can check
+            the last 45 seconds are saved to Recordings under “Misses”, with the camera's view of your hand, so you can check
             afterwards what really happened.
           </p>
           <div className="flex flex-wrap items-center gap-2" aria-live="polite">

@@ -64,7 +64,7 @@ function respond() {
 /** Opens the recording and gives the lanes a width, so dragging maps to time. */
 async function openRecording() {
   render(<LabellingPage />);
-  fireEvent.click(await screen.findByRole("combobox", { name: "Dataset" }));
+  fireEvent.click(await screen.findByRole("combobox", { name: "Recording" }));
   fireEvent.click(await screen.findByRole("option", { name: /#3 pinch session/ }));
   await screen.findByRole("list", { name: "Recorded labels" });
   const lanes = document.querySelector(".labelling-lanes") as HTMLElement;
@@ -203,7 +203,7 @@ describe("LabellingPage", () => {
     drag(lanes, 0, 400);
     fireEvent.click(screen.getByRole("button", { name: /^Nothing here/ }));
     fireEvent.click(screen.getByRole("button", { name: /Label selection: Nothing here/ }));
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save as new dataset" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save as a new recording" })));
     const saved = invoke.mock.calls.find(([command]) => command === "save_labelling_version");
     expect(saved?.[1]).toEqual({ source: { kind: "dataset", id: "d1" }, intervals: [{ startMs: 0, endMs: 400, label: "-" }] });
     await waitFor(() => expect(feedback.success).toHaveBeenCalledWith("Saved", expect.stringContaining("#4 pinch session (labelled)")));
@@ -235,7 +235,7 @@ describe("LabellingPage", () => {
     invoke.mockImplementation(async (command: string, args?: Record<string, unknown>) => (command === "list_model_datasets" ? [] : answer(command, args)));
     await act(async () => { window.dispatchEvent(new Event(RECORDINGS_CHANGED)); await Promise.resolve(); });
     await waitFor(() => expect(screen.queryByRole("button", { name: "Save to original" })).not.toBeInTheDocument());
-    expect(await screen.findByText("That recording was deleted from Datasets, so it was closed here.")).toBeInTheDocument();
+    expect(await screen.findByText("That recording was deleted from Recordings, so it was closed here.")).toBeInTheDocument();
   });
 
   it("exports to a folder chosen for that export, keeping the usual folder", async () => {

@@ -1,12 +1,17 @@
+import { AdvancedSection } from "../../../components/app/AdvancedSection";
 import { invoke } from "@tauri-apps/api/core";
 import { notifyRecordingsChanged } from "../../../shared/tauri/recordingBundle";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useCallback, useState } from "react";
+import { lazy, Suspense, useCallback, useState } from "react";
 import { feedbackWithUndo, OperationFeedback } from "../../../components/app/OperationFeedback";
 import { useModelLabData } from "../hooks/useModelLabData";
 import { recordingName } from "../recordingNames";
 import { describeGaps, type DatasetSummary } from "../types";
 import { DatasetManager } from "./DatasetManager";
+
+
+/** The session viewer is large and rarely opened, so it loads only when unfolded. */
+const SessionViewer = lazy(() => import("../../telemetry/components/SessionViewer").then((m) => ({ default: m.SessionViewer })));
 
 /**
  * Datasets: every recording the app can label, train and test on, in one library. Recorder sessions join it as they are
@@ -85,14 +90,14 @@ export function DatasetsPage() {
     <main className="shell model-lab-shell">
       <header className="hero">
         <div>
-          <h1>Datasets</h1>
+          <h1>Recordings</h1>
           <p className="subtitle">
             Every recording to label, train and test on: name, group and seal them here.
           </p>
         </div>
       </header>
-      {!desktopAvailable && <p className="hint">Datasets are kept by the desktop app, so they are unavailable in browser preview.</p>}
-      <fieldset className="lab-workspace card-stack" disabled={!desktopAvailable} aria-label="Datasets">
+      {!desktopAvailable && <p className="hint">Recordings are kept by the desktop app, so they are unavailable in browser preview.</p>}
+      <fieldset className="lab-workspace card-stack" disabled={!desktopAvailable} aria-label="Recordings">
         <DatasetManager
           desktopAvailable={desktopAvailable}
           labels={labels}
@@ -158,6 +163,13 @@ export function DatasetsPage() {
           }}
         />
       </fieldset>
+      {desktopAvailable && (
+        <AdvancedSection storageKey="recordingsLookInside" title="Look inside a session" summary="A saved session's signals as images, and the camera's label proposals">
+          <Suspense fallback={<p className="hint">Loading…</p>}>
+            <SessionViewer />
+          </Suspense>
+        </AdvancedSection>
+      )}
     </main>
   );
 }

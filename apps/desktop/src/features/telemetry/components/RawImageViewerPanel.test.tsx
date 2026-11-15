@@ -226,9 +226,9 @@ describe("RawImageViewerPanel and the Datasets tab", () => {
     await screen.findByRole("combobox", { name: "Saved recording" });
     act(() => rawImageViewerStore.setRecording("rec-a"));
     const button = await screen.findByRole("button", { name: "Delete recording" });
-    await waitFor(() => expect(button).toHaveAttribute("title", "This session is in Datasets: delete it there"));
+    await waitFor(() => expect(button).toHaveAttribute("title", "This session is in Recordings: delete it there"));
     expect(button).toBeDisabled();
-    expect(screen.queryByRole("button", { name: "Add to Datasets" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add to Recordings" })).not.toBeInTheDocument();
   });
 
   it("adds a session that did not join Datasets, and shows why not when it still cannot", async () => {
@@ -239,7 +239,7 @@ describe("RawImageViewerPanel and the Datasets tab", () => {
     renderPanel();
     await screen.findByRole("combobox", { name: "Saved recording" });
     act(() => rawImageViewerStore.setRecording("rec-a"));
-    fireEvent.click(await screen.findByRole("button", { name: "Add to Datasets" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add to Recordings" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("nothing in it was labelled");
     expect(invoke).toHaveBeenCalledWith("add_recording_to_training_data", { recordingId: "rec-a", filter: "notExcluded", restLabel: null });
   });

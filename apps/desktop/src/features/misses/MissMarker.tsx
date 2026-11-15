@@ -66,7 +66,7 @@ export function MissDetailsDrawer() {
             <div className="miss-drawer-body">
               <Drawer.Title className="miss-drawer-title">{saved.name}</Drawer.Title>
               <Drawer.Description id="miss-drawer-description" className="field-hint">
-                The last 45 seconds before you marked it, saved to Datasets under “Misses”. {CAMERA_LINE[details.camera]}
+                The last 45 seconds before you marked it, saved to Recordings under “Misses”. {CAMERA_LINE[details.camera]}
               </Drawer.Description>
               <ul className="miss-summary">
                 {saved.summary.lines.map((line) => <li key={line}>{line}</li>)}
@@ -174,7 +174,7 @@ export function MissMarker() {
       <span className="miss-marker-title">
         That was wrong
         <HelpTooltip label="About marking a miss">
-          Saves the last 45 seconds of the watch's signals as a recording under “Misses” in Datasets, with what the models
+          Saves the last 45 seconds of the watch's signals as a recording under “Misses” in Recordings, with what the models
           scored and why nothing fired. If the camera is on, what it saw of your hand is saved too, so you can check what
           really happened. Use it right after a gesture goes wrong. From any other app, press Ctrl+Alt+M (Control-Option-M
           on a Mac).

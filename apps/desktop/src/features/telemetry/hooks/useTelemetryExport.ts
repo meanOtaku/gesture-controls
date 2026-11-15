@@ -28,9 +28,9 @@ export function reportRecordingBundleOutcome(result: SaveRecordingBundleResult):
   const operation = "Save recording";
   if (result.status === "saved") {
     if (result.dataset) {
-      OperationFeedback.success(operation, `Saved (${result.rowCount.toLocaleString()} rows) and added to Datasets as ${recordingName(result.dataset)}.`);
+      OperationFeedback.success(operation, `Saved (${result.rowCount.toLocaleString()} rows) and added to Recordings as ${recordingName(result.dataset)}.`);
     } else {
-      OperationFeedback.warning(operation, `Saved (${result.rowCount.toLocaleString()} rows), but not added to Datasets: ${result.notInDatasets ?? "it could not be added"}.`);
+      OperationFeedback.warning(operation, `Saved (${result.rowCount.toLocaleString()} rows), but not added to Recordings: ${result.notInDatasets ?? "it could not be added"}.`);
     }
   } else {
     OperationFeedback.error(operation, `Could not save recording bundle: ${result.message}`);

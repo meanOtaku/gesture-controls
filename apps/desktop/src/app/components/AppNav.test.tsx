@@ -54,7 +54,7 @@ const renderNav = (props: Partial<Parameters<typeof AppNav>[0]> = {}) => {
 
 describe("AppNav", () => {
   it("orders the pages with what is used every day first: use, devices, then record, label and train, then settings", () => {
-    expect(NAV_ORDER).toEqual(["main", "gestures", "recipes", "devices", "watch", "headphone", "drone", "signals", "recorder", "recordings", "datasets", "labelling", "labels", "gestureLibrary", "modelLab", "settings"]);
+    expect(NAV_ORDER).toEqual(["main", "gestures", "recipes", "devices", "watch", "headphone", "drone", "signals", "recorder", "datasets", "labelling", "labels", "gestureLibrary", "modelLab", "settings"]);
   });
 
   it("folds the pages for making a model away, remembers it, and never hides the page you are on", () => {
@@ -77,7 +77,7 @@ describe("AppNav", () => {
 
   it("lists every destination, grouped, with the current page marked", () => {
     renderNav({ activeTab: "recorder" });
-    for (const name of ["Overview", "Headphones", "Watch", "Live signals", "Recorder", "Recordings", "Datasets", "Model Lab", "Settings"]) {
+    for (const name of ["Overview", "Headphones", "Watch", "Live signals", "Recorder", "Recordings", "Model Lab", "Settings"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
     expect(screen.queryByRole("button", { name: "Live data" })).not.toBeInTheDocument();

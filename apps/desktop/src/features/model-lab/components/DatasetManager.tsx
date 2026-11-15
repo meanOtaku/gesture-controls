@@ -314,7 +314,7 @@ export function DatasetManager({ desktopAvailable, datasets, loading, importing,
     <Card id="lab-dataset" role="region" aria-label="Recordings" className="min-w-0">
       <CardHeader>
         <SectionHeader
-          title="Recordings"
+          title="All recordings"
           description="Every recording to label, train and test on. Recorder sessions join by themselves."
           help={{
             label: "About importing recordings",

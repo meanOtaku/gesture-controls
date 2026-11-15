@@ -52,7 +52,7 @@ describe("NervBars' drone", () => {
 describe("NervBars", () => {
   it("names a page by its place in the navigation and its name", () => {
     expect(sectionIdentifier("main")).toBe("01 // OVERVIEW");
-    expect(sectionIdentifier("gestureLibrary")).toBe("14 // GESTURE LIBRARY");
+    expect(sectionIdentifier("gestureLibrary")).toBe("13 // GESTURE LIBRARY");
     expect(sectionIdentifier("settings")).toMatch(/^\d\d \/\/ SETTINGS$/);
   });
 

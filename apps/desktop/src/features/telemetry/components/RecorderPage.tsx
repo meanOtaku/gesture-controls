@@ -30,7 +30,7 @@ export function RecorderPage() {
 
   return <main className="shell telemetry-shell">
     <header className="hero">
-      <div><h1>Recorder</h1><p className="subtitle">Record a session from the watch. It joins Datasets by itself.</p></div>
+      <div><h1>Recorder</h1><p className="subtitle">Record a session from the watch. It joins Recordings by itself.</p></div>
       <div className={`connection ${datasetRecording ? "online" : "offline"}`}><span className="pulse" /><AnimatedWord>{datasetRecording ? "Recording" : "Not recording"}</AnimatedWord></div>
     </header>
     <StreamStatus />

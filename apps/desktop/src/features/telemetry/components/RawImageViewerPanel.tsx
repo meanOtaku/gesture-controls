@@ -267,7 +267,7 @@ export function RawImageViewerPanel() {
             className="text-destructive"
             disabled={!selectedSummary || deleting || selectedSummary.inDatasets}
             aria-busy={deleting}
-            title={selectedSummary?.inDatasets ? "This session is in Datasets: delete it there" : "Permanently delete the selected recording"}
+            title={selectedSummary?.inDatasets ? "This session is in Recordings: delete it there" : "Permanently delete the selected recording"}
             onClick={() => selectedSummary && setPendingDelete(selectedSummary)}
           >
             {deleting ? "Deleting…" : "Delete recording"}
@@ -469,19 +469,19 @@ export function RawImageViewerPanel() {
           <h3 className="viewer-group-title">Source</h3>
         </div>
         <p className="text-sm text-muted-foreground">
-          Sessions saved on the Datasets tab, to look inside. Import recordings and delete them on the Datasets tab.
+          Saved sessions, to look inside. Import and delete recordings in the list above.
         </p>
         {selectedSummary && selectedSummary.inDatasets === false && (
-          <div className="flex flex-wrap items-center gap-2 text-sm" role="group" aria-label="Not in Datasets">
-            <span>This session did not join Datasets when it was saved, usually because a label in it is not on the Labels tab.</span>
+          <div className="flex flex-wrap items-center gap-2 text-sm" role="group" aria-label="Not in Recordings">
+            <span>This session did not join Recordings when it was saved, usually because a label in it is not on the Labels tab.</span>
             <Button type="button" size="sm" disabled={adding} aria-busy={adding} onClick={() => void handleAddToDatasets(selectedSummary)}>
-              {adding ? "Adding…" : "Add to Datasets"}
+              {adding ? "Adding…" : "Add to Recordings"}
             </Button>
           </div>
         )}
         {addError && (
           <p role="alert" className="text-sm text-destructive">
-            Could not add this session to Datasets: {addError}
+            Could not add this session to Recordings: {addError}
           </p>
         )}
         {deleteError && (

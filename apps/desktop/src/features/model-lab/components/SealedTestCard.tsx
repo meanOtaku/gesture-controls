@@ -102,7 +102,7 @@ export function SealedTestCard({ desktopAvailable, models, datasets }: { desktop
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {sealed.length === 0 ? (
-          <p className="hint">No recording is sealed. On the Datasets tab, seal a whole day you have not trained on.</p>
+          <p className="hint">No recording is sealed. On the Recordings page, seal a whole day you have not trained on.</p>
         ) : (
           <>
             <p className="hint">

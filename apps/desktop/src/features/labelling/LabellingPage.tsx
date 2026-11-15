@@ -163,7 +163,7 @@ export function LabellingPage() {
     setRecording(null);
     setHistory(historyOf([]));
     setSaved([]);
-    setMessage({ tone: "error", text: "That recording was deleted from Datasets, so it was closed here." });
+    setMessage({ tone: "error", text: "That recording was deleted from Recordings, so it was closed here." });
   }, [listsLoaded, datasets, recording]);
 
   useEffect(() => {
@@ -232,7 +232,7 @@ export function LabellingPage() {
     const picked = await open(
       directory
         ? { directory: true, multiple: false, title: "Choose a recording folder (it holds ppg.csv and imu.csv)" }
-        : { multiple: false, title: "Choose a dataset CSV", filters: [{ name: "CSV", extensions: ["csv"] }] },
+        : { multiple: false, title: "Choose a recording CSV", filters: [{ name: "CSV", extensions: ["csv"] }] },
     );
     if (typeof picked === "string") request({ kind: "file", path: picked });
   };
@@ -357,7 +357,7 @@ export function LabellingPage() {
       setSaved(spans);
       notifyRecordingsChanged();
       await refreshLists();
-      OperationFeedback.success("Saved", "Manual labels saved to the original dataset.");
+      OperationFeedback.success("Saved", "Manual labels saved to the original recording.");
       return true;
     } catch (error) {
       setMessage({ tone: "error", text: `Not saved: ${String(error)}` });
@@ -375,7 +375,7 @@ export function LabellingPage() {
       await refreshLists();
       // The new version is what you go on labelling; the original stays as it was.
       await load({ kind: "dataset", id: summary.id });
-      OperationFeedback.success("Saved", `A new dataset: ${recordingLine(summary)}. The original is unchanged.`);
+      OperationFeedback.success("Saved", `A new recording: ${recordingLine(summary)}. The original is unchanged.`);
     } catch (error) {
       setMessage({ tone: "error", text: `Not saved: ${String(error)}` });
     } finally {
@@ -693,16 +693,16 @@ export function LabellingPage() {
         <CardHeader>
           <SectionHeader
             title="Recording"
-            description="Open a recording from Datasets, or a dataset folder or CSV exported by the Recorder. Files without a manual_label column get one."
+            description="Open one of your recordings, or a recording folder or CSV exported by the Recorder. Files without a manual_label column get one."
             status={dirty ? <Badge variant="outline">Unsaved labels</Badge> : null}
           />
         </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-3">
           <div className="field min-w-64 max-w-3xl flex-1">
-            <Label htmlFor="labelling-dataset">Dataset</Label>
+            <Label htmlFor="labelling-dataset">Recording</Label>
             <Select value={currentSource} onValueChange={(id) => id && request({ kind: "dataset", id })}>
-              <SelectTrigger id="labelling-dataset" aria-label="Dataset">
-                <SelectValue placeholder={datasets.length > 0 ? "Choose a recording" : "Nothing in Datasets yet"}>
+              <SelectTrigger id="labelling-dataset" aria-label="Recording">
+                <SelectValue placeholder={datasets.length > 0 ? "Choose a recording" : "No recordings yet"}>
                   {((dataset) => (dataset ? recordingLine(dataset) : currentSource))(datasets.find((entry) => entry.id === currentSource))}
                 </SelectValue>
               </SelectTrigger>
@@ -1112,12 +1112,12 @@ export function LabellingPage() {
             <SectionHeader
               title="Keep it"
               description="Save your labels into this recording, or keep them as a separate copy."
-              help={{ label: "About saving and exporting", content: "Save to original updates this dataset’s manual_label column with your labels. Save as new dataset keeps a separate copy in Datasets, and leaves this one as it was. Export includes all available recording files and manual labels. CSV exports also include a companion folder for supporting files." }}
+              help={{ label: "About saving and exporting", content: "Save to original updates this recording’s manual_label column with your labels. Save as a new recording keeps a separate copy in Recordings, and leaves this one as it was. Export includes all available recording files and manual labels. CSV exports also include a companion folder for supporting files." }}
             />
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-4">
             <Button onClick={() => void saveOriginal()} disabled={busy || !dirty}>Save to original</Button>
-            <Button variant="outline" onClick={() => void saveVersion()} disabled={busy || !dirty}>Save as new dataset</Button>
+            <Button variant="outline" onClick={() => void saveVersion()} disabled={busy || !dirty}>Save as a new recording</Button>
             <Button variant="outline" onClick={() => void exportIt()} disabled={busy}>Export</Button>
             <Button variant="outline" onClick={() => void exportIt(true)} disabled={busy}>Export to a folder…</Button>
             <div className="basis-full">
