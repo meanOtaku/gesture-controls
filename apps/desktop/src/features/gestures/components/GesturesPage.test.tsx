@@ -92,13 +92,8 @@ describe("GesturesPage", () => {
     expect(locations.queryByText("Left edge")).not.toBeInTheDocument();
   });
 
-  it("offers the model-against-camera check under the models, asking for the camera and a linked gesture", async () => {
+  it("leaves the model-against-camera check to Model Lab", () => {
     setup();
-    const section = await screen.findByRole("region", { name: "Model against camera" });
-    expect(within(section).getByRole("status").textContent).toMatch(/Turn the camera on\./);
-    expect(within(section).getByRole("button", { name: "Turn camera on" })).toBeInTheDocument();
-    cleanup();
-    setup({}, status({ loadedLabels: [] }));
     expect(screen.queryByRole("region", { name: "Model against camera" })).not.toBeInTheDocument();
   });
 

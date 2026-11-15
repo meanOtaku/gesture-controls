@@ -9,6 +9,7 @@ import { MistakesCard } from "./MistakesCard";
 import { ThresholdCard } from "./ThresholdCard";
 import { SealedTestCard } from "./SealedTestCard";
 import { DetectionActivity } from "./DetectionActivity";
+import { ModelAgreementSection } from "../../gestureLibrary/ModelAgreementSection";
 import { RuntimeSwitch } from "./RuntimeSwitch";
 import { AdvancedSection } from "../../../components/app/AdvancedSection";
 import { LabelModelsPanel } from "./LabelModelsPanel";
@@ -84,6 +85,7 @@ export function ModelLab() {
         <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} onInspect={setInspecting} />
         {inspecting !== null && <div id="lab-inspect"><ModelInspector id={inspecting} models={models} onClose={() => setInspecting(null)} /></div>}
         <DetectionActivity desktopAvailable={desktopAvailable} />
+        {desktopAvailable && <ModelAgreementSection status={status} />}
         <AdvancedSection id="lab-advanced" storageKey="modelLab" summary="Training history, mistakes, threshold, comparing models and the final test">
           <TrainingHistory desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} refreshKey={models.map((model) => `${model.id}:${model.state}`).join(",")} />
           <MistakesCard desktopAvailable={desktopAvailable} models={models} datasets={datasets} />

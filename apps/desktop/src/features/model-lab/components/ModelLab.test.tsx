@@ -48,6 +48,8 @@ describe("ModelLab", () => {
     expect(screen.queryByRole("region", { name: "Mistakes" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("Advanced", { selector: ".advanced-title" }));
     expect(await screen.findByRole("region", { name: "Mistakes" })).toBeInTheDocument();
+    // The model-against-camera check lives here, and shows only once it can run (the camera is off in this test).
+    expect(screen.queryByRole("region", { name: "Model against camera" })).not.toBeInTheDocument();
     // Pages already in the sidebar get no link cards of their own here.
     expect(screen.queryByRole("button", { name: "Open Datasets" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open Labels" })).not.toBeInTheDocument();

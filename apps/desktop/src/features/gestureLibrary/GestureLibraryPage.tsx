@@ -8,9 +8,7 @@ import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { speedLabel } from "../camera/cameraController";
 import { getCameraController } from "../camera/cameraService";
 import { OperationFeedback } from "../../components/app/OperationFeedback";
-import { useLabelModels } from "../model-lab/hooks/useLabelModels";
 import { AgreementTracker } from "./agreement";
-import { AgreementPanel } from "./AgreementPanel";
 import { blankDefinition, describeRule, type GestureDefinition } from "./definition";
 import { CameraPair } from "./CameraPair";
 import { SecondCameraControls } from "./SecondCameraControls";
@@ -37,7 +35,6 @@ export function GestureLibraryPage() {
   const camera2 = getCameraController("secondary");
   const cam2 = useSyncExternalStore(camera2.subscribe, camera2.getSnapshot, camera2.getSnapshot);
   const states = useLiveGestures(definitions, cam, tracker, cam2);
-  const { status } = useLabelModels("__TAURI_INTERNALS__" in window);
   const [editing, setEditing] = useState<GestureDefinition | null>(null);
   // Kept the same between renders (the page re-renders on every camera update), so the editor does not redo its
   // calibration analysis each time.
@@ -150,7 +147,6 @@ export function GestureLibraryPage() {
         </CardContent>
       </Card>
       <LibraryCheckPanel definitions={definitions} samples={samples} />
-      <AgreementPanel tracker={tracker} definitions={definitions} status={status} cameraOn={on} />
     </main>
   );
 }
