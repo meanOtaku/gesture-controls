@@ -20,6 +20,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm run build
       - uses: astral-sh/setup-uv@v6
       - run: uv run --directory tools/sony-head-tracker --with pytest pytest -q
