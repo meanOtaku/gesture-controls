@@ -762,3 +762,76 @@ html[data-theme="nerv"] .readiness-light[data-tone="wait"] { color: var(--eva-am
 html[data-theme="nerv"] .readiness-light[data-tone="wait"] .readiness-dot { background: var(--eva-amber); }
 html[data-theme="nerv"] .readiness-light[data-tone="off"] .readiness-dot { background: var(--eva-text-muted); }
 html[data-theme="nerv"] .readiness-countdown { color: inherit; }
+
+/*
+ * Parts added with the November 2026 UI audit: folded sections, small disclosure menus, the runtime switch, the
+ * confirmation dialogs' buttons, native checkboxes and sliders, and the sidebar footer. Same vocabulary as above:
+ * orange for the interface, green for the active state, red for anything that can act on the world.
+ */
+
+/* Folded sections ("Advanced", "Diagnostics", "Flight options", "Live graphs"…): a dim orange rule and a tall orange heading. */
+html[data-theme="nerv"] .advanced-section { border-top: 1px solid var(--eva-frame); }
+html[data-theme="nerv"] .advanced-section > summary { padding: .7rem .25rem; }
+html[data-theme="nerv"] .advanced-title { font-family: var(--font-tall); font-weight: 400; font-size: 1.45rem; line-height: 1; letter-spacing: .05em; text-transform: uppercase; color: var(--eva-orange); }
+html[data-theme="nerv"] .advanced-summary { font-family: var(--font-mono); font-size: .7rem; letter-spacing: .04em; color: var(--eva-text-muted); }
+html[data-theme="nerv"] .advanced-chevron { color: var(--eva-orange); }
+html[data-theme="nerv"] .advanced-section > summary:hover .advanced-title { color: var(--eva-text); }
+html[data-theme="nerv"] .advanced-section > summary:focus-visible { outline: 2px solid var(--eva-orange); outline-offset: 2px; }
+
+/* Small disclosure menus ("Open a file…", "View…", "About this model", "Link details"): a command button that stays lit while open. */
+html[data-theme="nerv"] .inline-menu > summary {
+  border: 1px solid var(--eva-orange);
+  border-radius: 0;
+  background: #000;
+  color: var(--eva-text);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: .78rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  transition: background-color var(--eva-motion-fast), color var(--eva-motion-fast);
+}
+html[data-theme="nerv"] .inline-menu > summary:hover,
+html[data-theme="nerv"] .inline-menu[open] > summary { background: var(--eva-orange); color: #000; }
+html[data-theme="nerv"] .inline-menu > summary:focus-visible { outline: 2px solid var(--eva-orange); outline-offset: 2px; }
+html[data-theme="nerv"] .inline-menu[open] > .inline-menu-body { border-left: 2px solid var(--eva-frame); padding-left: .75rem; }
+/* Other plain disclosures (Overview's setup steps, a page error's details): orange display caps. */
+html[data-theme="nerv"] details:not(.advanced-section):not(.inline-menu) > summary { font-family: var(--font-display); font-weight: 700; font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; color: var(--eva-orange); }
+
+/* The runtime switch: Live is the one state that acts on the computer, so it lights red, not orange. */
+html[data-theme="nerv"] .runtime-switch-label { font-family: var(--font-display); font-weight: 700; letter-spacing: .14em; color: var(--eva-orange); }
+html[data-theme="nerv"] .runtime-switch[data-mode="live"] .segment:has([data-state="checked"]) { background: var(--eva-red); color: #000; }
+html[data-theme="nerv"] .runtime-switch[data-mode="monitor"] .segment:has([data-state="checked"]) { background: var(--eva-green); color: #000; }
+
+/* Confirmation dialogs: their buttons are Buttons too (with another slot name), so they get the command look. */
+html[data-theme="nerv"] :is([data-slot="alert-dialog-action"], [data-slot="alert-dialog-cancel"]) {
+  border-radius: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  background: #000;
+  color: var(--eva-text);
+  border: 1px solid var(--eva-green);
+}
+html[data-theme="nerv"] [data-slot="alert-dialog-cancel"]:hover { background: var(--eva-green); color: #000; }
+html[data-theme="nerv"] [data-slot="alert-dialog-action"]:not([data-variant="destructive"]) { background: var(--eva-orange); color: #000; border-color: var(--eva-orange); }
+html[data-theme="nerv"] [data-slot="alert-dialog-action"][data-variant="destructive"] { background: var(--eva-red); color: #000; border-color: var(--eva-red); }
+html[data-theme="nerv"] [data-slot="alert-dialog-action"]:hover { background: #000; color: var(--eva-orange); }
+html[data-theme="nerv"] [data-slot="alert-dialog-action"][data-variant="destructive"]:hover { color: var(--eva-red); }
+html[data-theme="nerv"] [data-slot="alert-dialog-content"] { border-radius: 0; border: 1px solid var(--eva-orange); background: var(--eva-bg), var(--eva-brackets); }
+
+/* Native checkboxes and sliders (the Drone page, Labelling's threshold to try): orange, like the rest. */
+html[data-theme="nerv"] input[type="checkbox"],
+html[data-theme="nerv"] input[type="range"] { accent-color: var(--eva-orange); }
+
+/* Keyboard keys named beside buttons. */
+html[data-theme="nerv"] kbd { border-radius: 0; border-color: var(--eva-frame); font-family: var(--font-mono); color: var(--eva-text-muted); }
+
+/* The sidebar's "Make a model" fold. */
+html[data-theme="nerv"] .nav-lab-toggle { font-family: var(--font-display); font-weight: 700; letter-spacing: .14em; color: var(--eva-text-muted); }
+html[data-theme="nerv"] .nav-lab-toggle:hover:not(:disabled) { color: var(--eva-orange); }
+
+/* The miss marker: the two buttons in a row, so the sidebar's pages keep their room. */
+html[data-theme="nerv"] .miss-marker { border-top-color: var(--eva-frame); }
+html[data-theme="nerv"] .miss-marker-title { font-family: var(--font-display); font-weight: 700; letter-spacing: .14em; color: var(--eva-orange); }

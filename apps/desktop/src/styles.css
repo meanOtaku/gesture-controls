@@ -392,8 +392,9 @@ html.overlay-document body::before { display:none; }
 .nav-lab-toggle:disabled { cursor:default; }
 .miss-marker { display:flex; flex-direction:column; gap:.35rem; padding:.35rem .5rem .5rem; border-top:1px solid var(--line, currentColor); }
 .miss-marker-title { display:flex; align-items:center; justify-content:space-between; font-size:.75rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3); }
-.miss-marker-buttons { display:flex; flex-direction:column; gap:.3rem; }
-.miss-marker-buttons > button { justify-content:flex-start; }
+.miss-marker-buttons { display:flex; flex-direction:row; gap:.3rem; }
+/* Side by side, so the sidebar footer stays short and the pages above keep their room on a short window. */
+.miss-marker-buttons > button { flex:1 1 0; min-width:0; justify-content:center; white-space:normal; height:auto; min-height:2rem; padding:.25rem .35rem; line-height:1.15; font-size:.72rem; text-align:center; }
 .lab-monitor { display:grid; grid-template-columns:minmax(0, 22rem) minmax(0, 1fr); gap:1rem; align-items:start; }
 .lab-monitor[hidden] { display:none; }
 .lab-monitor-camera { display:flex; flex-direction:column; gap:.6rem; min-width:0; }
@@ -646,6 +647,10 @@ number-flow-react {
 [data-collapsible="icon"] .readiness-text { display: none; }
 /* Off / Monitor / Live for the trained models: in the sidebar footer (compact) and in Model Lab's overview. */
 .runtime-switch { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
+/* In the sidebar the label sits beside the switch: one line, not two. */
+.runtime-switch-sidebar { flex-direction: row; align-items: center; flex-wrap: wrap; }
+.runtime-switch-sidebar .runtime-switch-label { flex: none; }
+.runtime-switch-sidebar .segmented { flex: 1 1 0; min-width: 0; }
 .runtime-switch-label { font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
 .runtime-switch-sidebar { padding: .35rem .5rem; }
 /* :root lifts these over the themes' own segment rules: three short words must never break mid-word. */
