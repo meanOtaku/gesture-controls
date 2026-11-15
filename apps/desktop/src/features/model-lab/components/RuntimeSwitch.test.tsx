@@ -10,7 +10,7 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: () => Promise.resolve(() => un
 const baseStatus = { mode: "monitor", loadedLabels: [], loadFailures: [], quarantined: [], registryError: null, activeDetections: [], lastScores: {} };
 const calls = (command: string) => invokeMock.mock.calls.filter(([name]) => name === command);
 
-function setup(status: Partial<typeof baseStatus> & { registryError?: string | null } = {}) {
+function setup(status: { mode?: string; registryError?: string | null } = {}) {
   let mode = status.mode ?? baseStatus.mode;
   invokeMock.mockImplementation(async (command: string, args?: { mode: string }) => {
     if (command === "set_label_runtime_mode" && args) mode = args.mode;

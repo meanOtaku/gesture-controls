@@ -133,7 +133,7 @@ export const MODE_OPTIONS: ReadonlyArray<{ value: LabelRuntimeMode; label: strin
 export type ModelAction =
   | { kind: "state"; to: "evaluated" | "approved" | "archived" | "draft"; label: string }
   /** `via`: the lifecycle steps taken first, in order, so one click goes from Draft or Evaluated to Active. */
-  | { kind: "activate"; label: string; via?: ("evaluated" | "approved")[] }
+  | { kind: "activate"; label: string; via?: readonly ("evaluated" | "approved")[] }
   | { kind: "deactivate"; label: string };
 
 /**
