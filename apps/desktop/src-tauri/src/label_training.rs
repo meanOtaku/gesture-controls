@@ -85,6 +85,160 @@ pub struct TrainRequest {
     /// A training plan for the CNN: it trains through these in order. Absent or empty trains on everything at once.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stages: Vec<StageRequest>,
+    /// A trained v2 CNN (its model version id) to continue training from instead of starting from scratch. The
+    /// recordings it trained on can then only train, never test, and it is replayed on the new model's test to compare.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_from: Option<String>,
+}
+
+/// A v2 CNN to continue training from, as the trainer is told of it (`startFrom`).
+#[derive(Debug, Clone, PartialEq)]
+struct StartPoint {
+    version_id: String,
+    name: String,
+    /// Its model file.
+    model: PathBuf,
+    /// The cut-off and gate it runs at now, to replay it as it runs.
+    threshold: f64,
+    gate_min_jerk: Option<f64>,
+    /// The recordings it trained on (its manifest's `provenance.trainRecordings`).
+    trained_on: Vec<String>,
+}
+
+/// A model a run can continue from, for the Train panel's choice.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct StartPointView {
+    pub version_id: String,
+    pub name: String,
+    pub created_at: String,
+    /// The recordings it trained on that are still in Model Lab: chosen again, it keeps what it learnt from them.
+    pub trained_on: Vec<String>,
+    /// How many of the recordings it trained on are no longer in Model Lab.
+    pub missing: usize,
+}
+
+/// The model version `version_id` as a model to continue from: a v2 CNN for `target` whose manifest says what it
+/// trained on and whose model file is the one registered. `lab` is the model-lab directory.
+fn start_point(
+    registry: &model_lab_core::Registry,
+    lab: &Path,
+    version_id: &str,
+    target: &str,
+) -> Result<StartPoint, String> {
+    let version = registry
+        .versions
+        .values()
+        .find(|v| v.id.as_str() == version_id)
+        .ok_or_else(|| format!("there is no model '{version_id}' to continue from"))?;
+    let name = version
+        .name
+        .clone()
+        .unwrap_or_else(|| version.id.to_string());
+    if version.label.as_str() != target {
+        return Err(format!(
+            "{name} detects '{}', not '{target}', so a {target} model cannot continue from it",
+            version.label
+        ));
+    }
+    let dir = lab.join(&version.artifact_dir);
+    let manifest: serde_json::Value = fs::read(dir.join("manifest.json"))
+        .map_err(|e| e.to_string())
+        .and_then(|bytes| serde_json::from_slice(&bytes).map_err(|e| e.to_string()))
+        .map_err(|e| format!("{name}'s manifest could not be read: {e}"))?;
+    if manifest["provenance"]["backend"].as_str() != Some(CNN_V2_BACKEND)
+        || manifest["model"]["format"].as_str() != Some("cnn-branches")
+    {
+        return Err(format!(
+            "{name} is not a v2 CNN: only a v2 CNN can be trained on from where it is"
+        ));
+    }
+    let file = manifest["model"]["file"]
+        .as_str()
+        .filter(|f| !f.is_empty() && !f.contains('/') && !f.contains('\\') && *f != "..")
+        .ok_or_else(|| format!("{name}'s manifest names no model file"))?;
+    let model = dir.join(file);
+    let sha = sha256_of_file(&model).map_err(|e| format!("{name}'s model file: {e}"))?;
+    if version
+        .model_sha256
+        .as_deref()
+        .is_some_and(|registered| registered != sha)
+    {
+        return Err(format!(
+            "{name}'s model file is not the one registered, so it is not continued from"
+        ));
+    }
+    let trained_on: Vec<String> = manifest["provenance"]["trainRecordings"]
+        .as_array()
+        .map(|ids| {
+            ids.iter()
+                .filter_map(|id| id.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    if trained_on.is_empty() {
+        return Err(format!(
+            "{name} does not say which recordings it trained on, so the new model could be tested on them: train it from scratch"
+        ));
+    }
+    Ok(StartPoint {
+        version_id: version.id.to_string(),
+        name,
+        model,
+        threshold: version.thresholds.activation,
+        gate_min_jerk: manifest["preprocessing"]["gate"]["minJerk"].as_f64(),
+        trained_on,
+    })
+}
+
+/// The models a `target` model can continue from, newest first: its v2 CNNs that pass [`start_point`].
+fn start_points(
+    registry: &model_lab_core::Registry,
+    lab: &Path,
+    target: &str,
+    datasets: &[DatasetSummary],
+) -> Vec<StartPointView> {
+    let mut views: Vec<StartPointView> = registry
+        .versions
+        .values()
+        .filter(|v| v.label.as_str() == target)
+        .filter_map(|v| {
+            let point = start_point(registry, lab, v.id.as_str(), target).ok()?;
+            let (here, gone): (Vec<String>, Vec<String>) = point
+                .trained_on
+                .iter()
+                .cloned()
+                .partition(|id| datasets.iter().any(|d| &d.id == id));
+            Some(StartPointView {
+                version_id: point.version_id,
+                name: point.name,
+                created_at: v.created_at.clone(),
+                trained_on: here,
+                missing: gone.len(),
+            })
+        })
+        .collect();
+    views.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    views
+}
+
+/// The v2 CNNs a model for `label` can continue training from (`TrainRequest::start_from`).
+#[tauri::command]
+pub fn list_training_start_points(
+    app: AppHandle,
+    host: State<'_, LabelRuntimeHost>,
+    label: String,
+) -> Result<Vec<StartPointView>, String> {
+    let lab = model_lab_dir(&app)?;
+    let index = load_index(&app);
+    host.with_store(|store| {
+        Ok(start_points(
+            store.registry(),
+            &lab,
+            &label,
+            &index.datasets,
+        ))
+    })
 }
 
 /// One step of a training plan: the recordings it trains on, whether it also rehearses the earlier stages' recordings,
@@ -243,6 +397,10 @@ struct Checked {
     /// one already has its moments. The trainer takes its decisions only after it, so no moment counts twice; the earlier
     /// samples are still there as history.
     decide_from_ns: BTreeMap<String, i64>,
+    /// The model this run continues from (`TrainRequest::start_from`), set by `recordings_for`.
+    start_from: Option<StartPoint>,
+    /// Recordings that may train but never test: those the model continued from trained on.
+    train_only: Vec<RecordingId>,
 }
 
 fn label_id(raw: &str) -> Result<LabelId, String> {
@@ -375,6 +533,8 @@ fn check_request(
         label_timing,
         sessions: Vec::new(),
         decide_from_ns: BTreeMap::new(),
+        start_from: None,
+        train_only: Vec::new(),
     })
 }
 
@@ -447,6 +607,12 @@ fn build_spec(
         // when the setting asks for the gate (`steady_starts_only`, set by the caller).
         "steadyStarts": false,
         "stages": spec_stages(&checked.stages, &ids(&split.train).into_iter().collect()),
+        "startFrom": checked.start_from.as_ref().map(|point| serde_json::json!({
+            "model": point.model,
+            "name": point.name,
+            "threshold": point.threshold,
+            "gateMinJerk": point.gate_min_jerk,
+        })),
     })
 }
 
@@ -587,7 +753,35 @@ fn recordings_for(app: &AppHandle, request: &TrainRequest) -> Result<Checked, St
         .collect::<Result<_, _>>()
         .map_err(|e| e.to_string())?;
     checked.decide_from_ns = decide_from_ns;
+    if let Some(version) = &request.start_from {
+        if checked.backend != CNN_V2_BACKEND {
+            return Err("only a v2 CNN can continue from a trained model: choose CNN v2".into());
+        }
+        if !checked.stages.is_empty() {
+            return Err(
+                "a model continued from another trains on everything at once: remove the plan"
+                    .into(),
+            );
+        }
+        let lab = model_lab_dir(app)?;
+        let host = app.state::<LabelRuntimeHost>();
+        let target = checked.target.to_string();
+        let point =
+            host.with_store(|store| start_point(store.registry(), &lab, version, &target))?;
+        checked.train_only = continued_train_only(&checked.recordings, &point);
+        checked.start_from = Some(point);
+    }
     Ok(checked)
+}
+
+/// The chosen recordings that the model continued from trained on: they may only train, so the new model and the old one
+/// are both tested on recordings neither saw.
+fn continued_train_only(recordings: &[RecordingInfo], point: &StartPoint) -> Vec<RecordingId> {
+    recordings
+        .iter()
+        .filter(|r| point.trained_on.iter().any(|id| id == r.id.as_str()))
+        .map(|r| r.id.clone())
+        .collect()
 }
 
 /// Each set of recordings that hold one session, its members in the order their samples begin, and for each member after
@@ -830,7 +1024,7 @@ pub async fn suggest_label_offset(
         &checked.recordings,
         &checked.mapping,
         &checked.target,
-        &[],
+        &checked.train_only,
         &checked.sessions,
     )
     .map_err(|e| e.to_string())?;
@@ -893,7 +1087,7 @@ fn plan_label_training_blocking(app: &AppHandle, request: &TrainRequest) -> Plan
             &checked.recordings,
             &checked.mapping,
             &checked.target,
-            &[],
+            &checked.train_only,
             &checked.sessions,
         )
         .map(|split| (checked, split))
@@ -1056,10 +1250,16 @@ pub async fn start_label_training(
                     serde_json::to_value(&checked.stages).unwrap_or_default(),
                 )
             }))
+            .chain(checked.start_from.as_ref().map(|point| {
+                (
+                    "startFrom".to_string(),
+                    serde_json::Value::String(point.version_id.clone()),
+                )
+            }))
             .collect(),
         },
         recordings: checked.recordings.clone(),
-        train_only: Vec::new(),
+        train_only: checked.train_only.clone(),
         sessions: checked.sessions.clone(),
         unique,
     };
@@ -1375,6 +1575,7 @@ mod tests {
             method: None,
             hard_negatives: false,
             stages: vec![],
+            start_from: None,
         }
     }
 
@@ -1892,5 +2093,110 @@ mod tests {
         .unwrap_err();
         assert_eq!(refused, "too few recordings");
         assert!(offsets_from(None).is_err() && offsets_from(Some("not json")).is_err());
+    }
+
+    /// A registry with one model, `pinch_in-v2`, saved under `lab` with this manifest and model file.
+    fn lab_with(lab: &Path, manifest: serde_json::Value, model: &[u8]) -> model_lab_core::Registry {
+        let dir = lab.join("label-models/pinch_in-v2");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("model.cnn"), model).unwrap();
+        fs::write(dir.join("manifest.json"), manifest.to_string()).unwrap();
+        let mut registry = model_lab_core::Registry::default();
+        let mut version = model_lab_core::ModelVersion::new(
+            model_lab_core::ModelVersionId::new("pinch_in-v2").unwrap(),
+            model_lab_core::ProjectId::new("p-pinch_in").unwrap(),
+            label_id("pinch_in").unwrap(),
+            model_lab_core::ModelOrigin::Imported,
+            true,
+            Some(model_lab_core::sha256_hex(model)),
+            "label-models/pinch_in-v2".into(),
+            cnn_v2_contract(),
+            model_lab_core::Thresholds::default(),
+            QualityRules::default(),
+            "2026-11-15T10:00:00Z",
+        )
+        .unwrap();
+        version.name = Some("Pinch v2".into());
+        version.thresholds.activation = 0.99;
+        registry.versions.insert(version.id.clone(), version);
+        registry
+    }
+
+    fn v2_manifest(trained_on: &[&str]) -> serde_json::Value {
+        serde_json::json!({
+            "model": {"file": "model.cnn", "format": "cnn-branches"},
+            "preprocessing": {"gate": {"windowMs": 600, "minJerk": 160.5}},
+            "provenance": {"backend": CNN_V2_BACKEND, "trainRecordings": trained_on},
+        })
+    }
+
+    #[test]
+    fn a_v2_model_is_continued_from_as_it_runs_and_says_what_it_trained_on() {
+        let lab = tempfile::tempdir().unwrap();
+        let registry = lab_with(lab.path(), v2_manifest(&["a", "b", "gone"]), b"{}");
+        let point = start_point(&registry, lab.path(), "pinch_in-v2", "pinch_in").unwrap();
+        assert_eq!(point.name, "Pinch v2");
+        assert_eq!(point.threshold, 0.99);
+        assert_eq!(point.gate_min_jerk, Some(160.5));
+        assert!(point.model.ends_with("label-models/pinch_in-v2/model.cnn"));
+        // What it trained on may only train again; the new recordings split as usual.
+        let recordings: Vec<RecordingInfo> = ["a", "new"]
+            .iter()
+            .map(|id| RecordingInfo {
+                id: RecordingId::new(*id).unwrap(),
+                sha256: "0".repeat(64),
+                labels: BTreeSet::new(),
+            })
+            .collect();
+        assert_eq!(
+            continued_train_only(&recordings, &point),
+            vec![RecordingId::new("a").unwrap()]
+        );
+        let shown = start_points(
+            &registry,
+            lab.path(),
+            "pinch_in",
+            &[dataset("a", &["pinch_in"]), dataset("b", &["pinch_in"])],
+        );
+        assert_eq!(shown.len(), 1);
+        assert_eq!(shown[0].trained_on, vec!["a".to_string(), "b".to_string()]);
+        assert_eq!(shown[0].missing, 1);
+        assert!(start_points(&registry, lab.path(), "pinch_out", &[]).is_empty());
+    }
+
+    #[test]
+    fn only_an_intact_v2_model_that_says_what_it_trained_on_is_continued_from() {
+        let lab = tempfile::tempdir().unwrap();
+        let mut first = v2_manifest(&["a"]);
+        first["provenance"]["backend"] = serde_json::json!(CNN_BACKEND);
+        let registry = lab_with(lab.path(), first, b"{}");
+        assert!(
+            start_point(&registry, lab.path(), "pinch_in-v2", "pinch_in")
+                .unwrap_err()
+                .contains("not a v2 CNN")
+        );
+        let registry = lab_with(lab.path(), v2_manifest(&[]), b"{}");
+        assert!(
+            start_point(&registry, lab.path(), "pinch_in-v2", "pinch_in")
+                .unwrap_err()
+                .contains("does not say which recordings")
+        );
+        let registry = lab_with(lab.path(), v2_manifest(&["a"]), b"{}");
+        assert!(
+            start_point(&registry, lab.path(), "pinch_in-v2", "pinch_out")
+                .unwrap_err()
+                .contains("detects 'pinch_in'")
+        );
+        assert!(start_point(&registry, lab.path(), "missing", "pinch_in").is_err());
+        fs::write(
+            lab.path().join("label-models/pinch_in-v2/model.cnn"),
+            b"changed",
+        )
+        .unwrap();
+        assert!(
+            start_point(&registry, lab.path(), "pinch_in-v2", "pinch_in")
+                .unwrap_err()
+                .contains("not the one registered")
+        );
     }
 }

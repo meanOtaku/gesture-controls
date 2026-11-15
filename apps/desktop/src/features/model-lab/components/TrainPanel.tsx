@@ -12,7 +12,7 @@ import { Checkbox } from "../../../components/ui/checkbox";
 import { Label } from "../../../components/ui/label";
 import { useSessionState } from "../hooks/useSessionState";
 import { useTrainingRun } from "../hooks/useTrainingRun";
-import { CNN_METHOD, CNN_MODEL, CNN_V2_METHOD, CNN_V2_MODEL, PULSE_MODEL, TREES_METHOD, buildRequest, defaultStages, hasLabel, otherLabels, recordingsWithLabel, stagesForRequest, type OtherRole, type StageDraft, type TrainMethod, type TrainPlan, type TrainerEnvironment } from "../training";
+import { CNN_METHOD, CNN_MODEL, CNN_V2_METHOD, CNN_V2_MODEL, PULSE_MODEL, TREES_METHOD, buildRequest, defaultStages, hasLabel, otherLabels, recordingsWithLabel, stagesForRequest, type OtherRole, type StageDraft, type StartPoint, type TrainMethod, type TrainPlan, type TrainerEnvironment } from "../training";
 import { TrainingPlanEditor } from "./TrainingPlanEditor";
 import { datasetLabels, inImportOrder, recordingNumber, type DatasetLabel, type DatasetSummary } from "../types";
 import { LabelTiming } from "./LabelTiming";
@@ -48,6 +48,9 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
   const [method, setMethod] = useSessionState<TrainMethod>("train.method", CNN_METHOD);
   const [staged, setStaged] = useSessionState("train.staged", false);
   const [stages, setStages] = useSessionState<StageDraft[]>("train.stages", []);
+  // CNN v2: the model to continue training from ("" trains a new one from scratch).
+  const [startFrom, setStartFrom] = useSessionState("train.startFrom", "");
+  const [startPoints, setStartPoints] = useState<StartPoint[]>([]);
   const [plan, setPlan] = useState<TrainPlan | null>(null);
   const [environment, setEnvironment] = useState<TrainerEnvironment | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +64,11 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
   const others = useMemo(() => otherLabels(datasets, selected, target), [datasets, selected, target]);
   const chosen = useMemo(() => candidates.filter((dataset) => selected.has(dataset.id)), [candidates, selected]);
   const planStages = useMemo(() => (staged && method === CNN_METHOD ? stagesForRequest(stages, selected) : undefined), [staged, method, stages, selected]);
-  const request = useMemo(() => target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, research, labelOffsetMs: labelOffset, method, hardNegatives, stages: planStages }), [target, selected, others, roles, research, labelOffset, method, hardNegatives, planStages]);
+  const startPoint = method === CNN_V2_METHOD ? startPoints.find((point) => point.versionId === startFrom) ?? null : null;
+  const continuedFrom = startPoint?.versionId;
+  const request = useMemo(() => target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, research, labelOffsetMs: labelOffset, method, hardNegatives, stages: planStages, startFrom: continuedFrom }), [target, selected, others, roles, research, labelOffset, method, hardNegatives, planStages, continuedFrom]);
+  // What the model continued from trained on and is not chosen now: left out, it may forget what it learnt there.
+  const dropped = startPoint ? startPoint.trainedOn.filter((id) => !selected.has(id)).length : 0;
   const requestKey = JSON.stringify(request);
   const coverage = useMemo(() => plan ? splitCoverage(datasets, plan.train, plan.evaluation, target) : [], [datasets, plan, target]);
   const sessionsKey = JSON.stringify(plan?.sessions ?? []);
@@ -92,6 +99,24 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [desktopAvailable, requestKey]);
 
+  // The v2 CNNs of this label that a new model can continue from.
+  useEffect(() => {
+    setStartPoints([]);
+    if (!desktopAvailable || target === "" || method !== CNN_V2_METHOD) return;
+    let live = true;
+    void invoke<StartPoint[]>("list_training_start_points", { label: target })
+      .then((points) => { if (live) setStartPoints(points); })
+      .catch(() => undefined);
+    return () => { live = false; };
+  }, [desktopAvailable, target, method]);
+
+  const chooseStartFrom = (versionId: string) => {
+    setStartFrom(versionId);
+    const point = startPoints.find((entry) => entry.versionId === versionId);
+    // What it learnt from goes in again, so it is rehearsed as the new recordings are learnt.
+    if (point) setSelected((previous) => new Set([...previous, ...point.trainedOn.filter((id) => candidates.some((dataset) => dataset.id === id))]));
+  };
+
   const toggleRecording = useCallback((id: string) =>
     setSelected((previous) => {
       const next = new Set(previous);
@@ -102,6 +127,7 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
 
   const chooseTarget = (label: string) => {
     setTarget(label);
+    setStartFrom("");
     run.clearResult();
     setStaged(false);
     setStages([]);
@@ -214,6 +240,25 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
           </select>
           {usable.length === 0 && <p className="field-hint">Add a label on the Labels page first.</p>}
         </div>
+
+        {target !== "" && method === CNN_V2_METHOD && (
+          <div className="field">
+            <div className="field-head"><Label htmlFor={`${uid}-start-from`}>Start from</Label></div>
+            <select id={`${uid}-start-from`} className={NATIVE_SELECT} value={startPoint?.versionId ?? ""} disabled={running !== null} onChange={(event) => chooseStartFrom(event.target.value)}>
+              <option value="">A new model, trained from scratch</option>
+              {startPoints.map((point) => <option key={point.versionId} value={point.versionId}>Continue training {point.name}</option>)}
+            </select>
+            {startPoint ? (
+              <p className="field-hint">
+                It trains on from {startPoint.name} instead of from scratch: fewer passes at a lower learning rate, so the new recordings adjust what it learnt. The {startPoint.trainedOn.length} recordings it trained on are chosen again, so it keeps what it learnt from them; they only train, never test. Add the new recordings. Both models are then tested on the same recordings neither trained on, side by side, and {startPoint.name} is not changed.
+                {dropped > 0 && <strong> {dropped} of the recordings it trained on are not chosen: it may forget what it learnt from them.</strong>}
+                {startPoint.missing > 0 && ` ${startPoint.missing} of the recordings it trained on are no longer in Model Lab.`}
+              </p>
+            ) : (
+              <p className="field-hint">{startPoints.length === 0 ? "No CNN v2 for this label to continue from yet." : "Or continue training a CNN v2 you have, with new recordings added, instead of training from scratch."}</p>
+            )}
+          </div>
+        )}
 
         {target !== "" && (
           <>

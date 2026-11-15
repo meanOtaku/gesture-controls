@@ -42,6 +42,10 @@ WARP_KNOTS = 4
 MAGNITUDE_WARP = 0.2
 TIME_WARP = 0.25
 PARITY_TOLERANCE = cnn.PARITY_TOLERANCE
+# Continuing from a trained model (`fit(start=...)`): fewer passes at a lower learning rate, so the new recordings adjust
+# what it learnt instead of overwriting it. Its batch normalisation stays as the saved file folded it (`load`).
+CONTINUE_EPOCHS = 8
+CONTINUE_LEARNING_RATE_SCALE = 0.3
 
 
 def _net():
@@ -130,8 +134,10 @@ def _augmented(windows, generator):
     return torch.sigmoid(logit)
 
 
-def _train(net, x: np.ndarray, y: np.ndarray, rng: np.random.Generator, epochs: int = cnn.EPOCHS) -> None:
-    """`cnn._train` with `_augmented` and the v2 shape."""
+def _train(net, x: np.ndarray, y: np.ndarray, rng: np.random.Generator, epochs: int = cnn.EPOCHS,
+           learning_rate: float = cnn.LEARNING_RATE, frozen_norm: bool = False) -> None:
+    """`cnn._train` with `_augmented` and the v2 shape. With `frozen_norm` (a network from `load`), its batch
+    normalisation keeps the statistics it has instead of taking each batch's."""
     import torch
     from torch import nn
 
@@ -143,13 +149,17 @@ def _train(net, x: np.ndarray, y: np.ndarray, rng: np.random.Generator, epochs: 
     net.to(where)
     windows = torch.from_numpy(np.asarray(x, dtype=np.float32).reshape(-1, CHANNELS, LENGTH)).to(where)
     truth = torch.from_numpy(np.asarray(y, dtype=np.float32)).to(where)
-    optimiser = torch.optim.Adam(net.parameters(), lr=cnn.LEARNING_RATE, weight_decay=cnn.WEIGHT_DECAY)
+    optimiser = torch.optim.Adam(net.parameters(), lr=learning_rate, weight_decay=cnn.WEIGHT_DECAY)
     positives = max(1.0, float(y.sum()))
     loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(min(cnn.MAX_POSITIVE_WEIGHT, (len(y) - positives) / positives), device=where))
     schedule = torch.optim.lr_scheduler.CosineAnnealingLR(optimiser, max(1, epochs * ((len(y) + cnn.BATCH - 1) // cnn.BATCH)))
     generator = torch.Generator(device=where).manual_seed(int(rng.integers(2**31)))
     for _ in range(epochs):
         net.train()
+        if frozen_norm:
+            for layer in net.modules():
+                if isinstance(layer, nn.BatchNorm1d):
+                    layer.eval()
         order = torch.from_numpy(rng.permutation(len(y))).to(where)
         for b in range(0, len(order), cnn.BATCH):
             pick = order[b:b + cnn.BATCH]
@@ -163,21 +173,77 @@ def _train(net, x: np.ndarray, y: np.ndarray, rng: np.random.Generator, epochs: 
     net.to("cpu")
 
 
-def fit(x: np.ndarray, y: np.ndarray, seed: int, epochs: int | None = None) -> Model:
+def fit(x: np.ndarray, y: np.ndarray, seed: int, epochs: int | None = None, start: bytes | None = None) -> Model:
     """MEMBERS networks trained on `x` (decisions x 1000 v2 inputs) and `y`, each from its own seed, for `epochs` passes
-    (the CNN's EPOCHS when None)."""
+    (the CNN's EPOCHS when None). With `start` (a saved model file), each of its networks trains on from where it was
+    instead of from scratch, for CONTINUE_EPOCHS passes (when None) at CONTINUE_LEARNING_RATE_SCALE of the rate."""
     import torch
 
     if np.asarray(x).shape[1] != CHANNELS * LENGTH:
         raise ValueError(f"the v2 CNN reads {CHANNELS * LENGTH} inputs, not {np.asarray(x).shape[1]}")
+    begun = load(start) if start is not None else None
     nets = []
-    for member in range(MEMBERS):
+    for member in range(len(begun) if begun is not None else MEMBERS):
         torch.manual_seed(seed + member)
         torch.set_num_threads(max(1, torch.get_num_threads()))
-        net = _net()
-        _train(net, np.asarray(x), np.asarray(y), np.random.default_rng(seed + member), epochs or cnn.EPOCHS)
+        if begun is None:
+            net = _net()
+            _train(net, np.asarray(x), np.asarray(y), np.random.default_rng(seed + member), epochs or cnn.EPOCHS)
+        else:
+            net = begun[member]
+            _train(net, np.asarray(x), np.asarray(y), np.random.default_rng(seed + member), epochs or CONTINUE_EPOCHS,
+                   cnn.LEARNING_RATE * CONTINUE_LEARNING_RATE_SCALE, frozen_norm=True)
         nets.append(net.eval())
     return Model(nets)
+
+
+def load(model_bytes: bytes) -> list:
+    """The networks of a saved model file, ready to train on: each convolution takes the file's weights (batch
+    normalisation already folded in) and its batch normalisation is set to pass values through unchanged, so before any
+    training they score exactly as the file does. Refused when the file is not a v2 CNN of this shape."""
+    import torch
+
+    file = json.loads(model_bytes)
+    if file.get("format") != FORMAT or file.get("version") != VERSION:
+        raise ValueError(f"the model to start from is not a {FORMAT} file of version {VERSION}")
+    if file.get("channels") != CHANNELS or file.get("length") != LENGTH or not file.get("members"):
+        raise ValueError(f"the model to start from reads {file.get('channels')} x {file.get('length')}, not {CHANNELS} x {LENGTH}")
+
+    def set_conv(seq, convs):
+        layers = list(seq)
+        if len(convs) * 3 != len(layers):
+            raise ValueError("the model to start from has a different number of convolutions")
+        for i, c in enumerate(convs):
+            conv, norm = layers[3 * i], layers[3 * i + 1]
+            shape = tuple(conv.weight.shape)
+            if (c["out"], c["in"], c["kernel"]) != shape or c["dilation"] != conv.dilation[0]:
+                raise ValueError(f"the model to start from has a convolution of {c['out']} x {c['in']} x {c['kernel']}, not {shape}")
+            conv.weight.copy_(torch.tensor(c["weight"], dtype=torch.float32).reshape(shape))
+            conv.bias.copy_(torch.tensor(c["bias"], dtype=torch.float32))
+            norm.weight.fill_(1.0)
+            norm.bias.zero_()
+            norm.running_mean.zero_()
+            norm.running_var.fill_(1.0 - norm.eps)
+
+    nets = []
+    with torch.no_grad():
+        for member in file["members"]:
+            net = _net()
+            if [b["channels"] for b in member["branches"]] != [list(g) for g in GROUPS]:
+                raise ValueError("the model to start from groups its channels differently")
+            for branch, saved in zip(net.branches, member["branches"]):
+                set_conv(branch, saved["conv"])
+            set_conv(net.shared, member["shared"])
+            dense = [layer for layer in net.head if isinstance(layer, torch.nn.Linear)]
+            if len(dense) != len(member["dense"]):
+                raise ValueError("the model to start from has a different number of dense layers")
+            for layer, d in zip(dense, member["dense"]):
+                if (d["out"], d["in"]) != tuple(layer.weight.shape):
+                    raise ValueError("the model to start from has dense layers of another size")
+                layer.weight.copy_(torch.tensor(d["weight"], dtype=torch.float32).reshape(d["out"], d["in"]))
+                layer.bias.copy_(torch.tensor(d["bias"], dtype=torch.float32))
+            nets.append(net.eval())
+    return nets
 
 
 def _conv(conv, norm) -> dict:

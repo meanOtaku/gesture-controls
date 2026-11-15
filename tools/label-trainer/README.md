@@ -59,6 +59,13 @@ this trainer in a `spec.json`.
    the checks for going live is still written, as **evaluation only**: the desktop keeps it as monitor-only, so it can be
    activated but only ever reports.
 
+A v2 CNN spec may name a model to continue from (`startFrom`: its `model.cnn`, name, cut-off and gate). `cnn_v2.load`
+turns the file back into networks (its batch normalisation, folded into the convolutions, is set to pass values through
+and kept frozen), and they train on for `CONTINUE_EPOCHS` passes at `CONTINUE_LEARNING_RATE_SCALE` of the learning rate,
+the cut-off folds included. The desktop keeps the recordings that model trained on out of the test, and the trainer
+replays it, as it runs, on the same held-out recordings (`metrics.startedFrom`) for the side-by-side; the bundle's
+provenance says what it continued from (`continuedFrom`).
+
 `tests/make_runtime_bundle.py` writes the bundle the runtime's tests load, with a pulse trace and the probability the
 trainer gives each of its samples.
 

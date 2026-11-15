@@ -141,6 +141,19 @@ class TrainingStage:
 
 
 @dataclass(frozen=True)
+class StartFrom:
+    """A trained v2 CNN to continue training from: its model file, the name it goes by, and how it runs (its cut-off and
+    gate), so it can be replayed on the same held-out recordings as the new one."""
+    model: Path
+    name: str
+    threshold: float
+    gate_min_jerk: float | None = None
+
+    def model_bytes(self) -> bytes:
+        return self.model.read_bytes()
+
+
+@dataclass(frozen=True)
 class Spec:
     target: str
     negatives: list[str]
@@ -174,6 +187,8 @@ class Spec:
     motion_hz: int = imu_onset.MOTION_HZ
     # The v2 CNN's gate level (m/s^3, `cnn_input.spike`), set by `run` from the training recordings; None: no gate.
     gate_min_jerk: float | None = None
+    # The v2 CNN only: train on from this model instead of from scratch (`cnn_v2.fit(start=...)`).
+    start_from: StartFrom | None = None
 
     def session_of(self, rid: str) -> str:
         """The session a recording belongs to: its own id unless it shares one with others."""
@@ -265,7 +280,9 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
     decide_from_ns = raw.get("decideFromNs", {}) or {}
     if not isinstance(decide_from_ns, dict) or any(rid not in recordings or isinstance(t, bool) or not isinstance(t, int) for rid, t in decide_from_ns.items()):
         raise TrainingRefused("decideFromNs must give recordings of the spec a whole number of nanoseconds")
+    start_from = parse_start_from(raw.get("startFrom"), backend, stages)
     return Spec(
+        start_from=start_from,
         target=target,
         negatives=list(raw.get("negatives", [])),
         excludes=list(raw.get("excludes", [])),
@@ -285,6 +302,28 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         decide_from_ns={str(rid): int(t) for rid, t in decide_from_ns.items()},
         motion_hz=int(motion_hz),
     )
+
+
+def parse_start_from(raw: Any, backend: str, stages: tuple[TrainingStage, ...]) -> StartFrom | None:
+    """A spec's model to continue from, checked: the v2 CNN only, not with a training plan, and its file there."""
+    if raw is None:
+        return None
+    if backend != CNN_V2_BACKEND:
+        raise TrainingRefused("only the v2 CNN can continue from a trained model")
+    if stages:
+        raise TrainingRefused("a model continued from another trains on everything at once, not in stages")
+    if not isinstance(raw, dict) or not isinstance(raw.get("model"), str):
+        raise TrainingRefused("startFrom must give the model file to start from")
+    model = Path(raw["model"])
+    if not model.is_file():
+        raise TrainingRefused(f"the model to start from is not there: {model}")
+    threshold = raw.get("threshold")
+    if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or not 0 < threshold < 1:
+        raise TrainingRefused(f"startFrom's threshold must be between 0 and 1, got {threshold!r}")
+    gate = raw.get("gateMinJerk")
+    if gate is not None and (isinstance(gate, bool) or not isinstance(gate, (int, float)) or gate < 0):
+        raise TrainingRefused(f"startFrom's gateMinJerk must be a positive number, got {gate!r}")
+    return StartFrom(model, str(raw.get("name") or model.parent.name), float(threshold), None if gate is None else float(gate))
 
 
 def parse_stages(raw: list[Any], backend: str, train: list[str]) -> tuple[TrainingStage, ...]:
@@ -526,14 +565,15 @@ def cnn_device() -> str:
 
 
 def fit(x: np.ndarray, y: np.ndarray, seed: int, n_trees: int = TREES, backend: str = BACKEND, keep: np.ndarray | None = None,
-        groups: np.ndarray | None = None, stages: tuple[TrainingStage, ...] = ()):
+        groups: np.ndarray | None = None, stages: tuple[TrainingStage, ...] = (), start: bytes | None = None):
     """The model trained on `x` and `y`. For the CNN, `keep` marks rows it must train on whatever it leaves out to stay
     within its number of negatives (the false activations `reinforce` adds); the trees train on every row. With `stages`
-    (and each row's recording in `groups`), the CNN trains through them in order (`stage_rows`)."""
+    (and each row's recording in `groups`), the CNN trains through them in order (`stage_rows`). With `start` (a v2 model
+    file), the v2 CNN trains on from it."""
     if backend == CNN_V2_BACKEND:
         from . import cnn_v2
 
-        return cnn_v2.fit(x, y, seed)
+        return cnn_v2.fit(x, y, seed, start=start)
     if backend == CNN_BACKEND:
         from . import cnn
 
@@ -660,7 +700,8 @@ def out_of_fold_threshold(spec: Spec, train: Examples, recordings: dict[str, Rec
         test = fold == k
         if int(train.y[~test].sum()) < MIN_POSITIVE_TRAIN or int((train.y[~test] == 0).sum()) < MIN_POSITIVE_TRAIN:
             continue
-        model = fit(train.x[~test], train.y[~test], spec.seed, backend=spec.backend, groups=train.groups[~test], stages=spec.stages)
+        model = fit(train.x[~test], train.y[~test], spec.seed, backend=spec.backend, groups=train.groups[~test], stages=spec.stages,
+                    start=start_bytes(spec))
         if spec.hard_negatives:
             fold_train = Examples(train.x[~test], train.y[~test], train.groups[~test], [], train.decisions[~test])
             model, _ = reinforce(spec, model, fold_train, recordings, [g for g in groups if fold_of[g] != k])
@@ -909,6 +950,46 @@ def merge_spans(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
     return [(a, b) for a, b in merged]
 
 
+def continued_from(start: StartFrom) -> dict[str, Any]:
+    """What a model continued from, for its provenance: the model (by name and file hash) and how it trained on."""
+    from . import cnn_v2
+
+    return {"name": start.name, "sha256": hashlib.sha256(start.model_bytes()).hexdigest(),
+            "epochs": cnn_v2.CONTINUE_EPOCHS, "learningRateScale": cnn_v2.CONTINUE_LEARNING_RATE_SCALE}
+
+
+def start_bytes(spec: Spec) -> bytes | None:
+    """The model file a spec continues from, or None to train from scratch."""
+    return None if spec.start_from is None else spec.start_from.model_bytes()
+
+
+class _SavedModel:
+    """A saved v2 model file with the `predict_proba` the evaluation uses, scored as the runtime scores it."""
+
+    def __init__(self, model_bytes: bytes):
+        self.model_bytes = model_bytes
+
+    def predict_proba(self, x: np.ndarray) -> np.ndarray:
+        from . import cnn_v2
+
+        p = cnn_v2.predict(self.model_bytes, x) if len(x) else np.zeros(0)
+        return np.stack([1.0 - p, p], axis=1)
+
+
+def started_from_metrics(spec: Spec, recordings: dict[str, Recording], held_out: "Examples") -> dict[str, Any]:
+    """The model continued from, on exactly the held-out recordings the new one is tested on, at its own cut-off and gate:
+    the side-by-side the user decides on. None of these recordings trained it (the desktop keeps its training recordings
+    out of the test)."""
+    start = spec.start_from
+    assert start is not None
+    saved = _SavedModel(start.model_bytes())
+    probability = saved.predict_proba(held_out.x)[:, 1]
+    as_it_runs = replace(spec, gate_min_jerk=start.gate_min_jerk)
+    return {"name": start.name, "threshold": start.threshold,
+            **evaluate(probability, held_out.y, start.threshold, "startedFrom"),
+            "events": replay(as_it_runs, saved, recordings, start.threshold)}
+
+
 def replay(spec: Spec, model, recordings: dict[str, Recording], threshold: float) -> dict[str, Any]:
     """The model as a detector over each held-out recording, as the runtime runs it: scored at every PPG sample, through the
     runtime's detection rule (see `detections`)."""
@@ -1102,6 +1183,7 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, A
             "evaluationCohort": (metrics.get("events") or {}).get("cohort"),
             "labelOffsetMs": spec.label_offset_ms,
             **({"hardNegatives": metrics.get("hardNegatives", 0)} if spec.hard_negatives else {}),
+            **({"continuedFrom": continued_from(spec.start_from)} if spec.start_from is not None else {}),
         },
     }
     usual = training_range(x_train)
@@ -1158,7 +1240,12 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
             rows = np.isin(train.groups, stage.recordings)
             say(f"Stage {number} of {len(spec.stages)}, {stage.name}: {int(rows.sum())} moments ({int(train.y[rows].sum())} starts) "
                 f"from {len(stage.recordings)} recordings" + (", rehearsing the stages before" if stage.rehearse and number > 1 else ""))
-        model = fit(train.x, train.y, spec.seed, backend=spec.backend, groups=train.groups, stages=spec.stages)
+        if spec.start_from is not None:
+            from . import cnn_v2
+
+            say(f"Continuing from {spec.start_from.name}: {cnn_v2.CONTINUE_EPOCHS} passes at {cnn_v2.CONTINUE_LEARNING_RATE_SCALE:g} of the"
+                " learning rate, on every training recording (its own and the new ones together, so it keeps what it learnt)")
+        model = fit(train.x, train.y, spec.seed, backend=spec.backend, groups=train.groups, stages=spec.stages, start=start_bytes(spec))
         model, mined = reinforce(spec, model, train, recordings, spec.train)
         if spec.hard_negatives:
             say(f"Trained again with the {mined} moments it fired by mistake on the training recordings")
@@ -1171,6 +1258,9 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
             metrics["crossCheckEvents"] = cross_events
         say("Replaying the held-out recordings as the runtime would")
         metrics["events"] = replay(spec, model, recordings, threshold)
+        if spec.start_from is not None:
+            say(f"Replaying the same held-out recordings with {spec.start_from.name}, as it runs now, to compare")
+            metrics["startedFrom"] = started_from_metrics(spec, recordings, held_out)
         metrics["steadyStarts"] = spec.steady_starts
         if spec.hard_negatives:
             metrics["hardNegatives"] = mined

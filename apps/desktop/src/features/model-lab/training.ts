@@ -144,6 +144,19 @@ export interface TrainRequest {
   hardNegatives?: boolean;
   /** A training plan for the CNN: it trains through these in order. Absent trains on everything at once. */
   stages?: StageRequest[];
+  /** CNN v2 only: the model (its version id) to train on from instead of from scratch. */
+  startFrom?: string;
+}
+
+/** Mirrors `StartPointView` in `label_training.rs`: a v2 CNN a new model can continue training from. */
+export interface StartPoint {
+  versionId: string;
+  name: string;
+  createdAt: string;
+  /** The recordings it trained on that are still here: chosen again, it keeps what it learnt from them. */
+  trainedOn: string[];
+  /** How many of the recordings it trained on are no longer here. */
+  missing: number;
 }
 
 /** Mirrors `StageRequest` in `label_training.rs`: one step of a training plan. */
@@ -271,6 +284,8 @@ export interface TrainingMetrics {
   thresholdChosenOnEvaluationRecordings?: boolean;
   /** The model replayed as a detector over the whole held-out recordings. */
   events?: EventMetrics;
+  /** For a model continued from another: that one, at its own cut-off, on the same held-out recordings. */
+  startedFrom?: { name: string; threshold: number; rocAuc?: number; events?: EventMetrics };
 }
 
 /** The replay counted as `docs/research/gesture-detector-evaluation-metrics.md` counts it (`label_train.detections`). */
@@ -335,6 +350,8 @@ export function buildRequest(input: {
   hardNegatives?: boolean;
   /** Only for the CNN: the plan to train through. */
   stages?: StageRequest[];
+  /** Only for CNN v2: the model to continue from. */
+  startFrom?: string;
 }): TrainRequest {
   const role = (label: string): OtherRole => input.roles[label] ?? "negative";
   return {
@@ -347,6 +364,7 @@ export function buildRequest(input: {
     ...(input.method === CNN_METHOD || input.method === CNN_V2_METHOD ? { method: input.method } : {}),
     ...(input.hardNegatives ? { hardNegatives: true } : {}),
     ...(input.method === CNN_METHOD && input.stages?.length ? { stages: input.stages } : {}),
+    ...(input.method === CNN_V2_METHOD && input.startFrom ? { startFrom: input.startFrom } : {}),
   };
 }
 

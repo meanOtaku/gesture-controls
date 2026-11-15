@@ -30,6 +30,7 @@ function setup(over: { plan?: TrainPlan; environment?: TrainerEnvironment; statu
     if (command === "get_label_training_status") return over.status ?? { running: null, last: null };
     if (command === "plan_label_training") return over.plan ?? okPlan;
     if (command === "start_label_training") return "run-1";
+    if (command === "list_training_start_points") return [{ versionId: "snap-v2", name: "Snap v2", createdAt: "2026-11-15T10:00:00Z", trainedOn: ["s1", "i1"], missing: 1 }];
     return undefined;
   });
   render(<TrainPanel desktopAvailable labels={labels} datasets={datasets} onShowPipeline={over.onShowPipeline} />);
@@ -351,6 +352,43 @@ describe("TrainPanel training plan", () => {
     expect(screen.getByRole("checkbox", { name: "Use i2.csv" })).not.toBeChecked();
     expect(await screen.findByText(/Stage 1 of 2/)).toBeInTheDocument();
     expect(screen.getByText(/Stage 2 of 2/)).toBeInTheDocument(); // sent while it was away
+  });
+
+  it("continues a CNN v2 from one you have, choosing what it trained on again, and only for CNN v2", async () => {
+    setup();
+    choose("snap");
+    expect(screen.queryByLabelText("Start from")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn-v2" } });
+    const startFrom = await screen.findByLabelText("Start from");
+    await within(startFrom).findByRole("option", { name: "Continue training Snap v2" });
+    expect(calls("list_training_start_points").at(-1)?.[1]).toEqual({ label: "snap" });
+    // Leave out one it trained on, then continue: it comes back.
+    fireEvent.click(screen.getByRole("checkbox", { name: "Use s1.csv" }));
+    fireEvent.change(startFrom, { target: { value: "snap-v2" } });
+    expect(screen.getByRole("checkbox", { name: "Use s1.csv" })).toBeChecked();
+    expect(screen.getByText(/The 2 recordings it trained on are chosen again/)).toHaveTextContent("1 of the recordings it trained on are no longer in Model Lab");
+    await waitFor(() => expect(calls("plan_label_training").at(-1)?.[1]).toMatchObject({ request: { method: "ppg-imu-cnn-v2", startFrom: "snap-v2" } }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Use i1.csv" }));
+    expect(screen.getByText(/1 of the recordings it trained on are not chosen: it may forget/)).toBeInTheDocument();
+    // Another model kind never continues.
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn" } });
+    await waitFor(() => expect(calls("plan_label_training").at(-1)?.[1]).not.toHaveProperty("request.startFrom"));
+  });
+
+  it("puts a continued model next to the one it began from, on the same test recordings", async () => {
+    setup();
+    choose("snap");
+    await screen.findByText(/It will train on/);
+    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
+    await vi.waitFor(() => expect(handlers.has("label-training-event")).toBe(true));
+    const events = (caught: number, falseActivations: number, perHour: number) => ({ recordings: 2, gestures: 10, caught, gestureRecall: caught / 10, repeats: 0, medianLatencyMs: 300, falseActivations, negativeSeconds: 3600, falseActivationsPerHour: perHour });
+    act(() => handlers.get("label-training-event")?.({ payload: { kind: "finished", runId: "run-1", label: "snap", outcome: "deployable", message: "", versionId: "snap-new",
+      metrics: { windows: 50, positiveWindows: 20, negativeWindows: 30, precision: 0.9, recall: 0.8, f1: 0.85, falseActivationRate: 0.04, rocAuc: 0.95, activationThreshold: 0.97,
+        events: events(9, 2, 2), startedFrom: { name: "Snap v2", threshold: 0.99, events: events(7, 21, 21) } } } }));
+    const table = await screen.findByRole("table", { name: "The new model and Snap v2 on the same test recordings" });
+    expect(table).toHaveTextContent("Gestures caught7 of 109 of 10");
+    expect(table).toHaveTextContent("False alarms21 (about 21 an hour)2 (about 2 an hour)");
+    expect(table).toHaveTextContent("Cut-off0.990.97");
   });
 
   it("names the label being trained when the run is already going and nothing was chosen here", async () => {

@@ -579,6 +579,15 @@ never trained on, and the plan lists them per stage. A stage left with nothing t
 false alarms adds those moments to the last stage, and the models the threshold is chosen with follow the same plan. The
 plan is kept in the model's manifest (`trainingStages`).
 
+**Start from** (CNN v2 only) continues training a CNN v2 you have instead of training a new one from scratch: for example
+to add everyday-noise recordings made with the watch buzzing like the volume knob. It takes fewer passes at a lower learning
+rate, so the new recordings adjust what the model learnt rather than overwrite it. Choosing it ticks the recordings that
+model trained on again, so it keeps what it learnt from them (left out, it may forget it, and the card says so); those
+recordings only train, never test. Add the new recordings and train. The result is a new model next to the old one, which
+is not changed, and the training result shows both on the same test recordings, neither of which trained on them, each at
+its own cut-off: gestures caught, false alarms and delay. Keep whichever is better. Only a CNN v2 whose files say what it
+trained on can be continued from. A fresh model now and then is still worth training, as the clean comparison.
+
 **Learn from its own false alarms** trains the model, runs it over its training recordings as the app runs it live, adds
 every moment it fired with no gesture under way as an example of what is not the gesture, and trains it again (each model
 the threshold is chosen with does the same, so the threshold fits the model you get). Everyday-noise recordings teach it
