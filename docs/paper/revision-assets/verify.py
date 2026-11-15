@@ -11,7 +11,7 @@ from audit_evidence import ROOT, OUT, effective
 
 def main():
     paper=ROOT/'docs/paper'
-    docs=[paper/'README.md',paper/'EVIDENCE_AUDIT.md',paper/'Q2_RESEARCH_PLAN.md',OUT/'README.md']
+    docs=[paper/'README.md',paper/'notes'/'EVIDENCE_AUDIT.md',paper/'notes'/'Q2_RESEARCH_PLAN.md',OUT/'README.md']
     docs += [paper/'archive'/x/'IMPROVEMENTS.md' for x in ('ieee','springer','ieee-journal','springer-journal')]
     checked_links=0
     for doc in docs:

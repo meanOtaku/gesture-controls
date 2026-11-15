@@ -2,7 +2,7 @@
 
 **Applies to:** `main.tex`, `body.tex`, `refs.bib`, `sn-jnl.cls` and the current 17-page PDF. A Springer Nature class is a format, not a Q2 designation. Choose a particular journal, verify its current category/year and author instructions, and adapt the scientific contribution accordingly.
 
-**Companion documents:** [full provenance audit](../../EVIDENCE_AUDIT.md), [research plan and primary-source findings](../../Q2_RESEARCH_PLAN.md), [IEEE journal section-by-section guide](../ieee-journal/IMPROVEMENTS.md). The two journal body files are currently identical; keep scientific corrections synchronised. This documentation does not silently replace LaTeX or regenerate the original PDFs.
+**Companion documents:** [full provenance audit](../../notes/EVIDENCE_AUDIT.md), [research plan and primary-source findings](../../notes/Q2_RESEARCH_PLAN.md), [IEEE journal section-by-section guide](../ieee-journal/IMPROVEMENTS.md). The two journal body files are currently identical; keep scientific corrections synchronised. This documentation does not silently replace LaTeX or regenerate the original PDFs.
 
 ## 1. Main editorial decision
 
@@ -129,7 +129,7 @@ Until executed, include this only under future work or as a clearly proposed pro
 
 ### Outcome graphics still needed
 
-Current-model score/emission timeline; annotation disagreement; per-person/day recall–FAR; paired modality/normalisation effects; real post-motion recovery; task time/error and unintended-action outcomes. The [shared plan](../../Q2_RESEARCH_PLAN.md#8-figure-and-table-plan) lists required source artifacts. Do not fabricate representative scores or copy another model's latency distribution.
+Current-model score/emission timeline; annotation disagreement; per-person/day recall–FAR; paired modality/normalisation effects; real post-motion recovery; task time/error and unintended-action outcomes. The [shared plan](../../notes/Q2_RESEARCH_PLAN.md#8-figure-and-table-plan) lists required source artifacts. Do not fabricate representative scores or copy another model's latency distribution.
 
 ## 5. Springer Nature declarations and reproducibility
 

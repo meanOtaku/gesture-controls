@@ -2,39 +2,33 @@
 
 **Edit the paper and the report in [`manuscript/`](manuscript/README.md).** It is the single source:
 one set of section files builds the IEEE conference paper, the Springer LNCS paper and the
-project report. Everything under [`archive/`](archive/) is an earlier variant, kept for reference
-and no longer edited.
+project report.
 
-## Evidence audit and revision guides
+## Layout
 
-The manuscripts currently mix historical cue/camera-labelled experiments and later model variants.
-The November 7 audit separates these from the newer hand-labelled development model; **do not
-replace old table values with new manifest percentages without matching cohort and protocol**.
+| Folder | What it holds |
+| --- | --- |
+| [`manuscript/`](manuscript/README.md) | The source: section files, bibliography, figures, and the three build targets |
+| [`notes/`](notes/) | Working notes behind the paper: the [evidence audit](notes/EVIDENCE_AUDIT.md), the [Q2 research plan](notes/Q2_RESEARCH_PLAN.md) and the [journal companion](notes/JOURNAL_COMPANION.md) |
+| [`revision-assets/`](revision-assets/README.md) | Reproducible figures, data inventory, provenance and the `verify.py` check |
+| [`archive/`](archive/) | The four earlier format variants, frozen for reference |
 
-- [Evidence audit: old versus hand-labelled data, source aliases and claim corrections](EVIDENCE_AUDIT.md)
-- [Q2-target research plan: implemented capabilities, related work and proposed studies](Q2_RESEARCH_PLAN.md)
-- Format-specific improvements and suggested manuscript text:
-  [IEEE conference](archive/ieee/IMPROVEMENTS.md), [Springer LNCS](archive/springer/IMPROVEMENTS.md),
-  [IEEE journal](archive/ieee-journal/IMPROVEMENTS.md), [Springer Nature journal](archive/springer-journal/IMPROVEMENTS.md)
-- [Reproducible figures, inventory, provenance and verification](revision-assets/README.md)
-- [Journal companion: every claim, term, number, equation, table and figure of the journal version explained](JOURNAL_COMPANION.md)
+The evidence-qualified rewrite of 8 Nov 2026 (its IEEE and Springer folders and its Markdown → LaTeX tools) was
+folded into `manuscript/` and removed on 15 Nov 2026; it remains in git history.
 
-These additions are documentation and proposed revisions, not a completed new study, a rewritten
-manuscript or a guarantee of journal quartile/acceptance. The shared audit assets are outside the
-self-contained LaTeX folders: copy selected figures into a paper folder before standalone upload.
+## Evidence audit
 
-## New evidence-qualified Codex manuscript
+The manuscripts mix historical cue/camera-labelled experiments and later model variants. The November 7 audit
+separates these from the newer hand-labelled development model; **do not replace old table values with new
+manifest percentages without matching cohort and protocol**. See the [evidence audit](notes/EVIDENCE_AUDIT.md)
+and the format-specific suggestions for the archived variants:
+[IEEE conference](archive/ieee/IMPROVEMENTS.md), [Springer LNCS](archive/springer/IMPROVEMENTS.md),
+[IEEE journal](archive/ieee-journal/IMPROVEMENTS.md), [Springer Nature journal](archive/springer-journal/IMPROVEMENTS.md).
 
-The new [IEEE Codex](archive/ieee%20codex/README.md) and [Springer Codex](archive/springer%20codex/README.md)
-folders contain a complete rewritten paper using the audit: current hand-labelled development evidence,
-separately identified historical results, corrected causal methods and explicitly proposed future studies.
-The scientific body is identical across the two formats. Both compile locally; PDFs remain local rather
-than being committed. Full Markdown, embedded figures, downloadable Markdown and both PDFs are saved
-in Joplin's **Conference Papers** notebook as **Failure-Aware Spatial Interaction — Codex manuscript
-(IEEE + Springer)**. The note and all seven resources were read back after successful server sync.
-See [generation, provenance and checks](archive/codex-tools/README.md).
+These are documentation and proposed revisions, not a completed new study or a guarantee of journal
+quartile/acceptance.
 
-The four original variants below are preserved alongside the two new Codex journal formats.
+## The archived variants
 
 | Folder (under `archive/`) | Format | Pages |
 | --- | --- | --- |
@@ -42,17 +36,10 @@ The four original variants below are preserved alongside the two new Codex journ
 | `springer/` | Springer LNCS conference proceedings (`llncs`, `splncs04`) | 11 |
 | `ieee-journal/` | IEEE journal / Transactions (`IEEEtran` journal mode, biography, statements) | 8 |
 | `springer-journal/` | Springer Nature journal (`sn-jnl`, December 2024 template, Declarations) | 17 |
-| `ieee codex/` | New evidence-qualified IEEE journal manuscript | 8 |
-| `springer codex/` | New evidence-qualified Springer Nature journal manuscript | 15 |
 
-The original two conference versions share one `body.tex`; the original two journal versions share a longer `body.tex` with research
-questions, a dataset section, the full results (including the robustness screen and further variations), a discussion
-with threats to validity, and future work. Keep each pair's `body.tex` identical when editing.
-
-Each original folder is self-contained and uploads as-is to Overleaf: `main.tex` (class, title, abstract, back matter),
-`body.tex`, `refs.bib` and `architecture.png`. `springer-journal/` also holds `sn-jnl.cls` and `sn-mathphys-num.bst`
-from Springer Nature's official template package; change the `sn-mathphys-num` option in `main.tex` if the target
-journal asks for another reference style.
+The two conference versions share one `body.tex`; the two journal versions share a longer `body.tex`. Each folder
+is self-contained and uploads as-is to Overleaf: `main.tex`, `body.tex`, `refs.bib` and `architecture.png`
+(`springer-journal/` also holds Springer Nature's `sn-jnl.cls` and `sn-mathphys-num.bst`).
 
 Build locally with `latexmk -pdf main.tex`. With BasicTeX, first install the classes, fonts and the packages
 `sn-jnl` needs:

@@ -2,7 +2,7 @@
 
 **Applies to:** this folder's `main.tex`, `body.tex`, `refs.bib` and `architecture.png`. The committed PDF is 11 pages. LNCS is a proceedings format, not a journal quartile or an acceptance standard. The actual conference's limits override this observed length.
 
-**Evidence base:** [full audit](../../EVIDENCE_AUDIT.md), [Q2 research/study plan](../../Q2_RESEARCH_PLAN.md), [IEEE conference editing checklist](../ieee/IMPROVEMENTS.md). This guide adds format-specific revision and proposed text; original manuscript files are unchanged by the documentation audit.
+**Evidence base:** [full audit](../../notes/EVIDENCE_AUDIT.md), [Q2 research/study plan](../../notes/Q2_RESEARCH_PLAN.md), [IEEE conference editing checklist](../ieee/IMPROVEMENTS.md). This guide adds format-specific revision and proposed text; original manuscript files are unchanged by the documentation audit.
 
 ## 1. Scientific changes that must be shared with the IEEE conference version
 
@@ -55,7 +55,7 @@ Place after the reference-annotation subsection. Use a full-text-width `figure`,
 \end{figure}
 ```
 
-Use the full session/clock/normalisation provenance from [the audit](../../EVIDENCE_AUDIT.md). Keep text readable after scaling and do not reduce captions to hide required evidence qualifications. For standalone Overleaf uploads, copy the selected PDF into this folder and adjust the path.
+Use the full session/clock/normalisation provenance from [the audit](../../notes/EVIDENCE_AUDIT.md). Keep text readable after scaling and do not reduce captions to hide required evidence qualifications. For standalone Overleaf uploads, copy the selected PDF into this folder and adjust the path.
 
 ### Historical day-transfer figure
 
@@ -85,7 +85,7 @@ The schematic is useful for revision review or supplementary material. For the f
 
 ## 5. What more to do for the journal-level research goal
 
-Follow the [shared plan](../../Q2_RESEARCH_PLAN.md), prioritising:
+Follow the [shared plan](../../notes/Q2_RESEARCH_PLAN.md), prioritising:
 
 - Reviewer-audited boundaries and paired old-versus-reviewed annotation analysis.
 - Matched IMU-only, PPG-only and fused models using the same source-group splits, budget and operating-point policy.

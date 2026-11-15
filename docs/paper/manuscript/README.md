@@ -39,7 +39,7 @@ refs.bib                one bibliography (entries with % VERIFY still need check
 
 ## Origin
 
-The sections were split verbatim from the evidence-qualified "Codex" manuscript
-(`archive/ieee codex/body.tex`, 8 Nov 2026). The bibliography merges its verified entries
-with the older `archive/ieee/refs.bib`. The Markdown → LaTeX pipeline in
-`archive/codex-tools/` is retired: the `.tex` files here are now the source of truth.
+The sections were split verbatim from the evidence-qualified rewrite of 8 Nov 2026 (its folders
+and Markdown → LaTeX tools were removed on 15 Nov 2026; they remain in git history). The
+bibliography merges its verified entries with the older `archive/ieee/refs.bib`. The `.tex`
+files here are the source of truth.

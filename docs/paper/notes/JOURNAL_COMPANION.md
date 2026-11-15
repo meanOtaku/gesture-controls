@@ -150,7 +150,7 @@ The paper screened methods designed to make models hold up when data shift betwe
 
 It also cites **extremely randomised trees** (the tree model used) and **Savitzky–Golay filtering** (a smoothing method for derivatives).
 
-**Reference housekeeping.** The journal's `refs.bib` still marks the Tsunoda, ViWatch and Kim titles as "to be completed". The codex manuscript's bibliography has verified full metadata for Tsunoda (Riku Tsunoda, Myungguen Choi, Buntarou Shizuki, *Thumb-to-Finger Gesture Recognition Using COTS Smartwatch Accelerometers*) and ViWatch (Wenqiang Chen et al., *Robust Finger Interactions with COTS Smartwatches via Unsupervised Siamese Adaptation*); copy those across.
+**Reference housekeeping.** The journal's `refs.bib` still marks the Tsunoda, ViWatch and Kim titles as "to be completed". The manuscript's `refs.bib` (merged from the earlier evidence-qualified draft) has verified full metadata for Tsunoda (Riku Tsunoda, Myungguen Choi, Buntarou Shizuki, *Thumb-to-Finger Gesture Recognition Using COTS Smartwatch Accelerometers*) and ViWatch (Wenqiang Chen et al., *Robust Finger Interactions with COTS Smartwatches via Unsupervised Siamese Adaptation*); copy those across.
 
 ## Section 3 (III). System design
 
@@ -529,7 +529,7 @@ The conclusion restates the paper in three claims: (1) a consumer headset and sm
 | Funding | Acknowledgment | Funding item | Sources or "Not applicable" |
 | Author contribution | — | Item | Who did what (sole author here) |
 | Biography | IEEE biography | — | Short career summary |
-| AI assistance | Not yet stated | Not yet stated | Most journals now require disclosing AI tools used in drafting; see the codex manuscript's declaration and follow the target journal's policy |
+| AI assistance | Not yet stated | Not yet stated | Most journals now require disclosing AI tools used in drafting; see the declaration in `manuscript/sections/11-declarations.tex` and follow the target journal's policy |
 
 **References.** IEEE style numbers citations in order of appearance; the Springer version uses the `sn-mathphys-num` numbered style, which can be swapped for the journal's preferred style in one option.
 
@@ -604,7 +604,7 @@ Each figure in the paper traces to a file in the `gesture-controls` repository. 
 | Table I rates; Table III data-path measurements; MTU 514/512 fault; 61 → 30 notifications; 20 dropped messages | III-A, III-D | `docs/research/watch-data-path-findings-2026-10.md` |
 | Table II filters; 0.5-point steps, 150 ms easing, 1°, \~3° per point | III-C | `docs/original-volume-interaction.md`; `docs/architecture/safety-and-fail-closed-behavior.md` |
 | 130–190 ms macOS volume call; 500 ms freshness; 750 ms watchdog | III-C, III-E | `docs/architecture/safety-and-fail-closed-behavior.md` |
-| 37 exports, 28 distinct streams | IV-A | `docs/paper/EVIDENCE_AUDIT.md`; `revision-assets/evidence-audit.json` |
+| 37 exports, 28 distinct streams | IV-A | `docs/paper/notes/EVIDENCE_AUDIT.md`; `revision-assets/evidence-audit.json` |
 | Label lag up to 1.3 s | IV-B | `docs/research/ppg-imu-fusion-and-triggers-2026-10.md` |
 | 0.35 hand sizes; 110 → 20 false activations/h | IV-B | `docs/architecture/pinch-models.md` |
 | 8 of 163 pinch-in intervals without a hold | IV-B | `docs/research/camera-label-hold-audit-2026-11.md` |
@@ -627,4 +627,4 @@ Each figure in the paper traces to a file in the `gesture-controls` repository. 
 | System performance (452 µs → 0.1 µs, 17.5 → 12.0 MB, etc.) | VII-G | `docs/performance.md` |
 | 12–18% on 14 October vs 63–75% on 3–4 November | IX | `docs/architecture/pinch-models.md` |
 
-**Checks to keep the paper honest.** `docs/paper/revision-assets/verify.py` and `docs/paper/archive/codex-tools/verify.py` re-check links, model hashes and the paired LaTeX bodies; `replay_hand_labelled.py` recomputes Table VIII from the checked-in model and recordings.
+**Checks to keep the paper honest.** `docs/paper/revision-assets/verify.py` re-checks links and model hashes; `replay_hand_labelled.py` recomputes Table VIII from the checked-in model and recordings.

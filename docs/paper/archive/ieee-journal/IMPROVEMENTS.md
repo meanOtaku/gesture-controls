@@ -2,7 +2,7 @@
 
 **Applies to:** `main.tex`, `body.tex`, `refs.bib`, current eight-page PDF. This is an improvement specification with suggested insertion text and real figures, not an acceptance prediction. IEEE Transactions formatting does not make a paper Q1/Q2; select a specific journal and verify its category/year and author rules.
 
-**Read with:** [evidence/provenance audit](../../EVIDENCE_AUDIT.md), [research plan and verified related work](../../Q2_RESEARCH_PLAN.md), [Springer journal counterpart](../springer-journal/IMPROVEMENTS.md). The journal body files currently match and should remain scientifically identical when edited.
+**Read with:** [evidence/provenance audit](../../notes/EVIDENCE_AUDIT.md), [research plan and verified related work](../../notes/Q2_RESEARCH_PLAN.md), [Springer journal counterpart](../springer-journal/IMPROVEMENTS.md). The journal body files currently match and should remain scientifically identical when edited.
 
 ## 1. Overall assessment and reframing
 
@@ -26,7 +26,7 @@ After a confirmatory study, replace the last two sentences with its exact popula
 
 State three concrete contributions: (1) integrated causal sensing-to-action design, (2) auditable annotation/event-evaluation methodology, (3) measured effect of specific design choices. Contribution 3 must be scoped to the actual old/new cohort until matched current experiments exist.
 
-Add a related-work matrix following [the research plan](../../Q2_RESEARCH_PLAN.md#related-work-table-to-add). OpenWatch already addresses multimodal smartwatch learning across 50 people; ViWatch and Tsunoda address finger interaction/adaptation and IMU-only recognition. Novelty cannot simply be PPG+IMU fusion or a CNN. The defensible difference is continuous command operation, source/annotation provenance, recovery after movement and demonstrated interaction/failure behaviour.
+Add a related-work matrix following [the research plan](../../notes/Q2_RESEARCH_PLAN.md#related-work-table-to-add). OpenWatch already addresses multimodal smartwatch learning across 50 people; ViWatch and Tsunoda address finger interaction/adaptation and IMU-only recognition. Novelty cannot simply be PPG+IMU fusion or a CNN. The defensible difference is continuous command operation, source/annotation provenance, recovery after movement and demonstrated interaction/failure behaviour.
 
 ### System design
 
@@ -46,7 +46,7 @@ Do not use the 407/395/408 sampled PPG runs as evaluated-event denominators: the
 
 ### Detection Methods (`sec:methods`)
 
-Apply the exact [normalisation/trigger corrections](../../EVIDENCE_AUDIT.md#normalisation-correction). Define 549-tick decision grid, final 50-tick tensor, 1.4826 MAD scaling, per-channel floors, clipping and missing-input behaviour. Explain the old rolling variant separately rather than describing every result as median-scaled.
+Apply the exact [normalisation/trigger corrections](../../notes/EVIDENCE_AUDIT.md#normalisation-correction). Define 549-tick decision grid, final 50-tick tensor, 1.4826 MAD scaling, per-channel floors, clipping and missing-input behaviour. Explain the old rolling variant separately rather than describing every result as median-scaled.
 
 Document model ID/hash and versioned full training configuration. The hand-labelled manifest's preprocessing contract says median while its descriptive pipeline prose says rolling; report the inconsistency and repair the exporter separately. Do not silently edit an old bundle to appear consistent with the paper.
 
@@ -122,7 +122,7 @@ Use vector PDF for print and PNG for Markdown/Joplin. Copy selected assets into 
 
 ## 4. Research needed before a stronger journal claim
 
-P0: resolve current event logs and pinch-out roles, freeze annotation versions, correct inherited claims. P1: matched ablations and prospective day/refit test; a participant study if claiming cross-person generality. P2: counterbalanced interaction study, live fault trials and transport/energy/latency measurements. Full designs, exposure uncertainty and proposed sample-size reasoning are in [Q2_RESEARCH_PLAN.md](../../Q2_RESEARCH_PLAN.md).
+P0: resolve current event logs and pinch-out roles, freeze annotation versions, correct inherited claims. P1: matched ablations and prospective day/refit test; a participant study if claiming cross-person generality. P2: counterbalanced interaction study, live fault trials and transport/energy/latency measurements. Full designs, exposure uncertainty and proposed sample-size reasoning are in [Q2_RESEARCH_PLAN.md](../../notes/Q2_RESEARCH_PLAN.md).
 
 ## 5. Final checklist
 

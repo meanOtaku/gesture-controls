@@ -27,22 +27,22 @@ The following is **repository evidence**, not a fresh end-to-end validation on a
 
 | Existing capability | Evidence home | What the paper can use | Remaining scientific gap |
 |---|---|---|---|
-| Consumer Sony head orientation, calibration and dwell | [components](../architecture/components-and-deployment.md); `crates/head-tracking`, `crates/interaction-engine` | Actual sensing/topology and target selection | Target-selection error, drift/recalibration frequency, selection time across users |
-| Watch-only sensing; desktop training, inference and actions | [components](../architecture/components-and-deployment.md) | Clear placement of compute; neither camera nor on-watch inference is required at deployment | Measure CPU/memory, warm-up, energy and action latency in a fixed build |
-| BLE/Wi-Fi paths, batching, ordering and watch timestamps | [BLE protocol](../protocols/watch-ble-transport.md); [WebSocket protocol](../protocols/watch-websocket-protocol.md) | Transport constraints and loss handling | Long-run p50/p95/p99 age, gaps, reconnect recovery and watch battery measurement |
-| Saved camera landmarks and time correspondence | [camera-label audit](../research/camera-label-hold-audit-2026-11.md) | Explain reference-label production without claiming continuous image storage | Residual sync uncertainty; missed/occluded contact; independent boundary review |
-| Manual annotation overrides and Labelling interface | [manual-label tests](../../tools/label-trainer/tests/test_manual_label.py); `apps/desktop/src/features/labelling` | A reproducible correction pipeline with original labels retained | Reviewer protocol, inter-rater agreement and versioned annotation manifest |
+| Consumer Sony head orientation, calibration and dwell | [components](../../architecture/components-and-deployment.md); `crates/head-tracking`, `crates/interaction-engine` | Actual sensing/topology and target selection | Target-selection error, drift/recalibration frequency, selection time across users |
+| Watch-only sensing; desktop training, inference and actions | [components](../../architecture/components-and-deployment.md) | Clear placement of compute; neither camera nor on-watch inference is required at deployment | Measure CPU/memory, warm-up, energy and action latency in a fixed build |
+| BLE/Wi-Fi paths, batching, ordering and watch timestamps | [BLE protocol](../../protocols/watch-ble-transport.md); [WebSocket protocol](../../protocols/watch-websocket-protocol.md) | Transport constraints and loss handling | Long-run p50/p95/p99 age, gaps, reconnect recovery and watch battery measurement |
+| Saved camera landmarks and time correspondence | [camera-label audit](../../research/camera-label-hold-audit-2026-11.md) | Explain reference-label production without claiming continuous image storage | Residual sync uncertainty; missed/occluded contact; independent boundary review |
+| Manual annotation overrides and Labelling interface | [manual-label tests](../../../tools/label-trainer/tests/test_manual_label.py); `apps/desktop/src/features/labelling` | A reproducible correction pipeline with original labels retained | Reviewer protocol, inter-rater agreement and versioned annotation manifest |
 | Binary per-label trees/CNNs, median and rolling input variants | `tools/label-trainer/src/label_trainer`; `crates/label-inference` | Existing baselines and deployable input contract | Matched manual-label ablations; both targets on independent data |
-| Continuous event replay and temporal trigger | [metric standard](../research/gesture-detector-evaluation-metrics.md); `label_train.py`; `detection.rs` | Catch/repeat/late/false taxonomy; explicit negative-time denominator | Recover current model's event logs and expose unavailable time as a separate result |
-| Model hashes, load-contract checks, Off/Monitor/Live modes | [fail-closed architecture](../architecture/safety-and-fail-closed-behavior.md) | Safety design and reproducible artifacts | Live fault-injection outcome rates, not an assertion of formal safety certification |
+| Continuous event replay and temporal trigger | [metric standard](../../research/gesture-detector-evaluation-metrics.md); `label_train.py`; `detection.rs` | Catch/repeat/late/false taxonomy; explicit negative-time denominator | Recover current model's event logs and expose unavailable time as a separate result |
+| Model hashes, load-contract checks, Off/Monitor/Live modes | [fail-closed architecture](../../architecture/safety-and-fail-closed-behavior.md) | Safety design and reproducible artifacts | Live fault-injection outcome rates, not an assertion of formal safety certification |
 | Paired grab/release, bounded wrist mapping and native volume writer | `crates/interaction-engine`; `crates/volume-control` | Real interaction rather than a gesture-only demo | Controlled user task with completion/error/fatigue measures |
-| Historical fusion, trigger, curriculum and motion-burst studies | [research notes](../research/ppg-imu-fusion-and-triggers-2026-10.md), [curriculum](../research/cnn-curriculum-old-noise-2026-11.md), [hangover](../research/cnn-motion-hangover-2026-11.md) | Motivation, failure analysis and candidate hypotheses | Not automatically evidence for the latest annotation version |
+| Historical fusion, trigger, curriculum and motion-burst studies | [research notes](../../research/ppg-imu-fusion-and-triggers-2026-10.md), [curriculum](../../research/cnn-curriculum-old-noise-2026-11.md), [hangover](../../research/cnn-motion-hangover-2026-11.md) | Motivation, failure analysis and candidate hypotheses | Not automatically evidence for the latest annotation version |
 
 The repository now also contains drone work. **Do not add it to this article**: it introduces unrelated claims and safety requirements. Keep the laptop interaction scope coherent.
 
 ## 3. Relevant literature actually retrieved for this audit
 
-This was a focused search of the project's related-work trail, not an exhaustive systematic review. Full text was retrieved for sources 1–4 and 7 below; Crossref metadata only for sources 5–6. Do not use a DOI metadata record as evidence for an uninspected experimental result. Retrieval details are in [source ledger](revision-assets/literature-sources.json).
+This was a focused search of the project's related-work trail, not an exhaustive systematic review. Full text was retrieved for sources 1–4 and 7 below; Crossref metadata only for sources 5–6. Do not use a DOI metadata record as evidence for an uninspected experimental result. Retrieval details are in [source ledger](../revision-assets/literature-sources.json).
 
 1. **Bonazzi et al., OpenWatch: A Multimodal Benchmark for Hand Gesture Recognition on Smartwatches**, arXiv `2605.04791v2`: [primary full text](https://arxiv.org/html/2605.04791v2). Reports over 10 hours, 50 participants, 59 labelled gesture sequences, subject-independent evaluation and modality ablations. Its reported PPG benefit of 12.5 F1 points concerns foundation smartwatch models; it is not a universal gain for every architecture. **Implication:** “PPG + IMU works” is not sufficient novelty. Contrast continuous command detection and false-action exposure with its sequence-classification setting. Verify data/channel/window compatibility before proposing transfer, and describe it as a preprint unless a final venue is independently established.
 2. **Chen et al., Robust Finger Interactions with COTS Smartwatches via Unsupervised Siamese Adaptation (ViWatch)**: [author-hosted primary PDF](https://www.cs.virginia.edu/~stankovic/psfiles/ViWatch_UIST_%20FINAL.pdf). **Implication:** adaptation is established related work. Distinguish frozen cross-day transfer from calibration/adaptation and do not compare its recognition percentages directly with this project's continuous recall at a false-alarm budget. Its method is not simply “train our CNN longer.”
@@ -92,7 +92,7 @@ Report both pinch directions separately and per recording/day/person. Give caugh
 
 ## 6. Study C — Prospective generalisation
 
-![Proposed prospective evaluation](revision-assets/prospective-protocol.png)
+![Proposed prospective evaluation](../revision-assets/prospective-protocol.png)
 
 *Proposed protocol; none of these new data-collection stages has been completed by this documentation task.*
 
@@ -133,11 +133,11 @@ For systems efficiency, record device/OS/build, CPU and memory, input-building a
 ### Available now, with honest captions
 
 1. **Evidence lineage** — separate historical, hand-labelled and future evidence. Use in revision notes or a shortened methods provenance figure.
-2. **Real telemetry + annotation revision** — [PNG](revision-assets/annotation-telemetry.png), [vector PDF](revision-assets/annotation-telemetry.pdf), [SVG](revision-assets/annotation-telemetry.svg). Include the precise session and normalisation caption from the audit. Do not label it model output.
+2. **Real telemetry + annotation revision** — [PNG](../revision-assets/annotation-telemetry.png), [vector PDF](../revision-assets/annotation-telemetry.pdf), [SVG](../revision-assets/annotation-telemetry.svg). Include the precise session and normalisation caption from the audit. Do not label it model output.
 3. **Historical day-transfer plot** — shows the limitation obscured by the aggregate headline; place with historical results.
 4. **Prospective protocol diagram** — label as proposed until actually executed. It belongs in future work or a study protocol, not a completed Methods section prematurely.
 
-All four have PNG/PDF/SVG exports, an editable generator and [figure provenance](revision-assets/figure-provenance.json). Generate new figures from saved real event logs when those exist.
+All four have PNG/PDF/SVG exports, an editable generator and [figure provenance](../revision-assets/figure-provenance.json). Generate new figures from saved real event logs when those exist.
 
 ### Still needed; do not draw fictional results
 

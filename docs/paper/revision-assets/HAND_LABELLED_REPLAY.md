@@ -4,7 +4,7 @@
 `ae0a22bf8f744d5fa2fce9208221f0947288c5ba5c5eb196180985a70d77ba0d`, verified before scoring.
 **Script:** [`replay_hand_labelled.py`](replay_hand_labelled.py). **Full output:** [`hand-labelled-replay.json`](hand-labelled-replay.json).
 
-This closes the gap the [evidence audit](../EVIDENCE_AUDIT.md) recorded: the bundle stored an event recall and a
+This closes the gap the [evidence audit](../notes/EVIDENCE_AUDIT.md) recorded: the bundle stored an event recall and a
 false-activation rate but no event log, counts, exposure or latencies. The replay recovers them. **It is development
 evidence on the model's listed evaluation recordings, not an untouched test.**
 

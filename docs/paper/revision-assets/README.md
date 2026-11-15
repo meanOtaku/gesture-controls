@@ -1,6 +1,6 @@
 # Revision assets: provenance and reproduction
 
-These assets accompany the [evidence audit](../EVIDENCE_AUDIT.md) and [research plan](../Q2_RESEARCH_PLAN.md). They do not change original manuscripts, datasets, labels, model artifacts or runtime settings.
+These assets accompany the [evidence audit](../notes/EVIDENCE_AUDIT.md) and [research plan](../notes/Q2_RESEARCH_PLAN.md). They do not change original manuscripts, datasets, labels, model artifacts or runtime settings.
 
 ## Files and intended use
 

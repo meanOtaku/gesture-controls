@@ -10,13 +10,13 @@ The journal article already includes the November 5 curriculum, camera-label hol
 
 No manuscript, label, sensor recording or trained model was rewritten by this audit. The per-folder guides provide proposed replacement text and insertion instructions. Scientific claims should be updated only against an explicit experiment identity, not by substituting a newer percentage into an old table.
 
-![Evidence lineage](revision-assets/evidence-lineage.png)
+![Evidence lineage](../revision-assets/evidence-lineage.png)
 
 *Figure A. Evidence lineage, not a performance comparison. Yellow items are verification work still needed. The current-model number is a stored manifest result, not a newly reproduced test.*
 
 ## 2. What the hand-labelled directory actually contains
 
-Sources: [`audit_evidence.py`](revision-assets/audit_evidence.py), [`evidence-audit.json`](revision-assets/evidence-audit.json), [`hand-labelled-inventory.csv`](revision-assets/hand-labelled-inventory.csv).
+Sources: [`audit_evidence.py`](../revision-assets/audit_evidence.py), [`evidence-audit.json`](../revision-assets/evidence-audit.json), [`hand-labelled-inventory.csv`](../revision-assets/hand-labelled-inventory.csv).
 
 A read-only scan of `data/recordings/Hand labeled/` found:
 
@@ -30,7 +30,7 @@ A read-only scan of `data/recordings/Hand labeled/` found:
 
 ### Label semantics to describe precisely
 
-[`csv_io.py`](../../tools/label-trainer/src/label_trainer/csv_io.py) and [`test_manual_label.py`](../../tools/label-trainer/tests/test_manual_label.py) establish:
+[`csv_io.py`](../../../tools/label-trainer/src/label_trainer/csv_io.py) and [`test_manual_label.py`](../../../tools/label-trainer/tests/test_manual_label.py) establish:
 
 1. A nonempty `manual_label` overrides `label`.
 2. A blank manual field falls back to the original label; it does **not** mean “reviewed negative.”
@@ -38,7 +38,7 @@ A read-only scan of `data/recordings/Hand labeled/` found:
 4. `left_out` is a named exclusion label, not automatically the same as `-`. Event evaluation ignores labels supplied in the experiment's exclusion set; the exclusion configuration must be preserved and checked. A CSV containing `left_out` alone does not prove every pipeline excluded it.
 5. The exact historical experiment's loader matters: old standalone research scripts may read `label` directly instead of the current trainer's effective-label logic. Reusing an old script on edited CSVs can silently ignore the corrections.
 
-![Actual annotation and telemetry](revision-assets/annotation-telemetry.png)
+![Actual annotation and telemetry](../revision-assets/annotation-telemetry.png)
 
 *Figure B. Actual saved PPG and gyroscope samples from `gesture-dataset-pinch_hold-2026-11-03T01-05-59.434Z`, showing original versus effective row labels. Each PPG channel is centred and divided by its unscaled MAD over the displayed interval solely for visualisation; this is not the model's input normalisation. Gyroscope magnitude retains rad/s. Time is relative to the first saved PPG timestamp. No clock shift, interpolation, fitted prediction or invented waveform is shown. Manual corrections are not independently verified physical contact times.*
 
@@ -64,7 +64,7 @@ These rows have **different cohorts and configurations**. Do not rank their accu
 
 ### The newer hand-labelled model
 
-Verified source: [`pinch_in-hand-labeled/manifest.json`](../../trained-models/pinch_in-hand-labeled/manifest.json).
+Verified source: [`pinch_in-hand-labeled/manifest.json`](../../../trained-models/pinch_in-hand-labeled/manifest.json).
 
 - SHA-256: `ae0a22bf8f744d5fa2fce9208221f0947288c5ba5c5eb196180985a70d77ba0d`.
 - Preprocessing kind: `ppg_imu_cnn_median`; input dimension 450; context contract 11,000 ms.
@@ -76,7 +76,7 @@ Verified source: [`pinch_in-hand-labeled/manifest.json`](../../trained-models/pi
 
 **Missing for a headline current-model claim:** eligible caught/total counts, emitted event timestamps, repeats/late/misses, eligible negative seconds, latency distribution, per-recording outcomes, threshold-selection log, precise annotation-version hashes and full training configuration. Do not reverse-engineer event counts from a rounded recall or borrow the 57-event denominator from another model.
 
-> **Update, 8 November 2026:** the event log is now recovered. Replaying this bundle over its eight listed evaluation recordings with the trainer's own detection and event-accounting code reproduces the stored metrics exactly: 47/57 starts caught, 4 late, 0 repeats, 0 false activations over 1,735.4 s of eligible no-gesture time (95% upper bound 6.2/h), median latency 442 ms, and no interior input gaps. The everyday-noise session peaks at 0.970 against the 0.99 threshold. See [the replay report](revision-assets/HAND_LABELLED_REPLAY.md). It remains development evidence; the training configuration is reconstructed, and the threshold-selection log and annotation hashes are still missing.
+> **Update, 8 November 2026:** the event log is now recovered. Replaying this bundle over its eight listed evaluation recordings with the trainer's own detection and event-accounting code reproduces the stored metrics exactly: 47/57 starts caught, 4 late, 0 repeats, 0 false activations over 1,735.4 s of eligible no-gesture time (95% upper bound 6.2/h), median latency 442 ms, and no interior input gaps. The everyday-noise session peaks at 0.970 against the 0.99 threshold. See [the replay report](../revision-assets/HAND_LABELLED_REPLAY.md). It remains development evidence; the training configuration is reconstructed, and the threshold-selection log and annotation hashes are still missing.
 
 There is no separately named `pinch_out-hand-labeled` bundle in this checkout. The median pinch-out bundle is not automatically the matching hand-labelled model; its cohort must first be resolved.
 
@@ -91,19 +91,19 @@ The journal locations below refer to `ieee-journal/body.tex`; its Springer journ
 | Existing claim / location | Evidence found | Required treatment |
 |---|---|---|
 | Abstract: “about two thirds ... on unseen sessions” | Historical CNN/trees comparison and newer-day subsets; LODO selected row is 161/372 (43.3%), not two thirds overall | Specify cohort and operating point. Do not use an unqualified generalisation headline. |
-| RQ2 / `tab:lodo`: 161/372; noise FAR 7/h; pinch FAR 49/h | [`cnn-all-days/results.md`](../research/artifacts/cnn-all-days-2026-11/results.md), “all moments, no still-hand gate” | Preserve as historical explored camera-label LODO. Show day-level catches and FAR separately. |
+| RQ2 / `tab:lodo`: 161/372; noise FAR 7/h; pinch FAR 49/h | [`cnn-all-days/results.md`](../../research/artifacts/cnn-all-days-2026-11/results.md), “all moments, no still-hand gate” | Preserve as historical explored camera-label LODO. Show day-level catches and FAR separately. |
 | LODO “earlier” row: 204/372 | Source explicitly says live model trained on most October sessions | Keep conspicuous non-independent caveat or remove from main generalisation comparison. |
 | “final ... 15 of 20 and 18 of 21” | Exact current-model identity and event-log provenance not established by this audit | Mark provenance unresolved; do not attribute to `ae0a22bf`, median bundles or curriculum by similarity. Recover originating evaluation artifact or remove. |
 | Worst-split AUC 0.789 → 0.837 | Historical frozen 37-recording, 1,390-event fusion experiment | Keep in history/ablation with its original label era. It is not a measured PPG contribution for the new hand-labelled CNN. |
-| Curriculum: 15/19 and 10/19, FAR 0 | [`cnn-curriculum-old-noise`](../research/cnn-curriculum-old-noise-2026-11.md) and linked JSON | Correctly marked exploratory: same pair selected threshold and supplied outcome. Do not promote to independent testing or current hand-label evidence. |
-| Motion-burst table: median scaling removes blind spot | [`cnn-motion-hangover`](../research/cnn-motion-hangover-2026-11.md) uses maximum score 0.1–1 s after starts for spliced-burst percentages | Call it a synthetic-splice **window-score sensitivity** check, separate from continuous event replay; not live robustness proof. |
-| Equation: divide by MAD | [`cnn_input.py`](../../tools/label-trainer/src/label_trainer/cnn_input.py) uses 1.4826 × MAD plus channel floor and clipping | Replace equation and define shared-window indexing, floor and clip. Distinguish rolling and median variants. |
-| “fires at the peak”; next detection waits 1.5 s | [`detection.rs`](../../crates/label-inference/src/detection.rs): first decline after above-threshold climb; cooldown after detection ends | State causal emission at first decline, not retrospective peak timestamp; report actual emitted-event latency. |
+| Curriculum: 15/19 and 10/19, FAR 0 | [`cnn-curriculum-old-noise`](../../research/cnn-curriculum-old-noise-2026-11.md) and linked JSON | Correctly marked exploratory: same pair selected threshold and supplied outcome. Do not promote to independent testing or current hand-label evidence. |
+| Motion-burst table: median scaling removes blind spot | [`cnn-motion-hangover`](../../research/cnn-motion-hangover-2026-11.md) uses maximum score 0.1–1 s after starts for spliced-burst percentages | Call it a synthetic-splice **window-score sensitivity** check, separate from continuous event replay; not live robustness proof. |
+| Equation: divide by MAD | [`cnn_input.py`](../../../tools/label-trainer/src/label_trainer/cnn_input.py) uses 1.4826 × MAD plus channel floor and clipping | Replace equation and define shared-window indexing, floor and clip. Distinguish rolling and median variants. |
+| “fires at the peak”; next detection waits 1.5 s | [`detection.rs`](../../../crates/label-inference/src/detection.rs): first decline after above-threshold climb; cooldown after detection ends | State causal emission at first decline, not retrospective peak timestamp; report actual emitted-event latency. |
 | Camera labels described as ground truth | Automatic landmarks, session-adaptive distance thresholds, later manual overrides | Use “reference annotations”; quantify mapping/boundary uncertainty and independent review. Manual edits are not automatically perfect ground truth. |
 | “training and test recordings are always disjoint” | Hand model IDs and sensor hashes disjoint; some historical comparison rows explicitly reused training data | Scope statement per experiment. Group source-equivalent exports, not filenames alone; repeated development evaluation is not a sealed test. |
 | 15-minute BLE log / 31 µs input building / native volume latency | Existing engineering claims, not remeasured here | Preserve as prior measurements only with hardware, build, method, raw log and distribution; do not describe as comprehensive deployment validation. |
 
-![Historical day-specific results](revision-assets/historical-day-transfer.png)
+![Historical day-specific results](../revision-assets/historical-day-transfer.png)
 
 *Figure C. Historical camera-label LODO for the selected no-still-hand-gate configuration. Catch counts: 21/171, 37/52, 67/92 and 36/57. Dashed line is pooled 161/372. The newer days support the narrower “roughly two thirds” description, not the aggregate. Rates and thresholds are inherited from the explored historical artifact; this is not a rerun on manual labels.*
 
@@ -152,4 +152,4 @@ The 549-tick grid spans 10.96 s from first to last sample, under an 11 s contrac
 - [ ] Freeze code, model, thresholds, quality gates, matching tolerance, excluded intervals and inference cadence before collecting prospective data.
 - [ ] Collect an untouched test and report all sessions, including failed/aborted ones and input-unavailable time.
 
-See [Q2 research plan](Q2_RESEARCH_PLAN.md) for the proposed study and [the four per-format guides](README.md) for insertion locations. There is no universal experiment count or accuracy threshold that guarantees a Q2 publication.
+See [Q2 research plan](Q2_RESEARCH_PLAN.md) for the proposed study and [the four per-format guides](../README.md) for insertion locations. There is no universal experiment count or accuracy threshold that guarantees a Q2 publication.
