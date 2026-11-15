@@ -80,8 +80,14 @@ const ALL: NavItem[] = [MAIN, ...GROUPS.flatMap((group) => group.items), SETTING
 /** The name of every page, as the nav shows it. */
 export const NAV_LABELS: Record<AppTab, string> = Object.fromEntries(ALL.map((item) => [item.id, item.label])) as Record<AppTab, string>;
 
-/** Display order. Cmd/Ctrl+1..9 select the first nine and Cmd/Ctrl+0 the tenth; Settings is also Cmd/Ctrl+, (the usual place for it). */
+/** Display order. */
 export const NAV_ORDER: AppTab[] = ALL.map((item) => item.id);
+
+/**
+ * Cmd/Ctrl+1..9 go to the pages used most, in the order of the daily work (record, label, train) and then of use, not
+ * in the sidebar's order; Settings is Cmd/Ctrl+, (the usual place for it).
+ */
+export const SHORTCUT_TABS: readonly AppTab[] = ["main", "recorder", "labelling", "modelLab", "datasets", "gestures", "recipes", "watch", "headphone"];
 
 export type NavTone = "ok" | "warn" | "live" | "idle";
 export interface NavStatus { tone: NavTone; label: string }
@@ -116,12 +122,10 @@ export function navStatuses(input: NavStatusInput): Partial<Record<AppTab, NavSt
 }
 
 const isMac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
-const SHORTCUT_COUNT = 10;
-/** The digit that selects the page at `index` in display order: 1 to 9, then 0 for the tenth. */
-const digitFor = (index: number): string | null => (index < 0 || index >= SHORTCUT_COUNT ? null : String((index + 1) % 10));
-/** The shortcut for a tab, or null when it has none (only the first ten are numbered; Settings has its own). */
+/** The shortcut for a tab, or null when it has none. */
 export function shortcutFor(tab: AppTab): string | null {
-  const key = tab === "settings" ? "," : digitFor(NAV_ORDER.indexOf(tab));
+  const index = SHORTCUT_TABS.indexOf(tab);
+  const key = tab === "settings" ? "," : index < 0 ? null : String(index + 1);
   return key === null ? null : `${isMac() ? "⌘" : "Ctrl+"}${key}`;
 }
 
@@ -169,7 +173,7 @@ function AppNavView({ activeTab, onSelect, statuses = {} }: AppNavProps) {
     document.querySelector('[data-sidebar="menu-button"][data-active="true"]')?.scrollIntoView({ block: "nearest" });
   }, [activeTab, labShown]);
 
-  // Cmd/Ctrl + 1..9 jumps to a tab, and Cmd/Ctrl + , to Settings. A modified key is never text, so it is safe inside a field too.
+  // Cmd/Ctrl + 1..9 jumps to one of the pages used most, and Cmd/Ctrl + , to Settings. A modified key is never text, so it is safe inside a field too.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
@@ -178,11 +182,10 @@ function AppNavView({ activeTab, onSelect, statuses = {} }: AppNavProps) {
         onSelect("settings");
         return;
       }
-      const digit = Number(event.key);
-      const index = digit === 0 ? 9 : digit - 1;
-      if (/^[0-9]$/.test(event.key) && index < Math.min(SHORTCUT_COUNT, NAV_ORDER.length)) {
+      const tab = /^[1-9]$/.test(event.key) ? SHORTCUT_TABS[Number(event.key) - 1] : undefined;
+      if (tab) {
         event.preventDefault();
-        onSelect(NAV_ORDER[index]);
+        onSelect(tab);
       }
     };
     window.addEventListener("keydown", onKeyDown);

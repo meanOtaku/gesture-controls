@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SidebarProvider } from "../../components/ui/sidebar";
-import { AppNav, NAV_ORDER, navStatuses, shortcutFor, type NavStatusInput } from "./AppNav";
+import { AppNav, NAV_ORDER, SHORTCUT_TABS, navStatuses, shortcutFor, type NavStatusInput } from "./AppNav";
 
 afterEach(cleanup);
 
@@ -101,16 +101,19 @@ describe("AppNav", () => {
     expect(onSelect).toHaveBeenCalledWith("modelLab");
   });
 
-  it("jumps to the first ten tabs with Ctrl+1..9 and Ctrl+0 in display order, including from inside a text field", () => {
+  it("jumps to the daily pages with Ctrl+1..9, including from inside a text field", () => {
     const onSelect = renderNav();
-    NAV_ORDER.slice(0, 10).forEach((tab, index) => {
-      fireEvent.keyDown(window, { key: String((index + 1) % 10), ctrlKey: true });
+    expect(SHORTCUT_TABS).toEqual(["main", "recorder", "labelling", "modelLab", "datasets", "gestures", "recipes", "watch", "headphone"]);
+    SHORTCUT_TABS.forEach((tab, index) => {
+      fireEvent.keyDown(window, { key: String(index + 1), ctrlKey: true });
       expect(onSelect).toHaveBeenLastCalledWith(tab);
     });
-    expect(onSelect).toHaveBeenLastCalledWith("recordings");
+    onSelect.mockClear();
+    fireEvent.keyDown(window, { key: "0", ctrlKey: true });
+    expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it("opens Settings with Ctrl+comma, since the eleventh and later tabs have no number", () => {
+  it("opens Settings with Ctrl+comma", () => {
     const onSelect = renderNav();
     fireEvent.keyDown(window, { key: ",", ctrlKey: true });
     expect(onSelect).toHaveBeenLastCalledWith("settings");
@@ -122,12 +125,12 @@ describe("AppNav", () => {
     const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
     const prefix = isMac ? "⌘" : "Ctrl+";
     expect(shortcutFor("main")).toBe(`${prefix}1`);
-    expect(shortcutFor("recipes")).toBe(`${prefix}3`);
-    expect(shortcutFor("drone")).toBe(`${prefix}7`);
-    expect(shortcutFor("recordings")).toBe(`${prefix}0`);
-    // The eleventh and later tabs have no number.
-    expect(shortcutFor("modelLab")).toBeNull();
-    expect(shortcutFor("datasets")).toBeNull();
+    expect(shortcutFor("labelling")).toBe(`${prefix}3`);
+    expect(shortcutFor("modelLab")).toBe(`${prefix}4`);
+    expect(shortcutFor("headphone")).toBe(`${prefix}9`);
+    // Pages used less often have none.
+    expect(shortcutFor("drone")).toBeNull();
+    expect(shortcutFor("devices")).toBeNull();
     expect(shortcutFor("settings")).toBe(`${prefix},`);
   });
 
