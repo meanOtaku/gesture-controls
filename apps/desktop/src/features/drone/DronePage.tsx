@@ -1,3 +1,4 @@
+import { ChevronRightIcon } from "lucide-react";
 import { AnimatedNumber, AnimatedText } from "../../components/app/AnimatedNumber";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -461,6 +462,7 @@ export function DronePage() {
           {/* Folded, but always drawn: trim, reversal and hold-after-takeoff apply whether it is open or not. */}
           <details className="advanced-section">
             <summary>
+              <ChevronRightIcon className="advanced-chevron size-4" aria-hidden="true" />
               <span className="advanced-title">Flight options</span>
               <span className="advanced-summary">Headless mode, return home, reversing the steering, trim, and holding after takeoff</span>
             </summary>
