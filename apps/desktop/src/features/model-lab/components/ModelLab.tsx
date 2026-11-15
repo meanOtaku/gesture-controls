@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from "react";
 import { AnimatedNumber } from "../../../components/app/AnimatedNumber";
 import { Card, CardContent } from "../../../components/ui/card";
 import { useLabelModels } from "../hooks/useLabelModels";
@@ -11,6 +12,8 @@ import { DetectionActivity } from "./DetectionActivity";
 import { RuntimeSwitch } from "./RuntimeSwitch";
 import { AdvancedSection } from "../../../components/app/AdvancedSection";
 import { LabelModelsPanel } from "./LabelModelsPanel";
+import { ModelInspector } from "./ModelInspector";
+import { ModelPipeline } from "./ModelPipeline";
 import { TrainingHistory } from "./TrainingHistory";
 import { TrainPanel } from "./TrainPanel";
 
@@ -18,10 +21,26 @@ import { TrainPanel } from "./TrainPanel";
  * Model Lab: teach the app a gesture one label at a time. The recordings it trains and tests on are kept on the Datasets
  * tab; here you train, look back at what was tried, then switch the models on and watch what they detect.
  */
-export function ModelLab({ onInspectModel, onOpenNetworkLab }: { /** Opens the Network lab on this model, to look inside it. */ onInspectModel?: (id: string) => void; onOpenNetworkLab?: () => void }) {
+export function ModelLab() {
   const desktopAvailable = "__TAURI_INTERNALS__" in window;
   const { datasets, labels } = useModelLabData(desktopAvailable);
   const { models, status, error: modelsError, refresh } = useLabelModels(desktopAvailable);
+  const [inspecting, setInspecting] = useState<string | null>(null);
+
+  // A model deleted while it was open is no longer there to look inside.
+  useEffect(() => {
+    if (inspecting !== null && models.length > 0 && !models.some((model) => model.id === inspecting)) setInspecting(null);
+  }, [inspecting, models]);
+  // Bring the inspector into view when a model is chosen.
+  useEffect(() => {
+    if (inspecting !== null) document.getElementById("lab-inspect")?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }, [inspecting]);
+
+  const showPipeline = useCallback(() => {
+    const section = document.getElementById("lab-how");
+    if (section instanceof HTMLDetailsElement) section.open = true;
+    section?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }, []);
 
   const coverageByLabel = new Map<string, number>();
   for (const dataset of datasets) {
@@ -61,8 +80,9 @@ export function ModelLab({ onInspectModel, onOpenNetworkLab }: { /** Opens the N
       </nav>
 
       <fieldset className="lab-workspace card-stack" disabled={!desktopAvailable} aria-label="Desktop model tools">
-        <TrainPanel desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} onOpenNetworkLab={onOpenNetworkLab} />
-        <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} onInspect={onInspectModel} />
+        <TrainPanel desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} onShowPipeline={showPipeline} />
+        <LabelModelsPanel desktopAvailable={desktopAvailable} models={models} status={status} loadError={modelsError} refresh={refresh} onInspect={setInspecting} />
+        {inspecting !== null && <div id="lab-inspect"><ModelInspector id={inspecting} models={models} onClose={() => setInspecting(null)} /></div>}
         <DetectionActivity desktopAvailable={desktopAvailable} />
         <AdvancedSection id="lab-advanced" storageKey="modelLab" summary="Training history, mistakes, threshold, comparing models and the final test">
           <TrainingHistory desktopAvailable={desktopAvailable} labels={labels} datasets={datasets} refreshKey={models.map((model) => `${model.id}:${model.state}`).join(",")} />
@@ -70,6 +90,9 @@ export function ModelLab({ onInspectModel, onOpenNetworkLab }: { /** Opens the N
           <ThresholdCard desktopAvailable={desktopAvailable} models={models} />
           <CompareCard desktopAvailable={desktopAvailable} models={models} datasets={datasets} />
           <SealedTestCard desktopAvailable={desktopAvailable} models={models} datasets={datasets} />
+        </AdvancedSection>
+        <AdvancedSection id="lab-how" storageKey="modelLabPipelines" title="How the models work" summary="The trees and the CNN, stage by stage, with what the research measured">
+          <ModelPipeline />
         </AdvancedSection>
       </fieldset>
     </main>

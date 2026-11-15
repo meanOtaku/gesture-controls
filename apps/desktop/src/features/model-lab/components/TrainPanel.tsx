@@ -23,8 +23,8 @@ type TrainPanelProps = {
   desktopAvailable: boolean;
   labels: DatasetLabel[];
   datasets: DatasetSummary[];
-  /** Opens the Network lab, where the model's pipeline is shown. */
-  onOpenNetworkLab?: () => void;
+  /** Shows how the model works, stage by stage ("How the models work" in Model Lab). */
+  onShowPipeline?: () => void;
 };
 
 const NATIVE_SELECT = "recipe-select";
@@ -34,7 +34,7 @@ const NATIVE_SELECT = "recipe-select";
  * recordings and what each other label means. The app picks which recordings train and which test (never the same one) and
  * shows you that before anything runs. The result is a Draft you review before it can do anything.
  */
-export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, datasets, onOpenNetworkLab }: TrainPanelProps) {
+export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, datasets, onShowPipeline }: TrainPanelProps) {
   const uid = useId();
   const run = useTrainingRun(desktopAvailable);
   const running = run.running;
@@ -175,7 +175,7 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
               <p className="field-hint">
                 Compared with the trees on the same pinch recordings, with the hand still before each pinch, it caught about {<AnimatedNumber value={Math.round(CNN_MODEL.research.recall * 100)} />}% of pinch starts at {<AnimatedNumber value={CNN_MODEL.research.falsePerMinute} digits={0} />} false alarm a minute or fewer (the trees: 64%), about {<AnimatedNumber value={CNN_MODEL.research.delayMs} />} ms after the pinch began.
               {" "}
-                {onOpenNetworkLab ? <Button type="button" variant="link" className="h-auto p-0" onClick={onOpenNetworkLab}>See its pipeline in the Network lab</Button> : null}
+                {onShowPipeline ? <Button type="button" variant="link" className="h-auto p-0" onClick={onShowPipeline}>See how it works</Button> : null}
               </p>
             </>
           ) : (
@@ -184,7 +184,7 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
               <p className="field-hint">{PULSE_MODEL.summary}</p>
               <p className="field-hint">
                 In the research (37 recordings, 20 tests on recordings it never saw) it scored a worst-case AUC of {<AnimatedNumber value={PULSE_MODEL.research.worstAuc} />} and caught about {<AnimatedNumber value={Math.round(PULSE_MODEL.research.recall * 100)} />}% of gesture starts, with about {<AnimatedNumber value={PULSE_MODEL.research.falsePerMinute} digits={1} />} false alarms a minute.{" "}
-                {onOpenNetworkLab ? <Button type="button" variant="link" className="h-auto p-0" onClick={onOpenNetworkLab}>See its pipeline in the Network lab</Button> : null}
+                {onShowPipeline ? <Button type="button" variant="link" className="h-auto p-0" onClick={onShowPipeline}>See how it works</Button> : null}
               </p>
             </>
           )}

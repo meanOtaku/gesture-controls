@@ -1,4 +1,4 @@
-import { Activity, Brain, ChevronDown, ChevronRight, CircleDot, Database, Highlighter, Network, FolderOpen, Hand, Headphones, Shapes, Tags, Radar, LayoutDashboard, Plane, Settings as SettingsIcon, SlidersHorizontal, Watch, Workflow } from "lucide-react";
+import { Activity, Brain, ChevronDown, ChevronRight, CircleDot, Database, Highlighter, FolderOpen, Hand, Headphones, Shapes, Tags, Radar, LayoutDashboard, Plane, Settings as SettingsIcon, SlidersHorizontal, Watch, Workflow } from "lucide-react";
 import { memo, useEffect, useState } from "react";
 import {
   Sidebar,
@@ -17,7 +17,7 @@ import { MissMarker } from "../../features/misses/MissMarker";
 import { ReadinessLight } from "../../features/model-lab/components/ReadinessLight";
 import { RuntimeSwitch } from "../../features/model-lab/components/RuntimeSwitch";
 
-export type AppTab = "main" | "headphone" | "watch" | "recipes" | "devices" | "drone" | "gestures" | "signals" | "recorder" | "recordings" | "datasets" | "labelling" | "labels" | "gestureLibrary" | "modelLab" | "networkLab" | "settings";
+export type AppTab = "main" | "headphone" | "watch" | "recipes" | "devices" | "drone" | "gestures" | "signals" | "recorder" | "recordings" | "datasets" | "labelling" | "labels" | "gestureLibrary" | "modelLab" | "settings";
 
 type NavItem = { id: AppTab; label: string; icon: typeof LayoutDashboard };
 
@@ -59,7 +59,7 @@ const GROUPS: { title: string; items: NavItem[]; lab?: boolean }[] = [
       { id: "gestureLibrary", label: "Gesture library", icon: Shapes },
     ],
   },
-  { title: "Train", lab: true, items: [{ id: "modelLab", label: "Model Lab", icon: Brain }, { id: "networkLab", label: "Network lab", icon: Network }] },
+  { title: "Train", lab: true, items: [{ id: "modelLab", label: "Model Lab", icon: Brain }] },
 ];
 /** The pages for making a model, which fold away together. */
 const LAB_TABS = new Set<AppTab>(GROUPS.filter((group) => group.lab).flatMap((group) => group.items.map((item) => item.id)));

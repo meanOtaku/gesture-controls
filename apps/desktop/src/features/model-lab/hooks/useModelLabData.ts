@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { onRecordingsChanged } from "../../../shared/tauri/recordingBundle";
 import { inImportOrder, type DatasetLabel, type DatasetSummary } from "../types";
 
-/** The training recordings and the labels they can have: what Model Lab and the Network lab both train from. */
+/** The training recordings and the labels they can have: what Model Lab trains from. */
 export function useModelLabData(desktopAvailable: boolean) {
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
   const [labels, setLabels] = useState<DatasetLabel[]>([]);

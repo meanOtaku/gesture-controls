@@ -24,7 +24,7 @@ const datasets = [{ ...dataset("s1", ["snap"]), group: "New camera labels" }, da
 
 const okPlan: TrainPlan = { train: ["s1", "i1"], evaluation: ["s2", "i2"], problem: null, inputs: 1701 };
 
-function setup(over: { plan?: TrainPlan; environment?: TrainerEnvironment; status?: TrainingStatus; onOpenNetworkLab?: () => void } = {}) {
+function setup(over: { plan?: TrainPlan; environment?: TrainerEnvironment; status?: TrainingStatus; onShowPipeline?: () => void } = {}) {
   invokeMock.mockImplementation(async (command: string) => {
     if (command === "check_label_trainer") return over.environment ?? { available: true, detail: "uv 0.12" };
     if (command === "get_label_training_status") return over.status ?? { running: null, last: null };
@@ -32,7 +32,7 @@ function setup(over: { plan?: TrainPlan; environment?: TrainerEnvironment; statu
     if (command === "start_label_training") return "run-1";
     return undefined;
   });
-  render(<TrainPanel desktopAvailable labels={labels} datasets={datasets} onOpenNetworkLab={over.onOpenNetworkLab} />);
+  render(<TrainPanel desktopAvailable labels={labels} datasets={datasets} onShowPipeline={over.onShowPipeline} />);
 }
 
 const calls = (command: string) => invokeMock.mock.calls.filter(([name]) => name === command);
@@ -173,10 +173,10 @@ describe("TrainPanel", () => {
     expect(calls("start_label_training")[1][1].request.research).toBe(true);
   });
 
-  it("points to the Network lab for the model's pipeline", async () => {
+  it("points to how the model works", async () => {
     const onOpen = vi.fn();
-    setup({ onOpenNetworkLab: onOpen });
-    fireEvent.click(await screen.findByRole("button", { name: "See its pipeline in the Network lab" }));
+    setup({ onShowPipeline: onOpen });
+    fireEvent.click(await screen.findByRole("button", { name: "See how it works" }));
     expect(onOpen).toHaveBeenCalled();
   });
 
