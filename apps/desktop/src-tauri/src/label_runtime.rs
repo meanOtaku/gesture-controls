@@ -279,10 +279,6 @@ fn is_current_bundle(dir: &Path) -> bool {
 /// The files of the stores that belonged to the old kinds of model (network designs, fine-tune plans).
 const OLD_STORE_FILES: [&str; 2] = ["network-designs.json", "fine-tune-plans.json"];
 
-/// Removes every model this app can no longer run, with the training runs that made them, from the registry and then from
-/// disk: a version whose bundle is not the PPG pinch-start trees, a run sealed with other inputs, the legacy quarantined
-/// models, and the old network-design and fine-tune stores. Recordings and labels are never touched. Does nothing when there
-/// is nothing old, so it runs at every start.
 /// The inputs of every model this app can still run: whatever its trainer backends make (see
 /// `label_training::TRAINED_BACKENDS`), and the older kinds it still loads. A run or model reading anything else is old.
 fn kept_contracts() -> Vec<model_lab_core::InputContract> {
@@ -300,8 +296,31 @@ fn kept_contracts() -> Vec<model_lab_core::InputContract> {
     contracts
 }
 
+/// Where the start-up purge puts what it takes out, under the model lab. Nothing it takes out is deleted: a model it
+/// should have kept (as the CNN v2 was not, before it was listed) can be moved back and the app restarted.
+const SET_ASIDE_DIR: &str = "set-aside";
+
+/// Moves `path`, which must be inside the model lab `dir`, to the same place under `set-aside/<stamp>/`. Never deletes:
+/// whatever cannot be moved stays where it is. Whether it was moved.
+fn set_aside(dir: &Path, path: &Path, stamp: &str) -> bool {
+    let Ok(relative) = path.strip_prefix(dir) else {
+        return false;
+    };
+    let target = dir.join(SET_ASIDE_DIR).join(stamp).join(relative);
+    target
+        .parent()
+        .is_some_and(|parent| std::fs::create_dir_all(parent).is_ok())
+        && std::fs::rename(path, &target).is_ok()
+}
+
+/// Takes every model this app can no longer run, with the training runs that made them, out of the registry, and moves
+/// their files under `set-aside/<time>/` with a record of the registry entries (never deleting them): a version whose bundle
+/// is not a kind this app loads, a run sealed with inputs no kind here reads, the legacy quarantined models. The old
+/// network-design and fine-tune stores are removed. Recordings and labels are never touched. Does nothing when there is
+/// nothing old, so it runs at every start.
 fn purge_old_models(store: &mut RegistryStore<FileStore>, dir: &Path) -> Result<(), String> {
     let contracts = kept_contracts();
+    let stamp = Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
     let purged = store
         .mutate(|registry| {
             Ok(registry.purge(
@@ -313,13 +332,33 @@ fn purge_old_models(store: &mut RegistryStore<FileStore>, dir: &Path) -> Result<
             ))
         })
         .map_err(|e| e.to_string())?;
+    // The registry entries taken out are kept beside their files, so a model can be put back by hand.
+    if !purged.versions.is_empty() || !purged.runs.is_empty() {
+        let record = serde_json::json!({
+            "why": "set aside at start: their inputs are not a kind this app runs",
+            "versions": purged.versions,
+            "runs": purged.runs,
+        });
+        let file = dir
+            .join(SET_ASIDE_DIR)
+            .join(&stamp)
+            .join("registry-entries.json");
+        if let Some(parent) = file.parent()
+            && std::fs::create_dir_all(parent).is_ok()
+        {
+            let _ = std::fs::write(
+                &file,
+                serde_json::to_vec_pretty(&record).unwrap_or_default(),
+            );
+        }
+    }
     for version in &purged.versions {
         if let Some(path) = label_inference::removable_model_dir(dir, version) {
-            let _ = std::fs::remove_dir_all(path);
+            set_aside(dir, &path, &stamp);
         }
     }
     for run in &purged.runs {
-        let _ = std::fs::remove_dir_all(dir.join("training-runs").join(run.as_str()));
+        set_aside(dir, &dir.join("training-runs").join(run.as_str()), &stamp);
     }
     // Run folders the registry no longer lists (their records were deleted before) whose spec names another backend.
     let mut leftovers = 0;
@@ -339,7 +378,7 @@ fn purge_old_models(store: &mut RegistryStore<FileStore>, dir: &Path) -> Result<
             if backend
                 .is_some_and(|b| !crate::label_training::TRAINED_BACKENDS.contains(&b.as_str()))
             {
-                let _ = std::fs::remove_dir_all(entry.path());
+                set_aside(dir, &entry.path(), &stamp);
                 leftovers += 1;
             }
         }
@@ -351,7 +390,7 @@ fn purge_old_models(store: &mut RegistryStore<FileStore>, dir: &Path) -> Result<
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
         if plain {
-            let _ = std::fs::remove_dir_all(dir.join(&legacy.id));
+            set_aside(dir, &dir.join(&legacy.id), &stamp);
         }
     }
     let mut stores = 0;
@@ -368,7 +407,8 @@ fn purge_old_models(store: &mut RegistryStore<FileStore>, dir: &Path) -> Result<
             snapshots = purged.snapshots.len(),
             legacy = purged.quarantined.len(),
             stores,
-            "removed the models this app can no longer run"
+            set_aside = %dir.join(SET_ASIDE_DIR).join(&stamp).display(),
+            "set aside the models this app can no longer run"
         );
     }
     Ok(())
@@ -2053,6 +2093,17 @@ mod tests {
             lab.path().join("datasets").is_dir(),
             "recordings are never touched"
         );
+        // What was taken out is set aside, never deleted: its folder, the old run's folder, and its registry entry.
+        let stamps: Vec<_> = std::fs::read_dir(lab.path().join(SET_ASIDE_DIR))
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        assert_eq!(stamps.len(), 1, "one start, one set-aside folder");
+        let aside = &stamps[0];
+        assert!(aside.join("label-models/pinch-old/manifest.json").is_file());
+        assert!(aside.join("training-runs/run-old/spec.json").is_file());
+        let record = std::fs::read_to_string(aside.join("registry-entries.json")).unwrap();
+        assert!(record.contains("pinch-old"), "{record}");
         assert!(
             !lab.path().join("training-runs/run-old").exists()
                 && lab.path().join("training-runs/run-new").exists()

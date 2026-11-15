@@ -441,6 +441,73 @@ mod tests {
     }
 
     #[test]
+    fn importing_leaves_every_model_already_there_as_it_was() {
+        // An active model, and an approved one beside it, for the same label.
+        let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        let lab = tempfile::tempdir().unwrap();
+        let mut store = store();
+        let active = import_bundle(
+            &fixtures.join("ppg_imu_cnn_bundle"),
+            lab.path(),
+            &mut store,
+            NOW,
+        )
+        .unwrap();
+        let approved = import_bundle(
+            &fixtures.join("ppg_imu_cnn_median_100hz_bundle"),
+            lab.path(),
+            &mut store,
+            NOW,
+        )
+        .unwrap();
+        store
+            .mutate(|r| {
+                for id in [&active.version_id, &approved.version_id] {
+                    r.transition(id, LifecycleState::Evaluated, NOW)?;
+                    r.transition(id, LifecycleState::Approved, NOW)?;
+                }
+                r.activate(&active.version_id, NOW).map(|_| ())
+            })
+            .unwrap();
+        let before_versions = store.registry().versions.clone();
+        let before_active = store.registry().active_by_label.clone();
+        let before_projects = store.registry().projects.clone();
+
+        // Importing a new kind of model for the same label (the CNN v2).
+        let new = import_bundle(
+            &fixtures.join("ppg_imu_cnn_v2_bundle"),
+            lab.path(),
+            &mut store,
+            NOW,
+        )
+        .unwrap();
+
+        let after = store.registry();
+        assert_eq!(
+            after.active_by_label, before_active,
+            "the active model stays active"
+        );
+        assert_eq!(
+            after.projects, before_projects,
+            "the label's project is not changed"
+        );
+        for (id, version) in &before_versions {
+            assert_eq!(&after.versions[id], version, "{id} is unchanged");
+            let files = lab.path().join(&version.artifact_dir);
+            assert!(
+                files.join("manifest.json").is_file(),
+                "{id} keeps its files"
+            );
+        }
+        assert_eq!(
+            after.versions.len(),
+            before_versions.len() + 1,
+            "only the new model is added"
+        );
+        assert_eq!(after.versions[&new.version_id].state, LifecycleState::Draft);
+    }
+
+    #[test]
     fn importing_the_same_model_twice_is_refused_and_changes_nothing() {
         let source = copy_fixture();
         let lab = tempfile::tempdir().unwrap();
