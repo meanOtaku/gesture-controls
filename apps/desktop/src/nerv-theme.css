@@ -835,3 +835,18 @@ html[data-theme="nerv"] .nav-lab-toggle:hover:not(:disabled) { color: var(--eva-
 /* The miss marker: the two buttons in a row, so the sidebar's pages keep their room. */
 html[data-theme="nerv"] .miss-marker { border-top-color: var(--eva-frame); }
 html[data-theme="nerv"] .miss-marker-title { font-family: var(--font-display); font-weight: 700; letter-spacing: .14em; color: var(--eva-orange); }
+
+/* Labelling's selected hand label: a framed panel with an orange plate for its heading. */
+html[data-theme="nerv"] .labelling-timing { border-color: var(--eva-frame); background: var(--eva-surface); }
+html[data-theme="nerv"] .labelling-timing legend { padding: 1px 8px; background: var(--eva-orange); color: #000; font-family: var(--font-display); font-weight: 700; font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; }
+html[data-theme="nerv"] .labelling-timing label { font-family: var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: var(--eva-text-muted); }
+
+/*
+ * The sidebar under the top and bottom bars: tighter groups and group headings, so every page fits on a 900 px tall
+ * window (with the runtime switch, readiness light and miss buttons in the footer) without scrolling.
+ */
+html[data-theme="nerv"] [data-sidebar="content"] [data-sidebar="group"] { padding-top: 2px; padding-bottom: 2px; }
+html[data-theme="nerv"] [data-sidebar="content"] [data-sidebar="group-label"] { height: 1.3rem; }
+html[data-theme="nerv"] [data-sidebar="content"] .nav-lab-toggle { padding-top: .2rem; padding-bottom: .2rem; }
+html[data-theme="nerv"] [data-sidebar="footer"] { gap: 4px; padding-top: 4px; padding-bottom: 4px; }
+html[data-theme="nerv"] .miss-marker { padding-top: .25rem; padding-bottom: .3rem; gap: .25rem; }

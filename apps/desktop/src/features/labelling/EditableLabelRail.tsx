@@ -4,6 +4,12 @@ import type { View } from "./SignalLane";
 
 export type LabelDrag = "move" | "start" | "end";
 
+/**
+ * The narrowest a hand label is drawn, however short it is: wide enough that, between its two 7 px resize handles,
+ * there is still a body to click (to select it) or drag (to move it).
+ */
+const MIN_LABEL_PX = 30;
+
 /** Keep an edit inside the recording and between its neighbours. Moving preserves duration. */
 export function dragLabel(spans: Span[], index: number, mode: LabelDrag, delta: number, duration: number): Span {
   const span = spans[index];
@@ -67,7 +73,7 @@ export function EditableLabelRail({ spans, view, duration, colorOf, nameOf, onPr
       const left = Math.max(0, (span.startMs - view.startMs) / (view.endMs - view.startMs) * 100);
       const right = Math.min(100, (span.endMs - view.startMs) / (view.endMs - view.startMs) * 100);
       const name = nameOf(span.label);
-      return <div key={index} role="listitem" className="labelling-span labelling-span-editable" style={{ left: `${left}%`, width: `max(18px, ${right - left}%)`, background: colorOf(span.label) }}
+      return <div key={index} role="listitem" className="labelling-span labelling-span-editable" style={{ left: `${left}%`, width: `max(${MIN_LABEL_PX}px, ${right - left}%)`, background: colorOf(span.label) }}
         title={`${name}: ${formatSeconds(span.startMs)} to ${formatSeconds(span.endMs)}. Drag to move; drag either edge to resize.`}
         onPointerMove={move} onPointerUp={() => finish(false)} onPointerCancel={() => finish(true)} onLostPointerCapture={() => finish(true)}>
         <button type="button" className="labelling-drag-body" aria-label={`Move ${name}`} onClick={() => onSelect(span)} onPointerDown={(e) => begin(e, index, "move")}>{name}</button>

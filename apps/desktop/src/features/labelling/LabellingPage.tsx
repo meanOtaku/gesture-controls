@@ -741,7 +741,7 @@ export function LabellingPage() {
             </div>
           </details>
           {recording && (
-            <span className="hint">
+            <span className="hint labelling-open-hint">
               Open: <strong>{recording.name}</strong> · <AnimatedText>{formatSeconds(recording.durationMs)}</AnimatedText>
               {recording.context && Object.keys(recording.context).length > 0 ? ` · recorded ${describeContext(recording.context)}` : ""}
             </span>

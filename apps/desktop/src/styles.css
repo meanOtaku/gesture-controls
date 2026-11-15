@@ -666,3 +666,5 @@ number-flow-react {
 .inline-menu[open] > summary::after { content: "▴"; }
 .inline-menu > summary:focus-visible { outline: 2px solid var(--ring, currentColor); outline-offset: 2px; }
 .inline-menu-body { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
+/* What is open in Labelling: a line of its own under the picker, so the picker keeps the row's width. */
+.labelling-open-hint { flex-basis: 100%; max-width: none; }
