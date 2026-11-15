@@ -155,6 +155,62 @@ pub struct HapticCommand {
     pub duration_ms: u32,
 }
 
+/// One vibration the desktop sent to the watch: when (desktop clock, and the watch clock when the clocks were already
+/// matched), how long, and what asked for it ("knob", "ready", "noise-session"…). Recordings keep the ones made during
+/// them, since a vibration shakes the very sensors the gesture models read.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HapticRecord {
+    pub desktop_ns: u64,
+    pub watch_ns: Option<i64>,
+    pub duration_ms: u32,
+    pub source: String,
+}
+
+/// The vibrations sent lately, newest last; old ones fall off.
+#[derive(Default)]
+struct HapticLog {
+    records: Mutex<VecDeque<HapticRecord>>,
+    /// The latest watch-minus-desktop clock offset, to place each vibration on the watch's clock.
+    clock_offset_ns: Mutex<Option<i64>>,
+}
+
+/// About four hours of the volume knob's densest buzzing (8 a second).
+const HAPTIC_LOG_LIMIT: usize = 120_000;
+
+impl HapticLog {
+    fn record(&self, duration_ms: u32, source: &str, desktop_ns: u64) {
+        let offset = self.clock_offset_ns.lock().ok().and_then(|o| *o);
+        if let Ok(mut records) = self.records.lock() {
+            records.push_back(HapticRecord {
+                desktop_ns,
+                watch_ns: offset.map(|o| desktop_ns as i64 + o),
+                duration_ms,
+                source: source.to_string(),
+            });
+            while records.len() > HAPTIC_LOG_LIMIT {
+                records.pop_front();
+            }
+        }
+    }
+
+    fn between(&self, from_watch_ns: i64, to_watch_ns: i64) -> Vec<HapticRecord> {
+        self.records
+            .lock()
+            .map(|records| {
+                records
+                    .iter()
+                    .filter(|r| {
+                        r.watch_ns
+                            .is_some_and(|w| (from_watch_ns..=to_watch_ns).contains(&w))
+                    })
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+}
+
 /// Round-trip clock-offset estimate, computed from one desktop/watch time-sync exchange.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ClockOffsetEstimate {
@@ -224,6 +280,7 @@ struct SharedState {
     ble_status: Mutex<BleStatus>,
     /// What the link is doing and why, for the desktop's "Link health" card.
     link: diagnostics::LinkLog,
+    haptics: HapticLog,
 }
 
 impl SharedState {
@@ -333,6 +390,7 @@ impl WatchBridgeServer {
                 heartbeat_timeout,
                 ble_status: Mutex::new(BleStatus::Idle),
                 link: diagnostics::LinkLog::default(),
+                haptics: HapticLog::default(),
             }),
         })
     }
@@ -436,6 +494,16 @@ impl WatchBridgeServer {
     /// bounded haptic pulse. Errors if no watch is connected or `duration_ms`
     /// falls outside [`MIN_HAPTIC_DURATION_MS`]..=[`MAX_HAPTIC_DURATION_MS`].
     pub fn send_haptic_command(&self, command: HapticCommand) -> Result<(), WatchBridgeError> {
+        self.send_haptic_command_from(command, "other")
+    }
+
+    /// As [`Self::send_haptic_command`], saying what asked for the vibration; every one sent is logged (see
+    /// [`Self::haptics_between`]).
+    pub fn send_haptic_command_from(
+        &self,
+        command: HapticCommand,
+        source: &str,
+    ) -> Result<(), WatchBridgeError> {
         if !(MIN_HAPTIC_DURATION_MS..=MAX_HAPTIC_DURATION_MS).contains(&command.duration_ms) {
             return Err(WatchBridgeError::HapticDurationOutOfRange(
                 command.duration_ms,
@@ -444,8 +512,16 @@ impl WatchBridgeServer {
         if !self.shared.active.load(Ordering::Acquire) {
             return Err(WatchBridgeError::NoActiveConnection);
         }
+        let duration_ms = command.duration_ms;
         let _ = self.shared.haptic_commands.send(command);
+        self.shared.haptics.record(duration_ms, source, now_ns());
         Ok(())
+    }
+
+    /// The vibrations sent whose time on the watch's clock is within `from..=to` (watch-clock nanoseconds, as a
+    /// recording's `timestamp_ns`). Ones sent before the clocks were matched have no watch time and are left out.
+    pub fn haptics_between(&self, from_watch_ns: i64, to_watch_ns: i64) -> Vec<HapticRecord> {
+        self.shared.haptics.between(from_watch_ns, to_watch_ns)
     }
 
     pub async fn start(&self) -> Result<(), WatchBridgeError> {
@@ -1479,6 +1555,9 @@ fn handle_inbound(
                     clock_offset_samples.pop_front();
                 }
                 estimate.offset_ns = median_clock_offset(clock_offset_samples);
+                if let Ok(mut offset) = shared.haptics.clock_offset_ns.lock() {
+                    *offset = Some(estimate.offset_ns);
+                }
                 let _ = shared.events.send(WatchEvent::ClockOffsetUpdated(estimate));
             }
         }
@@ -1601,6 +1680,24 @@ fn now_ns() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn vibrations_are_logged_on_the_watch_clock_once_the_clocks_are_matched() {
+        let log = HapticLog::default();
+        log.record(20, "knob", 1_000);
+        *log.clock_offset_ns.lock().unwrap() = Some(500);
+        log.record(20, "knob", 2_000);
+        log.record(40, "ready", 9_000);
+        let found = log.between(2_000, 2_600);
+        assert_eq!(
+            found.len(),
+            1,
+            "the first had no watch time, the last is later"
+        );
+        assert_eq!(found[0].watch_ns, Some(2_500));
+        assert_eq!(found[0].source, "knob");
+        assert_eq!(log.between(0, 10_000).len(), 2);
+    }
+
     use super::*;
     use serde_json::json;
     use spatial_protocol::WATCH_PROTOCOL_VERSION;
@@ -1622,6 +1719,7 @@ mod tests {
             heartbeat_timeout: Duration::from_secs(3),
             ble_status: Mutex::new(BleStatus::Idle),
             link: diagnostics::LinkLog::default(),
+            haptics: HapticLog::default(),
         })
     }
 
@@ -1832,6 +1930,7 @@ mod tests {
                 heartbeat_timeout: Duration::from_millis(100),
                 ble_status: Mutex::new(BleStatus::Idle),
                 link: diagnostics::LinkLog::default(),
+                haptics: HapticLog::default(),
             });
             let started = Instant::now();
             let end = tokio::runtime::Builder::new_current_thread()
@@ -1940,6 +2039,7 @@ mod tests {
             heartbeat_timeout,
             ble_status: Mutex::new(BleStatus::Idle),
             link: diagnostics::LinkLog::default(),
+            haptics: HapticLog::default(),
         })
     }
 
@@ -2073,6 +2173,7 @@ mod tests {
             heartbeat_timeout: Duration::from_millis(150),
             ble_status: Mutex::new(BleStatus::Idle),
             link: diagnostics::LinkLog::default(),
+            haptics: HapticLog::default(),
         });
         let commands_rx = shared.commands.subscribe();
         let sensor_rx = shared.sensor_commands.subscribe();

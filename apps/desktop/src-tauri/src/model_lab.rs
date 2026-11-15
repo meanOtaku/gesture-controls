@@ -605,8 +605,10 @@ pub(crate) fn ingest_folder(
 /// into the recording just stored from it, so the Labelling page can draw the hand. Returns how many were copied; one that
 /// cannot be copied is left out (the recording is kept either way).
 fn keep_camera_files(from: &std::path::Path, to: &std::path::Path) -> usize {
+    // The watch's vibrations travel with the camera's files: both are evidence about the recording.
     crate::recording_bundle::CAMERA_FILE_NAMES
         .iter()
+        .chain(std::iter::once(&crate::recording_bundle::HAPTICS_FILE_NAME))
         .filter(|name| from.join(name).is_file())
         .filter(|name| match fs::copy(from.join(name), to.join(name)) {
             Ok(_) => true,

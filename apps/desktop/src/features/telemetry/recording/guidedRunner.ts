@@ -47,7 +47,7 @@ function buzz(session: Running) {
     session.buzzFailed = true;
     return;
   }
-  invoke("buzz_watch", { durationMs: CUE_BUZZ_MS }).catch(() => {
+  invoke("buzz_watch", { durationMs: CUE_BUZZ_MS, source: "cue" }).catch(() => {
     session.buzzFailed = true;
   });
 }

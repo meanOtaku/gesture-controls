@@ -1157,9 +1157,12 @@ impl LabelRuntimeHost {
         if buzz
             && wanted
             && let Some(server) = app.try_state::<std::sync::Arc<watch_bridge::WatchBridgeServer>>()
-            && let Err(error) = server.send_haptic_command(watch_bridge::HapticCommand {
-                duration_ms: READY_BUZZ_MS,
-            })
+            && let Err(error) = server.send_haptic_command_from(
+                watch_bridge::HapticCommand {
+                    duration_ms: READY_BUZZ_MS,
+                },
+                "ready",
+            )
         {
             tracing::debug!(%error, "the ready buzz was not sent");
         }

@@ -34,7 +34,7 @@ import { listGestureDefinitions } from "../gestureLibrary/gestureLibraryApi";
 import { cameraTrack, contactOnsets, contactThreshold, handsAt, type CameraTrack } from "./cameraTrack";
 import { inImportOrder, type DatasetLabel, type DatasetSummary } from "../model-lab/types";
 import { describeContext } from "../telemetry/sessionContext";
-import { exportLabellingRecording, labellingCameraEvidence, openLabellingRecording, replayActiveModels, saveLabellingOriginal, saveLabellingVersion, type LabellingRecording, type LabellingSource, type ModelReplay } from "./labellingApi";
+import { exportLabellingRecording, hapticSpans, labellingCameraEvidence, labellingHaptics, openLabellingRecording, replayActiveModels, saveLabellingOriginal, saveLabellingVersion, type LabellingRecording, type LabellingSource, type ModelReplay } from "./labellingApi";
 import { appNavigation, type LabellingFocus } from "../../shared/navigation/appNavigation";
 import { labelColor } from "../labels/labelColor";
 import { HandPreview } from "./HandPreview";
@@ -475,6 +475,23 @@ export function LabellingPage() {
     };
   }, [recording, recorderId]);
 
+  // The watch's vibrations during the recording (the volume knob's, the ready buzz, a noise session's bursts), since a
+  // buzz shakes the sensors: a false alarm or a missed pinch at one is the vibration's doing, not the hand's.
+  const [buzzes, setBuzzes] = useState<Span[]>([]);
+  useEffect(() => {
+    setBuzzes([]);
+    if (!recording) return;
+    let live = true;
+    void labellingHaptics(recording.source)
+      .then((haptics) => {
+        if (live) setBuzzes(hapticSpans(haptics ?? [], recording.originNs));
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [recording]);
+
   /** Where the fingers close: from the Gesture library's pinch rule (for the label you are marking, or any pinch). */
   const pinch = useMemo(() => {
     const pinches = definitions.filter((definition) => definition.conditions.some((c) => c.measure === "pinch.index" && c.direction === "below"));
@@ -905,6 +922,9 @@ export function LabellingPage() {
                   }}
                   pickTitle="Select it, ready to leave out"
                 />
+              )}
+              {buzzes.length > 0 && (
+                <SpanRail title="Watch buzzes" spans={buzzes} view={view} colorOf={colorOf} nameOf={nameOf} colorFor={() => "#a78bfa"} nameFor={() => ""} />
               )}
               {suggestions.length > 0 && (
                 <SpanRail

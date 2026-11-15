@@ -6,7 +6,12 @@ import { labelAt, planSteps, type GuidedPlan } from "../recording/guidedSession"
 import { telemetryStore } from "../store/telemetryStore";
 import { EverydayNoiseCard } from "./EverydayNoiseCard";
 
+const knob = vi.hoisted(() => ({ stop: vi.fn(), start: vi.fn() }));
+vi.mock("../recording/knobBuzz", () => ({ startKnobBuzz: knob.start }));
+
 beforeEach(() => {
+  knob.stop.mockReset();
+  knob.start.mockReset().mockReturnValue(knob.stop);
   localStorage.clear();
   telemetryStore.reset();
 });
@@ -23,6 +28,38 @@ function labelsThroughout(plan: GuidedPlan): (string | null)[] {
 }
 
 describe("EverydayNoiseCard", () => {
+  it("buzzes the watch like the volume knob only when asked, until the session ends, and says so in its details", () => {
+    // The card's own listener is the last one subscribed; React's are left alone, so nothing is drawn running.
+    const listeners: (() => void)[] = [];
+    let running = false;
+    vi.spyOn(guidedRunner, "subscribe").mockImplementation((next) => {
+      listeners.push(next);
+      return () => undefined;
+    });
+    vi.spyOn(guidedRunner, "snapshot").mockImplementation(() => (running ? ({ source: "noise" } as ReturnType<typeof guidedRunner.snapshot>) : null));
+    const start = vi.spyOn(guidedRunner, "start").mockImplementation(() => {
+      expect(telemetryStore.getSessionContext().activity).toBe("Everyday noise: active, with knob-like buzzes");
+      return true;
+    });
+    render(<EverydayNoiseCard recording={false} watchConnected onStop={() => undefined} />);
+    const box = screen.getByRole("checkbox", { name: "Buzz the watch like the volume knob" });
+    expect(box).not.toBeChecked();
+    fireEvent.click(box);
+    expect(JSON.parse(localStorage.getItem("recorder.noiseSession")!).knobBuzz).toBe(true);
+    cleanup();
+    render(<EverydayNoiseCard recording={false} watchConnected onStop={() => undefined} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start everyday noise session" }));
+    expect(start).toHaveBeenCalled();
+    expect(knob.start).toHaveBeenCalledTimes(1);
+    const listener = listeners[listeners.length - 1];
+    running = true;
+    listener();
+    expect(knob.stop).not.toHaveBeenCalled();
+    running = false;
+    listener();
+    expect(knob.stop).toHaveBeenCalledTimes(1);
+  });
+
   it("records your normal routine by default, all of it everyday noise, with nothing to label", () => {
     render(<EverydayNoiseCard recording={false} watchConnected onStop={() => undefined} />);
     expect(screen.getByRole("radio", { name: /Active/ })).toBeChecked();
@@ -31,6 +68,7 @@ describe("EverydayNoiseCard", () => {
     fireEvent.change(screen.getByLabelText("Minutes"), { target: { value: "5" } });
     fireEvent.click(screen.getByRole("button", { name: "Start everyday noise session" }));
     const [plan, , source] = start.mock.calls[0];
+    expect(knob.start).not.toHaveBeenCalled();
     expect(source).toBe("noise");
     expect(plan).toMatchObject({ label: "", cues: 0, activities: [{ seconds: 300 }] });
     expect(labelsThroughout(plan)).toEqual(["everyday_noise", "everyday_noise", "everyday_noise"]);

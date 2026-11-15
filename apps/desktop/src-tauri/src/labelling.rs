@@ -321,6 +321,77 @@ pub fn labelling_camera_evidence(
         .flatten())
 }
 
+/// One watch vibration in a recording (from its `haptics.csv`), for Labelling's timeline.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LabellingHaptic {
+    /// On the watch clock, like the recording's samples; a string, as it is too large to be exact in JavaScript.
+    pub timestamp_ns: String,
+    pub duration_ms: u32,
+    pub source: String,
+}
+
+/// Reads a `haptics.csv` (see `recording_bundle::HAPTICS_HEADER`); rows that do not parse are skipped.
+pub(crate) fn parse_haptics(csv: &str) -> Vec<LabellingHaptic> {
+    csv.lines()
+        .skip(1)
+        .filter_map(|line| {
+            let mut parts = line.split(',');
+            let ts = parts.next()?.trim().parse::<i64>().ok()?;
+            let duration_ms = parts.next()?.trim().parse::<u32>().ok()?;
+            let source = parts.next().unwrap_or("other").trim().to_string();
+            Some(LabellingHaptic {
+                timestamp_ns: ts.to_string(),
+                duration_ms,
+                source,
+            })
+        })
+        .collect()
+}
+
+/// The watch vibrations sent during a recording opened for labelling: from the Recorder recording it came from, or a
+/// `haptics.csv` in the folder itself. Empty when there were none, or nothing says.
+#[tauri::command]
+pub fn labelling_haptics(
+    source: LabellingSource,
+    app: AppHandle,
+) -> Result<Vec<LabellingHaptic>, String> {
+    let file = crate::recording_bundle::HAPTICS_FILE_NAME;
+    let mut places: Vec<PathBuf> = Vec::new();
+    match &source {
+        LabellingSource::Dataset { id } => {
+            let index = model_lab::load_index(&app);
+            let dataset = index
+                .datasets
+                .iter()
+                .find(|d| &d.id == id)
+                .ok_or("that recording is no longer in Datasets")?;
+            if let Some(recording) = &dataset.source_recording_id {
+                places.push(
+                    crate::recording_bundle::recording_bundles_dir(&app)?
+                        .join(recording)
+                        .join(file),
+                );
+            }
+            places
+                .push(model_lab::dataset_csv_path(&model_lab::datasets_dir(&app)?, id).join(file));
+        }
+        LabellingSource::File { path } => {
+            let path = PathBuf::from(path);
+            places.push(if path.is_dir() {
+                path.join(file)
+            } else {
+                path.with_file_name(file)
+            });
+        }
+    }
+    Ok(places
+        .iter()
+        .find_map(|place| fs::read_to_string(place).ok())
+        .map(|csv| parse_haptics(&csv))
+        .unwrap_or_default())
+}
+
 /// Writes manual labels back to the opened dataset without creating another dataset.
 #[tauri::command]
 pub fn save_labelling_original(
@@ -918,6 +989,19 @@ pub async fn labelling_model_replay(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn haptics_csv_rows_are_read_and_bad_ones_skipped() {
+        let found = super::parse_haptics(
+            "timestamp_ns,duration_ms,source\n123456789012345,20,knob\nnot,a,row\n9,40,ready\n",
+        );
+        assert_eq!(found.len(), 2);
+        assert_eq!(found[0].timestamp_ns, "123456789012345");
+        assert_eq!(
+            (found[1].duration_ms, found[1].source.as_str()),
+            (40, "ready")
+        );
+    }
+
     #[test]
     fn a_sweep_runs_the_scores_through_the_same_detection_rule_at_each_threshold() {
         let thresholds = model_lab_core::Thresholds {

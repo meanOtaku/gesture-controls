@@ -468,9 +468,12 @@ impl OverlayRuntime {
         // The rate-limit slot is only consumed by a pulse that was actually
         // sent: a failed send (watch disconnected) must not also silence the
         // first pulse after it reconnects.
-        match server.send_haptic_command(HapticCommand {
-            duration_ms: WRIST_ROTATION_HAPTIC_DURATION_MS,
-        }) {
+        match server.send_haptic_command_from(
+            HapticCommand {
+                duration_ms: WRIST_ROTATION_HAPTIC_DURATION_MS,
+            },
+            "knob",
+        ) {
             Ok(()) => {
                 *last_sent = Some(now);
                 self.haptic_send_failing.store(false, Ordering::Release);

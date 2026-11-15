@@ -584,9 +584,16 @@ pub fn stop_measurement(
 pub fn buzz_watch(
     server: State<'_, std::sync::Arc<WatchBridgeServer>>,
     duration_ms: u32,
+    source: Option<String>,
 ) -> Result<(), String> {
+    // What asked for it, as the recording's haptics.csv names it: only these, so a typo cannot make a new kind.
+    let source = match source.as_deref() {
+        None => "manual",
+        Some(s @ ("manual" | "noise-session" | "cue")) => s,
+        Some(other) => return Err(format!("unknown vibration source '{other}'")),
+    };
     server
-        .send_haptic_command(HapticCommand { duration_ms })
+        .send_haptic_command_from(HapticCommand { duration_ms }, source)
         .map_err(|error| error.to_string())
 }
 

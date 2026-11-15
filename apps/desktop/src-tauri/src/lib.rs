@@ -293,6 +293,7 @@ pub fn run() {
             model_lab::export_dataset_folder,
             labelling::open_labelling_recording,
             labelling::labelling_camera_evidence,
+            labelling::labelling_haptics,
             labelling::save_labelling_version,
             labelling::save_labelling_original,
             labelling::export_labelling_recording,

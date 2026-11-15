@@ -47,6 +47,38 @@ export function labellingCameraEvidence(source: LabellingSource): Promise<Camera
   return invoke<CameraEvidenceFiles | null>("labelling_camera_evidence", { source });
 }
 
+/** One vibration the desktop sent to the watch during the recording (`haptics.csv`), on the watch clock. */
+export interface LabellingHaptic {
+  /** Watch-clock ns, a string as it is too large to be exact. */
+  timestampNs: string;
+  durationMs: number;
+  /** What sent it: knob, ready, cue, noise-session, manual or other. */
+  source: string;
+}
+
+/** The vibrations saved with the recording; empty when it has none (made before they were saved, or none were sent). */
+export function labellingHaptics(source: LabellingSource): Promise<LabellingHaptic[]> {
+  return invoke<LabellingHaptic[]>("labelling_haptics", { source });
+}
+
+/** The vibrations as spans on the recording's timeline (ms from `originNs`), labelled by what sent them. */
+export function hapticSpans(haptics: LabellingHaptic[], originNs: string): Span[] {
+  let origin: bigint;
+  try {
+    origin = BigInt(originNs);
+  } catch {
+    return [];
+  }
+  return haptics.flatMap((haptic) => {
+    try {
+      const startMs = Number(BigInt(haptic.timestampNs) - origin) / 1e6;
+      return [{ startMs, endMs: startMs + haptic.durationMs, label: haptic.source }];
+    } catch {
+      return [];
+    }
+  });
+}
+
 /** Saves the hand labels as a new recording in Model Lab; the source is left as it was. */
 export function saveLabellingVersion(source: LabellingSource, spans: Span[]): Promise<DatasetSummary> {
   return invoke<DatasetSummary>("save_labelling_version", { source, intervals: toIntervals(spans) });

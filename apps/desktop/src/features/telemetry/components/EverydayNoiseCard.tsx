@@ -7,6 +7,8 @@ import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
 import { guidedRunner } from "../recording/guidedRunner";
+import { startKnobBuzz } from "../recording/knobBuzz";
+import { Checkbox } from "../../../components/ui/checkbox";
 import { NOISE_KINDS, NOISE_MAX_MINUTES, NOISE_MIN_MINUTES, noiseActivity, noiseRoutinePlan, planProblem, type NoiseKind, type SupportAngle } from "../recording/guidedSession";
 import { telemetryStore } from "../store/telemetryStore";
 import { GuidedRunningView } from "./GuidedRunningView";
@@ -18,12 +20,15 @@ interface NoiseSettings {
   angle: SupportAngle;
   /** The minutes typed for each kind. */
   minutes: Record<NoiseKind, string>;
+  /** Whether the session buzzes the watch in bursts like the volume knob's (see `knobBuzz.ts`). */
+  knobBuzz: boolean;
 }
 
 const DEFAULTS: NoiseSettings = {
   kind: "active",
   angle: "flat",
   minutes: { active: String(NOISE_KINDS.active.minutes), still: String(NOISE_KINDS.still.minutes), supported: String(NOISE_KINDS.supported.minutes) },
+  knobBuzz: false,
 };
 
 function loadSettings(): NoiseSettings {
@@ -34,6 +39,7 @@ function loadSettings(): NoiseSettings {
         kind: stored.kind && stored.kind in NOISE_KINDS ? stored.kind : DEFAULTS.kind,
         angle: stored.angle === "angled" ? "angled" : "flat",
         minutes: { ...DEFAULTS.minutes, ...(stored.minutes ?? {}) },
+        knobBuzz: stored.knobBuzz === true,
       };
     }
   } catch {
@@ -83,10 +89,23 @@ export function EverydayNoiseCard({ recording, watchConnected, onStop }: {
     // What it was goes with this recording's session details ("Doing"), so flat and angled can be told apart later. A
     // recording keeps the details it started with, so yours are put back at once for the next one.
     const before = telemetryStore.getSessionContext();
-    telemetryStore.setSessionContext({ ...before, activity: noiseActivity(kind, angle) });
+    telemetryStore.setSessionContext({ ...before, activity: noiseActivity(kind, angle) + (settings.knobBuzz ? ", with knob-like buzzes" : "") });
     const started = guidedRunner.start(plan, Math.random, "noise");
     telemetryStore.setSessionContext(before);
-    if (!started) setError("Could not start: stop the recording under way first.");
+    if (!started) {
+      setError("Could not start: stop the recording under way first.");
+      return;
+    }
+    if (settings.knobBuzz) {
+      // The bursts run for as long as this session does, whichever page is open, and stop with it.
+      const stop = startKnobBuzz();
+      const unsubscribe = guidedRunner.subscribe(() => {
+        if (guidedRunner.snapshot()?.source !== "noise") {
+          stop();
+          unsubscribe();
+        }
+      });
+    }
   };
 
   if (session?.source === "noise") {
@@ -148,6 +167,13 @@ export function EverydayNoiseCard({ recording, watchConnected, onStop }: {
           />
         </div>
         <p className="hint">Make no gesture. For example: {NOISE_KINDS[kind].suggestions}.</p>
+        <label className="flex items-start gap-2 text-sm">
+          <Checkbox checked={settings.knobBuzz} disabled={recording} onCheckedChange={(on) => update({ knobBuzz: on === true })} aria-label="Buzz the watch like the volume knob" />
+          <span>
+            <strong>Buzz the watch like the volume knob</strong>{" "}
+            <small className="text-muted-foreground">Bursts of short buzzes (20 ms every 1/8 s, 1 to 3 s long) every 4 to 12 s, so a model learns that the knob's vibration is not a pinch. Each buzz is saved with the recording.</small>
+          </span>
+        </label>
         {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" disabled={recording || !watchConnected || problem !== null} onClick={start}>Start everyday noise session</Button>

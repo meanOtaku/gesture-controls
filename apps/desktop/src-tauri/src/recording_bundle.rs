@@ -47,6 +47,46 @@ pub(crate) const PPG_CLOCK_FILE_NAME: &str = "ppg_clock.csv";
 /// put it on the watch clock (`offset_ns`). A row's own timestamp is its `timestamp_ns` less its batch's offset, so the
 /// mapping can be redone later.
 pub(crate) const PPG_CLOCK_HEADER: &str = "sequence,sent_ns,newest_sensor_ns,offset_ns";
+/// The vibrations the desktop sent to the watch during the recording (the volume knob's ticks, the ready buzz, a noise
+/// session's knob-like bursts), written by the desktop itself when the bundle is saved: they shake the very sensors the
+/// models read, so a recording keeps when they were. One row per vibration, on the watch clock like `raw.csv`.
+pub(crate) const HAPTICS_FILE_NAME: &str = "haptics.csv";
+pub(crate) const HAPTICS_HEADER: &str = "timestamp_ns,duration_ms,source";
+
+/// `haptics.csv` for a recording: the vibrations whose watch time lies within its first and last sample, or None when
+/// there were none (or `raw.csv` has no timed rows).
+pub(crate) fn haptics_csv(
+    raw_csv: &str,
+    haptics: impl Fn(i64, i64) -> Vec<watch_bridge::HapticRecord>,
+) -> Option<String> {
+    let (mut from, mut to) = (i64::MAX, i64::MIN);
+    for line in raw_csv.lines().skip(1) {
+        if let Some(ts) = line
+            .split(',')
+            .next()
+            .and_then(|t| t.trim().parse::<i64>().ok())
+        {
+            from = from.min(ts);
+            to = to.max(ts);
+        }
+    }
+    if from > to {
+        return None;
+    }
+    let records = haptics(from, to);
+    if records.is_empty() {
+        return None;
+    }
+    let mut csv = String::from(HAPTICS_HEADER);
+    for r in records {
+        if let Some(ts) = r.watch_ns {
+            csv.push_str(&format!("\n{ts},{},{}", r.duration_ms, r.source));
+        }
+    }
+    csv.push('\n');
+    Some(csv)
+}
+
 /// The optional evidence files a webview may add to a bundle, and nothing else.
 const EXTRA_FILE_NAMES: [&str; 4] = [
     HAND_LANDMARKS_FILE_NAME,
@@ -568,9 +608,15 @@ pub fn save_recording_bundle(
     extra_files: Option<BTreeMap<String, String>>,
     app: AppHandle,
 ) -> Result<RecordingBundleSummary, String> {
-    let extra_files = extra_files.unwrap_or_default();
+    let mut extra_files = extra_files.unwrap_or_default();
     for (name, content) in &extra_files {
         validate_extra_file(name, content)?;
+    }
+    // Added by the desktop, never taken from the webview: the watch vibrations sent during the recording.
+    if let Some(server) = app.try_state::<std::sync::Arc<watch_bridge::WatchBridgeServer>>()
+        && let Some(csv) = haptics_csv(&raw_csv, |from, to| server.haptics_between(from, to))
+    {
+        extra_files.insert(HAPTICS_FILE_NAME.to_string(), csv);
     }
     validate_recording_id(&recording.recording_id)?;
     if recording.recording_id != annotations.recording_id {
@@ -3901,6 +3947,34 @@ mod tests {
                 Err(error) => println!("not added {id}: {error}"),
             }
         }
+    }
+
+    #[test]
+    fn a_recording_keeps_the_vibrations_sent_during_it() {
+        let raw = "timestamp_ns,sequence\n1000,1\n5000,2\n3000,3\n";
+        let asked = std::cell::Cell::new((0, 0));
+        let csv = haptics_csv(raw, |from, to| {
+            asked.set((from, to));
+            vec![watch_bridge::HapticRecord {
+                desktop_ns: 1,
+                watch_ns: Some(2000),
+                duration_ms: 20,
+                source: "knob".into(),
+            }]
+        })
+        .unwrap();
+        assert_eq!(
+            asked.get(),
+            (1000, 5000),
+            "from its first sample to its last"
+        );
+        assert_eq!(csv, "timestamp_ns,duration_ms,source\n2000,20,knob\n");
+        assert_eq!(
+            haptics_csv(raw, |_, _| Vec::new()),
+            None,
+            "no file when nothing vibrated"
+        );
+        assert_eq!(haptics_csv("timestamp_ns\n", |_, _| unreachable!()), None);
     }
 
     #[test]

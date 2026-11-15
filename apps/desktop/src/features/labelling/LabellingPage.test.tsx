@@ -273,6 +273,23 @@ describe("LabellingPage", () => {
     expect(exportFolderStore.get()).toBe("/exports");
   });
 
+  it("shows when the watch buzzed during the recording, from the vibrations saved with it", async () => {
+    respond();
+    const fallback = invoke.getMockImplementation()!;
+    invoke.mockImplementation(async (command: string, args?: Record<string, unknown>) =>
+      command === "labelling_haptics" ? [{ timestampNs: "250000000", durationMs: 20, source: "knob" }, { timestampNs: "600000000", durationMs: 40, source: "ready" }] : fallback(command, args));
+    await openRecording();
+    const buzzes = within(await screen.findByRole("list", { name: "Watch buzzes labels" })).getAllByRole("listitem");
+    expect(buzzes).toHaveLength(2);
+    expect(buzzes[0]).toHaveAttribute("title", expect.stringContaining("0.250 s"));
+    expect(invoke).toHaveBeenCalledWith("labelling_haptics", { source: { kind: "dataset", id: "d1" } });
+  });
+
+  it("draws no buzz row for a recording without saved vibrations", async () => {
+    await openRecording();
+    expect(screen.queryByRole("list", { name: "Watch buzzes labels" })).toBeNull();
+  });
+
   it("draws the hand from the landmarks saved in an opened folder", async () => {
     respond();
     const fallback = invoke.getMockImplementation()!;
