@@ -94,14 +94,29 @@ pub fn plan_split(
     mapping: &LabelMapping,
     target: &LabelId,
 ) -> Result<Split, TrainingError> {
-    let has_target = |r: &RecordingInfo| r.labels.contains(target);
-    let has_other = |r: &RecordingInfo| {
-        r.labels
-            .iter()
-            .any(|l| mapping.entries.get(l) == Some(&ExampleRole::Negative))
+    plan_split_among(recordings, mapping, std::slice::from_ref(target))
+}
+
+/// [`plan_split`] for a model of several gestures (`targets`): each side has the starts of every one of them, and
+/// something that is none of them. The same recordings and `targets` always split the same way, whichever gesture's
+/// mapping is given, as long as the mappings differ only in which of `targets` is the positive one.
+pub fn plan_split_among(
+    recordings: &[RecordingInfo],
+    mapping: &LabelMapping,
+    targets: &[LabelId],
+) -> Result<Split, TrainingError> {
+    // What each side must have: each target's starts, then something that is none of them.
+    let kinds = targets.len() + 1;
+    let covers = |r: &RecordingInfo, kind: usize| -> bool {
+        match targets.get(kind) {
+            Some(target) => r.labels.contains(target),
+            None => r.labels.iter().any(|l| {
+                mapping.entries.get(l) == Some(&ExampleRole::Negative) && !targets.contains(l)
+            }),
+        }
     };
     let not_enough = || TrainingError::NotEnoughRecordings {
-        target: target.clone(),
+        target: targets[0].clone(),
     };
 
     let mut order: Vec<&RecordingInfo> = recordings.iter().collect();
@@ -110,15 +125,15 @@ pub fn plan_split(
     // Positions in `order` of the recordings held out for testing.
     let mut held: Vec<usize> = Vec::new();
     // Make sure testing sees each kind: the first of each (in the fixed order) that is not already covered.
-    for covers in [&has_target as &dyn Fn(&RecordingInfo) -> bool, &has_other] {
-        if !held.iter().any(|&i| covers(order[i]))
+    for kind in 0..kinds {
+        if !held.iter().any(|&i| covers(order[i], kind))
             && let Some(position) =
-                (0..order.len()).find(|i| covers(order[*i]) && !held.contains(i))
+                (0..order.len()).find(|i| covers(order[*i], kind) && !held.contains(i))
         {
             held.push(position);
         }
     }
-    // Then fill up to about 30%, while what is left to train on still has both kinds.
+    // Then fill up to about 30%, while what is left to train on still has every kind.
     let wanted = ((recordings.len() as f64) * 0.3).round() as usize;
     for candidate in 0..order.len() {
         if held.len() >= wanted {
@@ -128,7 +143,7 @@ pub fn plan_split(
             continue;
         }
         let rest = || (0..order.len()).filter(|i| *i != candidate && !held.contains(i));
-        if rest().any(|i| has_target(order[i])) && rest().any(|i| has_other(order[i])) {
+        if (0..kinds).all(|kind| rest().any(|i| covers(order[i], kind))) {
             held.push(candidate);
         }
     }
@@ -140,10 +155,8 @@ pub fn plan_split(
             .collect()
     };
     let (evaluation, train) = (side(true), side(false));
-    let both = |set: &[&RecordingInfo]| {
-        set.iter().any(|r| has_target(r)) && set.iter().any(|r| has_other(r))
-    };
-    if !both(&evaluation) || !both(&train) {
+    let every = |set: &[&RecordingInfo]| (0..kinds).all(|kind| set.iter().any(|r| covers(r, kind)));
+    if !every(&evaluation) || !every(&train) {
         return Err(not_enough());
     }
     let ids = |set: Vec<&RecordingInfo>| set.into_iter().map(|r| r.id.clone()).collect();
@@ -162,15 +175,29 @@ pub fn plan_split_keeping(
     target: &LabelId,
     train_only: &[RecordingId],
 ) -> Result<Split, TrainingError> {
+    keeping_among(
+        recordings,
+        mapping,
+        std::slice::from_ref(target),
+        train_only,
+    )
+}
+
+fn keeping_among(
+    recordings: &[RecordingInfo],
+    mapping: &LabelMapping,
+    targets: &[LabelId],
+    train_only: &[RecordingId],
+) -> Result<Split, TrainingError> {
     if train_only.is_empty() {
-        return plan_split(recordings, mapping, target);
+        return plan_split_among(recordings, mapping, targets);
     }
     let base: Vec<RecordingInfo> = recordings
         .iter()
         .filter(|r| !train_only.contains(&r.id))
         .cloned()
         .collect();
-    let mut split = plan_split(&base, mapping, target)?;
+    let mut split = plan_split_among(&base, mapping, targets)?;
     for recording in recordings {
         if train_only.contains(&recording.id) {
             split.train.push(recording.id.clone());
@@ -190,9 +217,26 @@ pub fn plan_split_sessions(
     train_only: &[RecordingId],
     sessions: &[Vec<RecordingId>],
 ) -> Result<Split, TrainingError> {
+    plan_split_sessions_among(
+        recordings,
+        mapping,
+        std::slice::from_ref(target),
+        train_only,
+        sessions,
+    )
+}
+
+/// [`plan_split_sessions`] for a model of several gestures (see [`plan_split_among`]).
+pub fn plan_split_sessions_among(
+    recordings: &[RecordingInfo],
+    mapping: &LabelMapping,
+    targets: &[LabelId],
+    train_only: &[RecordingId],
+    sessions: &[Vec<RecordingId>],
+) -> Result<Split, TrainingError> {
     let sets: Vec<&Vec<RecordingId>> = sessions.iter().filter(|set| set.len() > 1).collect();
     if sets.is_empty() {
-        return plan_split_keeping(recordings, mapping, target, train_only);
+        return keeping_among(recordings, mapping, targets, train_only);
     }
     let set_of = |id: &RecordingId| sets.iter().position(|set| set.contains(id));
     let mut merged: Vec<RecordingInfo> = Vec::new();
@@ -226,7 +270,7 @@ pub fn plan_split_sessions(
             }
         }
     }
-    let split = plan_split_keeping(&merged, mapping, target, &merged_train_only)?;
+    let split = keeping_among(&merged, mapping, targets, &merged_train_only)?;
     let expand = |side: Vec<RecordingId>| -> Vec<RecordingId> {
         side.into_iter()
             .flat_map(|id| match set_of(&id) {
@@ -259,6 +303,9 @@ pub struct RunPlan {
     /// Recordings that hold one session, set by set: each set stays on one side of the split (see
     /// [`plan_split_sessions`]). Empty when no two share samples.
     pub sessions: Vec<Vec<RecordingId>>,
+    /// For one gesture's run of a multi-gesture model: every gesture of it, the target among them, in the same order for
+    /// each of its runs, so they all split the same way ([`plan_split_among`]). Empty for a one-gesture model.
+    pub split_among: Vec<LabelId>,
     /// Ends of the unique names for this run's records, e.g. a short random string.
     pub unique: String,
 }
@@ -294,10 +341,17 @@ pub fn begin_run<P: Persist>(
     {
         return Err(TrainingError::UnmappedLabel(missing.clone()));
     }
-    let split = plan_split_sessions(
+    if !plan.split_among.is_empty() && !plan.split_among.contains(&plan.target) {
+        return Err(TrainingError::TargetNotPositive(plan.target.clone()));
+    }
+    let split = plan_split_sessions_among(
         &plan.recordings,
         &plan.mapping,
-        &plan.target,
+        if plan.split_among.is_empty() {
+            std::slice::from_ref(&plan.target)
+        } else {
+            &plan.split_among
+        },
         &plan.train_only,
         &plan.sessions,
     )?;
@@ -531,6 +585,64 @@ mod tests {
         }
     }
 
+    #[test]
+    fn a_multi_gesture_split_tests_every_gesture_and_splits_alike_for_each() {
+        // Recordings of pinch only, fist only, and idle only: a one-gesture split for pinch could train on every fist.
+        let recordings: Vec<RecordingInfo> = (0..12)
+            .map(|i| {
+                info(
+                    &format!("r{i}"),
+                    &[["pinch", "idle"], ["fist", "idle"], ["idle", "idle"]][i % 3],
+                )
+            })
+            .collect();
+        let gestures = [label("pinch"), label("fist")];
+        let as_positive = |positive: &str, other: &str| LabelMapping {
+            entries: [
+                (label(positive), ExampleRole::Positive),
+                (label(other), ExampleRole::Negative),
+                (label("idle"), ExampleRole::Negative),
+            ]
+            .into(),
+        };
+        let split = plan_split_sessions_among(
+            &recordings,
+            &as_positive("pinch", "fist"),
+            &gestures,
+            &[],
+            &[],
+        )
+        .unwrap();
+        let has = |side: &[RecordingId], l: &str| {
+            side.iter().any(|id| {
+                recordings
+                    .iter()
+                    .any(|r| &r.id == id && r.labels.contains(&label(l)))
+            })
+        };
+        for l in ["pinch", "fist"] {
+            assert!(has(&split.train, l) && has(&split.evaluation, l), "{l}");
+        }
+        assert_eq!(
+            split,
+            plan_split_sessions_among(
+                &recordings,
+                &as_positive("fist", "pinch"),
+                &gestures,
+                &[],
+                &[]
+            )
+            .unwrap()
+        );
+        // With no fist to test on, it is refused rather than split unfairly.
+        let one_fist: Vec<RecordingInfo> = recordings
+            .iter()
+            .filter(|r| !r.labels.contains(&label("fist")) || r.id.as_str() == "r1")
+            .cloned()
+            .collect();
+        assert!(plan_split_among(&one_fist, &as_positive("pinch", "fist"), &gestures).is_err());
+    }
+
     fn mapping() -> LabelMapping {
         LabelMapping {
             entries: [
@@ -592,6 +704,7 @@ mod tests {
             },
             recordings,
             train_only: Vec::new(),
+            split_among: Vec::new(),
             sessions: Vec::new(),
             unique: "abc12345".into(),
         }

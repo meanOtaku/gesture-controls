@@ -9,18 +9,26 @@
 //! convolution and dense layer is as in the first CNN's file ([`crate::cnn`]): zero padding to keep the length, a ReLU
 //! after each convolution and after every dense layer but the last, whose one value goes through a sigmoid.
 //!
+//! A multi-gesture file names its outputs (`"outputs": ["nothing", gesture, ...]`): the last dense layer gives one value
+//! for each, through a softmax, and a gesture's model reads its own output ([`BranchCnn::reading`]): the probability of
+//! that gesture, averaged over the networks.
+//!
 //! Every size and weight is checked when the file is read, so evaluation cannot go out of bounds.
 
 use serde::Deserialize;
 
 use crate::cnn::{
-    CnnError, Conv, Dense, MAX_LAYERS, MAX_MEMBERS, MAX_WIDTH, check_convs, check_dense, malformed,
-    pooled, run_convs, run_dense,
+    CnnError, Conv, Dense, MAX_LAYERS, MAX_MEMBERS, MAX_WIDTH, check_convs, check_dense_to,
+    malformed, pooled, run_convs, run_dense_raw,
 };
 
 pub const FORMAT: &str = "ppg-imu-cnn-branches";
 pub const VERSION: u32 = 1;
 const MAX_BRANCHES: usize = 8;
+/// The first output of a multi-gesture file.
+pub const NOTHING: &str = "nothing";
+/// At most this many gestures in one file.
+pub const MAX_GESTURES: usize = 6;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -44,6 +52,8 @@ struct File {
     version: u32,
     channels: usize,
     length: usize,
+    #[serde(default)]
+    outputs: Option<Vec<String>>,
     members: Vec<Member>,
 }
 
@@ -51,6 +61,10 @@ struct File {
 pub struct BranchCnn {
     channels: usize,
     length: usize,
+    /// A multi-gesture file's outputs, "nothing" first; `None` for one gesture (one output, a sigmoid).
+    outputs: Option<Vec<String>>,
+    /// The output [`BranchCnn::predict`] gives: 1 (the gesture) unless [`BranchCnn::reading`] chose another.
+    read: usize,
     members: Vec<Member>,
 }
 
@@ -76,14 +90,56 @@ impl BranchCnn {
         if file.members.is_empty() || file.members.len() > MAX_MEMBERS {
             return Err(malformed("it needs one to five networks"));
         }
+        if let Some(outputs) = &file.outputs {
+            let named = outputs
+                .iter()
+                .skip(1)
+                .all(|o| !o.is_empty() && o != NOTHING);
+            let distinct = outputs
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                == outputs.len();
+            if !(3..=MAX_GESTURES + 1).contains(&outputs.len())
+                || outputs[0] != NOTHING
+                || !named
+                || !distinct
+            {
+                return Err(malformed(format!(
+                    "a multi-gesture file names '{NOTHING}' and then 2 to {MAX_GESTURES} different gestures as its outputs"
+                )));
+            }
+        }
+        let width = file.outputs.as_ref().map_or(1, Vec::len);
         for member in &file.members {
-            check_member(member, file.channels)?;
+            check_member(member, file.channels, width)?;
         }
         Ok(Self {
             channels: file.channels,
             length: file.length,
+            outputs: file.outputs,
+            read: 1,
             members: file.members,
         })
+    }
+
+    /// A multi-gesture file's outputs, "nothing" first; `None` for a one-gesture file.
+    pub fn outputs(&self) -> Option<&[String]> {
+        self.outputs.as_deref()
+    }
+
+    /// The same networks giving output `index` (a gesture's: 1 or more) from [`BranchCnn::predict`]. A one-gesture file
+    /// has only output 1.
+    pub fn reading(mut self, index: usize) -> Result<Self, CnnError> {
+        let count = self.outputs.as_ref().map_or(2, Vec::len);
+        if index == 0 || index >= count {
+            return Err(malformed(format!(
+                "output {index} is not one of its gestures' (1 to {})",
+                count - 1
+            )));
+        }
+        self.read = index;
+        Ok(self)
     }
 
     /// How many inputs it reads: channels x length.
@@ -91,18 +147,28 @@ impl BranchCnn {
         self.channels * self.length
     }
 
-    /// The positive class's probability for `input` (channel by channel): the networks' probabilities averaged.
+    /// The probability of its gesture (output [`BranchCnn::reading`] chose) for `input` (channel by channel): the
+    /// networks' probabilities averaged.
     pub fn predict(&self, input: &[f64]) -> f64 {
         assert_eq!(input.len(), self.features(), "checked by the caller");
         self.members
             .iter()
-            .map(|m| m.predict(input, self.length))
+            .map(|m| {
+                let raw = m.predict(input, self.length);
+                if self.outputs.is_none() {
+                    1.0 / (1.0 + (-raw[0]).exp())
+                } else {
+                    let top = raw.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                    let sum: f64 = raw.iter().map(|v| (v - top).exp()).sum();
+                    (raw[self.read] - top).exp() / sum
+                }
+            })
             .sum::<f64>()
             / self.members.len() as f64
     }
 }
 
-fn check_member(m: &Member, channels: usize) -> Result<(), CnnError> {
+fn check_member(m: &Member, channels: usize, outputs: usize) -> Result<(), CnnError> {
     if m.branches.is_empty() || m.branches.len() > MAX_BRANCHES {
         return Err(malformed("each network needs one to eight branches"));
     }
@@ -126,11 +192,11 @@ fn check_member(m: &Member, channels: usize) -> Result<(), CnnError> {
         pooled_width += 2 * out;
     }
     let shared = check_convs(&m.shared, joined)?;
-    check_dense(&m.dense, pooled_width + 2 * shared)
+    check_dense_to(&m.dense, pooled_width + 2 * shared, outputs)
 }
 
 impl Member {
-    fn predict(&self, input: &[f64], length: usize) -> f64 {
+    fn predict(&self, input: &[f64], length: usize) -> Vec<f64> {
         let mut maps = Vec::new();
         let mut values = Vec::new();
         for b in &self.branches {
@@ -145,7 +211,7 @@ impl Member {
         }
         let shared = run_convs(&self.shared, maps, length);
         values.extend(pooled(&shared, length));
-        run_dense(&self.dense, values)
+        run_dense_raw(&self.dense, values)
     }
 }
 
@@ -205,5 +271,88 @@ mod tests {
             refused(|f| f["members"][0]["branches"] = serde_json::json!([])),
             CnnError::Malformed(_)
         ));
+    }
+
+    /// A tiny file with three outputs: the dense layer gives [6 + 16/3, 4, 0] (see the hand-worked test above).
+    fn tiny_multi() -> serde_json::Value {
+        let mut file = tiny();
+        file["outputs"] = serde_json::json!(["nothing", "pinch_in", "pinch_out"]);
+        file["members"][0]["dense"] = serde_json::json!([{"in": 6, "out": 3,
+            "weight": [1.0, 0.0, 0.0, 0.0, 0.0, 1.0,  0.0, 1.0, 0.0, 0.0, 0.0, 0.0,  0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            "bias": [0.0, 0.0, 0.0]}]);
+        file
+    }
+
+    #[test]
+    fn a_multi_gesture_file_gives_each_gesture_its_share_of_a_softmax() {
+        let input = [1.0, 2.0, 3.0, 0.0, 2.0, 4.0];
+        let file = tiny_multi().to_string();
+        let raw = [6.0 + 16.0 / 3.0, 4.0, 0.0];
+        let sum: f64 = raw.iter().map(|v: &f64| v.exp()).sum();
+        let cnn = BranchCnn::parse(file.as_bytes()).unwrap();
+        assert_eq!(cnn.outputs().unwrap(), ["nothing", "pinch_in", "pinch_out"]);
+        for index in [1, 2] {
+            let p = cnn.clone().reading(index).unwrap().predict(&input);
+            assert!((p - raw[index].exp() / sum).abs() < 1e-12);
+        }
+        assert!(cnn.clone().reading(0).is_err() && cnn.reading(3).is_err());
+        let one = BranchCnn::parse(tiny().to_string().as_bytes()).unwrap();
+        assert!(
+            one.outputs().is_none() && one.clone().reading(1).is_ok() && one.reading(2).is_err()
+        );
+    }
+
+    #[test]
+    fn a_multi_gesture_file_must_name_its_outputs_and_give_one_value_for_each() {
+        let refused = |edit: fn(&mut serde_json::Value)| {
+            let mut file = tiny_multi();
+            edit(&mut file);
+            BranchCnn::parse(file.to_string().as_bytes()).is_err()
+        };
+        assert!(refused(
+            |f| f["outputs"] = serde_json::json!(["nothing", "pinch_in"])
+        ));
+        assert!(refused(
+            |f| f["outputs"] = serde_json::json!(["pinch_in", "nothing", "pinch_out"])
+        ));
+        assert!(refused(
+            |f| f["outputs"] = serde_json::json!(["nothing", "pinch_in", "pinch_in"])
+        ));
+        assert!(refused(
+            |f| f["outputs"] = serde_json::json!(["nothing", "a", "b", "c"])
+        ));
+        assert!(refused(|f| {
+            f.as_object_mut().unwrap().remove("outputs");
+        }));
+    }
+
+    #[test]
+    fn the_runtime_gives_each_gesture_the_output_the_trainer_gave() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/cnn_v2_multi_gesture");
+        let bytes = std::fs::read(dir.join("model.cnn")).unwrap();
+        let expected: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(dir.join("expected.json")).unwrap()).unwrap();
+        let cnn = BranchCnn::parse(&bytes).unwrap();
+        for (input, outputs) in expected["inputs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .zip(expected["outputs"].as_array().unwrap())
+        {
+            let input: Vec<f64> = input
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_f64().unwrap())
+                .collect();
+            for index in [1, 2] {
+                let p = cnn.clone().reading(index).unwrap().predict(&input);
+                assert!(
+                    (p - outputs[index].as_f64().unwrap()).abs() < 1e-5,
+                    "output {index}: {p}"
+                );
+            }
+        }
     }
 }

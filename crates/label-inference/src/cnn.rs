@@ -183,6 +183,15 @@ pub(crate) fn check_convs(convs: &[Conv], channels: usize) -> Result<usize, CnnE
 
 /// Checks dense layers take `values` values and end in one, each layer's shape and weights.
 pub(crate) fn check_dense(dense: &[Dense], values: usize) -> Result<(), CnnError> {
+    check_dense_to(dense, values, 1)
+}
+
+/// Checks dense layers take `values` values and end in `outputs`, each layer's shape and weights.
+pub(crate) fn check_dense_to(
+    dense: &[Dense],
+    values: usize,
+    outputs: usize,
+) -> Result<(), CnnError> {
     let mut width = values;
     for (i, d) in dense.iter().enumerate() {
         if d.input != width {
@@ -202,8 +211,12 @@ pub(crate) fn check_dense(dense: &[Dense], values: usize) -> Result<(), CnnError
         }
         width = d.out;
     }
-    if width != 1 {
-        return Err(malformed("the last dense layer must give one value"));
+    if width != outputs {
+        return Err(malformed(if outputs == 1 {
+            "the last dense layer must give one value".to_string()
+        } else {
+            format!("the last dense layer must give {outputs} values, one for each output")
+        }));
     }
     if !dense
         .iter()
@@ -272,7 +285,13 @@ pub(crate) fn pooled(x: &[f64], length: usize) -> Vec<f64> {
 }
 
 /// `h` through the dense layers (a ReLU after every one but the last), the last's value through a sigmoid.
-pub(crate) fn run_dense(dense: &[Dense], mut h: Vec<f64>) -> f64 {
+pub(crate) fn run_dense(dense: &[Dense], h: Vec<f64>) -> f64 {
+    let h = run_dense_raw(dense, h);
+    1.0 / (1.0 + (-h[0]).exp())
+}
+
+/// The last dense layer's values, before any sigmoid or softmax.
+pub(crate) fn run_dense_raw(dense: &[Dense], mut h: Vec<f64>) -> Vec<f64> {
     for (n, d) in dense.iter().enumerate() {
         let last = n + 1 == dense.len();
         h = (0..d.out)
@@ -287,7 +306,7 @@ pub(crate) fn run_dense(dense: &[Dense], mut h: Vec<f64>) -> f64 {
             })
             .collect();
     }
-    1.0 / (1.0 + (-h[0]).exp())
+    h
 }
 
 #[cfg(test)]

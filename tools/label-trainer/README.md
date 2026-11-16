@@ -66,6 +66,12 @@ the cut-off folds included. The desktop keeps the recordings that model trained 
 replays it, as it runs, on the same held-out recordings (`metrics.startedFrom`) for the side-by-side; the bundle's
 provenance says what it continued from (`continuedFrom`).
 
+A v2 CNN spec may name several `gestures` (the target first): `multi_gesture.run_multi` trains one network with an
+output for nothing and each gesture (softmax; the file names them, `"outputs"`), chooses each gesture's cut-off on its
+folds as `v2_threshold` does, and writes, for each, what a one-gesture run writes under `gestures/<label>/` (its
+bundle's manifest reads its own output, `positiveIndex`), and in `result.json` the outcome of each and the confusion
+matrices (`confusion`: `events`, played through as the runtime runs; `moments`, each held-out decision).
+
 `tests/make_runtime_bundle.py` writes the bundle the runtime's tests load, with a pulse trace and the probability the
 trainer gives each of its samples.
 

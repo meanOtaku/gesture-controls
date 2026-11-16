@@ -54,6 +54,6 @@ pub use training::{
     BegunRun, MIN_WINDOW_SAMPLES, RecordingInfo, RunPlan, TrainingError, begin_run, cnn_contract,
     cnn_contract_100, cnn_v2_contract, complete_run, evaluation_only_run, fail_run,
     monitor_only_run, pinch_start_contract, plan_split, plan_split_keeping, plan_split_sessions,
-    ppg_onset_contract, trainer_backend,
+    plan_split_sessions_among, ppg_onset_contract, trainer_backend,
 };
 pub use trees::{TreeEnsemble, TreesError};

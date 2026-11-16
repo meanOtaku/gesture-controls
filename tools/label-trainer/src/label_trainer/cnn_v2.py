@@ -9,6 +9,10 @@ go through two shared convolutions (32 then 64 channels, dilation 4 then 8). Eac
 pooled over time (maximum, then mean), all of it side by side into a dense layer of 32 with a ReLU and dropout, and one
 output through a sigmoid. `MEMBERS` networks from different seeds are averaged.
 
+A multi-gesture network (`classes`) has one output for "nothing" and one for each gesture, through a softmax: the gestures
+compete, so two cannot both be likely at once. Its file names them (`"outputs": ["nothing", gesture, ...]`), and each
+gesture's model reads its own output (the manifest's `positiveIndex`).
+
 Training is the first CNN's (`cnn._train`: epochs, batch, optimiser, cosine schedule, positive weight, negative cap, size
 scaling, noise, 40 ms shift and pulse blanking), plus smooth time warping and magnitude warping of every batch (Um et al.
 2017). Noise-overlay copies of the training recordings are made by the trainer (`label_train.overlay_copies`), not here.
@@ -48,7 +52,10 @@ CONTINUE_EPOCHS = 8
 CONTINUE_LEARNING_RATE_SCALE = 0.3
 
 
-def _net():
+NOTHING = "nothing"     # the first output of a multi-gesture network
+
+
+def _net(outputs: int = 1):
     import torch
     from torch import nn
 
@@ -69,37 +76,44 @@ def _net():
             joined = sum(c for _, c in made)
             self.shared, c = stack(joined, SHARED)
             self.head = nn.Sequential(nn.Linear(2 * joined + 2 * c, cnn.HIDDEN), nn.ReLU(), nn.Dropout(0.2),
-                                      nn.Linear(cnn.HIDDEN, 1))
+                                      nn.Linear(cnn.HIDDEN, outputs))
+            self.outputs = outputs
 
         def forward(self, x):
             maps = [b(x[:, g, :]) for b, g in zip(self.branches, self.groups)]
             h = self.shared(torch.cat(maps, 1))
             pooled = [torch.cat([m.amax(2), m.mean(2)], 1) for m in maps] + [torch.cat([h.amax(2), h.mean(2)], 1)]
-            return self.head(torch.cat(pooled, 1)).squeeze(1)
+            out = self.head(torch.cat(pooled, 1))
+            return out.squeeze(1) if self.outputs == 1 else out
 
     return Net()
 
 
 class Model:
-    """Trained networks, averaged, with the `predict_proba` the trainer's evaluation uses."""
+    """Trained networks, averaged, with the `predict_proba` the trainer's evaluation uses: [nothing, gesture] for one
+    gesture, [nothing, each gesture...] for a multi-gesture network (`classes`, its gestures in output order)."""
 
-    def __init__(self, nets):
+    def __init__(self, nets, classes: tuple[str, ...] | None = None):
         self.nets = nets
+        self.classes = classes
 
     def predict_proba(self, x: np.ndarray) -> np.ndarray:
         import torch
 
         where = cnn.device()
         windows = torch.from_numpy(np.asarray(x, dtype=np.float32).reshape(-1, CHANNELS, LENGTH))
-        p = np.zeros(len(windows))
+        width = 1 if self.classes is None else len(self.classes) + 1
+        p = np.zeros((len(windows), width))
         with torch.no_grad():
             for net in self.nets:
                 net.to(where).eval()
                 for i in range(0, len(windows), 4096):
-                    p[i:i + 4096] += torch.sigmoid(net(windows[i:i + 4096].to(where))).cpu().numpy().astype(np.float64)
+                    out = net(windows[i:i + 4096].to(where))
+                    out = torch.sigmoid(out)[:, None] if self.classes is None else torch.softmax(out, 1)
+                    p[i:i + 4096] += out.cpu().numpy().astype(np.float64)
                 net.to("cpu")
         p /= len(self.nets)
-        return np.stack([1.0 - p, p], axis=1)
+        return np.concatenate([1.0 - p, p], axis=1) if self.classes is None else p
 
 
 def _smooth_curves(n, channels, ticks, spread, generator, device):
@@ -143,15 +157,22 @@ def _train(net, x: np.ndarray, y: np.ndarray, rng: np.random.Generator, epochs: 
 
     negatives = np.flatnonzero(y == 0)
     if len(negatives) > cnn.MAX_NEGATIVES:
-        rows = np.sort(np.concatenate([np.flatnonzero(y == 1), rng.choice(negatives, cnn.MAX_NEGATIVES, replace=False)]))
+        rows = np.sort(np.concatenate([np.flatnonzero(y >= 1), rng.choice(negatives, cnn.MAX_NEGATIVES, replace=False)]))
         x, y = x[rows], y[rows]
     where = cnn.device()
     net.to(where)
     windows = torch.from_numpy(np.asarray(x, dtype=np.float32).reshape(-1, CHANNELS, LENGTH)).to(where)
-    truth = torch.from_numpy(np.asarray(y, dtype=np.float32)).to(where)
     optimiser = torch.optim.Adam(net.parameters(), lr=learning_rate, weight_decay=cnn.WEIGHT_DECAY)
-    positives = max(1.0, float(y.sum()))
-    loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(min(cnn.MAX_POSITIVE_WEIGHT, (len(y) - positives) / positives), device=where))
+    if net.outputs == 1:
+        truth = torch.from_numpy(np.asarray(y, dtype=np.float32)).to(where)
+        positives = max(1.0, float(y.sum()))
+        loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(min(cnn.MAX_POSITIVE_WEIGHT, (len(y) - positives) / positives), device=where))
+    else:
+        # Each gesture weighted as the one-gesture network weights its starts: by how rare it is, at most MAX_POSITIVE_WEIGHT.
+        truth = torch.from_numpy(np.asarray(y, dtype=np.int64)).to(where)
+        counts = np.bincount(np.asarray(y, dtype=np.int64), minlength=net.outputs).astype(np.float64)
+        weights = [1.0] + [min(cnn.MAX_POSITIVE_WEIGHT, counts[0] / max(1.0, c)) for c in counts[1:]]
+        loss_fn = nn.CrossEntropyLoss(weight=torch.tensor(weights, dtype=torch.float32, device=where))
     schedule = torch.optim.lr_scheduler.CosineAnnealingLR(optimiser, max(1, epochs * ((len(y) + cnn.BATCH - 1) // cnn.BATCH)))
     generator = torch.Generator(device=where).manual_seed(int(rng.integers(2**31)))
     for _ in range(epochs):
@@ -173,28 +194,32 @@ def _train(net, x: np.ndarray, y: np.ndarray, rng: np.random.Generator, epochs: 
     net.to("cpu")
 
 
-def fit(x: np.ndarray, y: np.ndarray, seed: int, epochs: int | None = None, start: bytes | None = None) -> Model:
+def fit(x: np.ndarray, y: np.ndarray, seed: int, epochs: int | None = None, start: bytes | None = None,
+        classes: tuple[str, ...] | None = None) -> Model:
     """MEMBERS networks trained on `x` (decisions x 1000 v2 inputs) and `y`, each from its own seed, for `epochs` passes
     (the CNN's EPOCHS when None). With `start` (a saved model file), each of its networks trains on from where it was
-    instead of from scratch, for CONTINUE_EPOCHS passes (when None) at CONTINUE_LEARNING_RATE_SCALE of the rate."""
+    instead of from scratch, for CONTINUE_EPOCHS passes (when None) at CONTINUE_LEARNING_RATE_SCALE of the rate. With
+    `classes`, a multi-gesture network: `y` is 0 for nothing and i + 1 for `classes[i]`."""
     import torch
 
     if np.asarray(x).shape[1] != CHANNELS * LENGTH:
         raise ValueError(f"the v2 CNN reads {CHANNELS * LENGTH} inputs, not {np.asarray(x).shape[1]}")
+    if classes is not None and start is not None:
+        raise ValueError("a multi-gesture network trains from scratch")
     begun = load(start) if start is not None else None
     nets = []
     for member in range(len(begun) if begun is not None else MEMBERS):
         torch.manual_seed(seed + member)
         torch.set_num_threads(max(1, torch.get_num_threads()))
         if begun is None:
-            net = _net()
+            net = _net(1 if classes is None else len(classes) + 1)
             _train(net, np.asarray(x), np.asarray(y), np.random.default_rng(seed + member), epochs or cnn.EPOCHS)
         else:
             net = begun[member]
             _train(net, np.asarray(x), np.asarray(y), np.random.default_rng(seed + member), epochs or CONTINUE_EPOCHS,
                    cnn.LEARNING_RATE * CONTINUE_LEARNING_RATE_SCALE, frozen_norm=True)
         nets.append(net.eval())
-    return Model(nets)
+    return Model(nets, classes)
 
 
 def load(model_bytes: bytes) -> list:
@@ -206,6 +231,8 @@ def load(model_bytes: bytes) -> list:
     file = json.loads(model_bytes)
     if file.get("format") != FORMAT or file.get("version") != VERSION:
         raise ValueError(f"the model to start from is not a {FORMAT} file of version {VERSION}")
+    if "outputs" in file:
+        raise ValueError("a multi-gesture model cannot be trained on from where it is: train it from scratch")
     if file.get("channels") != CHANNELS or file.get("length") != LENGTH or not file.get("members"):
         raise ValueError(f"the model to start from reads {file.get('channels')} x {file.get('length')}, not {CHANNELS} x {LENGTH}")
 
@@ -272,6 +299,7 @@ def _member(net) -> dict:
 
 def to_bytes(model: Model) -> bytes:
     file = {"format": FORMAT, "version": VERSION, "channels": CHANNELS, "length": LENGTH,
+            **({"outputs": [NOTHING, *model.classes]} if model.classes is not None else {}),
             "members": [_member(net) for net in model.nets]}
     return (json.dumps(cnn._single_precision(file), separators=(",", ":")) + "\n").encode()
 
@@ -296,11 +324,15 @@ def _predict_member(member: dict, x: np.ndarray, length: int) -> np.ndarray:
         v = v @ np.asarray(d["weight"]).reshape(d["out"], d["in"]).T + np.asarray(d["bias"])
         if n + 1 < len(member["dense"]):
             v = np.maximum(v, 0.0)
-    return 1.0 / (1.0 + np.exp(-v[:, 0]))
+    if v.shape[1] == 1:
+        return 1.0 / (1.0 + np.exp(-v[:, 0]))
+    e = np.exp(v - v.max(axis=1, keepdims=True))
+    return e / e.sum(axis=1, keepdims=True)
 
 
 def predict(model_bytes: bytes, x: np.ndarray) -> np.ndarray:
-    """The positive class's probability for each row of `x`, from the model file alone, as the runtime computes it."""
+    """The positive class's probability for each row of `x`, from the model file alone, as the runtime computes it; for a
+    multi-gesture file, every output's (rows x [nothing, gestures...])."""
     file = json.loads(model_bytes)
     if file.get("format") != FORMAT:
         raise ValueError(f"not a {FORMAT} file")

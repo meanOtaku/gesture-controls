@@ -189,6 +189,14 @@ class Spec:
     gate_min_jerk: float | None = None
     # The v2 CNN only: train on from this model instead of from scratch (`cnn_v2.fit(start=...)`).
     start_from: StartFrom | None = None
+    # The v2 CNN only: the gestures one network learns together (`multi_gesture.run_multi`), `target` the first of them.
+    # Empty: one gesture, `target`.
+    classes: tuple[str, ...] = ()
+
+    @property
+    def gestures(self) -> tuple[str, ...]:
+        """Every gesture the model learns: `classes`, or the target alone."""
+        return self.classes or (self.target,)
 
     def session_of(self, rid: str) -> str:
         """The session a recording belongs to: its own id unless it shares one with others."""
@@ -281,7 +289,9 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
     if not isinstance(decide_from_ns, dict) or any(rid not in recordings or isinstance(t, bool) or not isinstance(t, int) for rid, t in decide_from_ns.items()):
         raise TrainingRefused("decideFromNs must give recordings of the spec a whole number of nanoseconds")
     start_from = parse_start_from(raw.get("startFrom"), backend, stages)
+    classes = parse_gestures(raw.get("gestures"), backend, target, start_from, stages)
     return Spec(
+        classes=classes,
         start_from=start_from,
         target=target,
         negatives=list(raw.get("negatives", [])),
@@ -302,6 +312,28 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         decide_from_ns={str(rid): int(t) for rid, t in decide_from_ns.items()},
         motion_hz=int(motion_hz),
     )
+
+
+MAX_GESTURES = 6
+
+
+def parse_gestures(raw: Any, backend: str, target: str, start_from: StartFrom | None,
+                   stages: tuple[TrainingStage, ...]) -> tuple[str, ...]:
+    """A spec's gestures for one multi-gesture network, checked: the v2 CNN only, 2 to MAX_GESTURES different labels with
+    the target first, trained from scratch at once."""
+    if raw is None:
+        return ()
+    if backend != CNN_V2_BACKEND:
+        raise TrainingRefused("only the v2 CNN can learn several gestures in one model")
+    if not isinstance(raw, list) or not all(isinstance(g, str) and g for g in raw) or len(set(raw)) != len(raw):
+        raise TrainingRefused("gestures must be different label names")
+    if not 2 <= len(raw) <= MAX_GESTURES:
+        raise TrainingRefused(f"a multi-gesture model learns 2 to {MAX_GESTURES} gestures, not {len(raw)}")
+    if raw[0] != target:
+        raise TrainingRefused("the first gesture must be the target")
+    if start_from is not None or stages:
+        raise TrainingRefused("a multi-gesture model trains from scratch, on everything at once")
+    return tuple(raw)
 
 
 def parse_start_from(raw: Any, backend: str, stages: tuple[TrainingStage, ...]) -> StartFrom | None:
@@ -413,7 +445,7 @@ def inputs(spec: Spec, recording: Recording, decisions_ns: np.ndarray) -> np.nda
 
 def check_labels(spec: Spec, recordings: dict[str, Recording]) -> None:
     present = {label for recording in recordings.values() for label in recording.raw_labels.tolist() if label}
-    known = {spec.target, *spec.negatives, *spec.excludes}
+    known = {*spec.gestures, *spec.negatives, *spec.excludes}
     unmapped = sorted(present - known)
     if unmapped:
         raise TrainingRefused(
@@ -437,11 +469,19 @@ def cnn_examples(spec: Spec, recording: Recording) -> tuple[np.ndarray, np.ndarr
 
     ts, _ = pulse_of(recording)
     held = ppg_onset.holds(recording.timestamps_ns, recording.raw_labels)
-    starts = [s for s, _, label in held if label == spec.target]
     excluded = [(s, e) for s, e, label in held if label in set(spec.excludes)]
-    y = cnn.labels(ts, starts, excluded)
+    if spec.classes:
+        # Each gesture labelled as alone, then together: left out where any is unsure, gesture i + 1 where it starts.
+        each = [cnn.labels(ts, [s for s, _, label in held if label == g], excluded) for g in spec.classes]
+        y = np.zeros(len(ts), dtype=np.int64)
+        for ys in each:
+            y[ys < 0] = -1
+        for i, ys in enumerate(each):
+            y[ys == 1] = i + 1
+    else:
+        y = cnn.labels(ts, [s for s, _, label in held if label == spec.target], excluded)
     keep = y >= 0
-    return ts[keep], y[keep], ["start" if v == 1 else "other" for v in y[keep].tolist()]
+    return ts[keep], y[keep], ["start" if v >= 1 else "other" for v in y[keep].tolist()]
 
 
 def examples(spec: Spec, recordings: dict[str, Recording], ids: list[str]) -> Examples:
@@ -485,9 +525,9 @@ def gate_level(spec: Spec, recordings: dict[str, Recording]) -> float | None:
     spikes = []
     for rid in spec.train:
         d, y, _ = cnn_examples(spec, recordings[rid])
-        if (y == 1).any():
+        if (y >= 1).any():
             motion_ts, axes = motion_of(recordings[rid])
-            spikes.append(cnn_input.spike(motion_ts, axes, d[y == 1]))
+            spikes.append(cnn_input.spike(motion_ts, axes, d[y >= 1]))
     return float(np.quantile(np.concatenate(spikes), GATE_QUANTILE)) if spikes else None
 
 
@@ -515,7 +555,7 @@ def overlay_copies(spec: Spec, recordings: dict[str, Recording], train: Examples
     of the target. The motion comes from the training recordings labelled everyday_noise only (never a held-out one). A
     copy's examples belong to its recording (`groups`), so a fold that leaves a recording out leaves its copies out."""
     noise = [recordings[rid] for rid in spec.train if "everyday_noise" in set(recordings[rid].raw_labels.tolist())
-             and not any(label == spec.target for _, _, label in ppg_onset.holds(recordings[rid].timestamps_ns, recordings[rid].raw_labels))]
+             and not any(label in spec.gestures for _, _, label in ppg_onset.holds(recordings[rid].timestamps_ns, recordings[rid].raw_labels))]
     if not noise:
         say("No everyday-noise recording to train on, so no noise-overlay copies")
         return train
@@ -524,7 +564,7 @@ def overlay_copies(spec: Spec, recordings: dict[str, Recording], train: Examples
     copies = 0
     for rid in spec.train:
         recording = recordings[rid]
-        if not any(label == spec.target for _, _, label in ppg_onset.holds(recording.timestamps_ns, recording.raw_labels)):
+        if not any(label in spec.gestures for _, _, label in ppg_onset.holds(recording.timestamps_ns, recording.raw_labels)):
             continue
         for _ in range(OVERLAY_COPIES):
             copy = _overlaid(recording, noise, rng)
@@ -734,7 +774,8 @@ def v2_threshold(spec: Spec, timelines: list[tuple[Recording, np.ndarray, np.nda
     counted: it may hold gestures nobody labelled, which kept the first rule's cut-off at 0.97-0.99. With no no-gesture
     recording among them, `budget_threshold`'s rule instead."""
     def has_target(r):
-        return any(label == spec.target for _, _, label in ppg_onset.holds(r.timestamps_ns, r.raw_labels))
+        # A recording of any gesture the model learns is not a no-gesture one.
+        return any(label in (spec.target, *spec.classes) for _, _, label in ppg_onset.holds(r.timestamps_ns, r.raw_labels))
     quiet = [(r, t, s) for r, t, s in timelines if not has_target(r)]
     if not quiet:
         return budget_threshold(spec, timelines)
@@ -936,6 +977,7 @@ def detections(spec: Spec, recording: Recording, times: np.ndarray, scores: np.n
         "negativeNs": max(observed - covered, 0),
         "falseOn": false_on,
         "falseRisesNs": false_rises,
+        "caughtStartsNs": sorted(caught_starts),
     }
 
 
@@ -1146,7 +1188,9 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, A
         "model": {"file": file, "sha256": sha, "format": format_, "opset": 0},
         "framework": framework,
         "input": {"name": "X", "shape": [None, len(names)], "dtype": "float32", "features": names},
-        "output": {"name": "probabilities", "shape": [None, 2], "dtype": "float32", "positiveIndex": 1},
+        # A multi-gesture network has an output for nothing and for each gesture; this gesture's model reads its own.
+        "output": {"name": "probabilities", "shape": [None, len(spec.classes) + 1 if spec.classes else 2], "dtype": "float32",
+                   "positiveIndex": spec.classes.index(spec.target) + 1 if spec.classes else 1},
         "sources": list(spec.sources),
         "window": {"durationMs": CNN_WINDOW_MS if spec.cnn else WINDOW_MS, "strideMs": STRIDE_MS, "maxGapMs": ppg_onset.MAX_GAP_MS,
                    "minSamples": MIN_WINDOW_SAMPLES},
@@ -1166,6 +1210,7 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, A
             "backend": spec.backend,
             "pipeline": pipeline,
             **details,
+            **({"gestures": list(spec.classes)} if spec.classes else {}),
             "trainRecordings": sorted(spec.train),
             "evaluationRecordings": sorted(spec.evaluation),
             **({"trainingStages": [{"name": st.name, "recordings": list(st.recordings), "rehearse": st.rehearse,
@@ -1222,6 +1267,10 @@ def run(raw_spec: dict[str, Any], out: Path) -> dict[str, Any]:
     result: dict[str, Any] = {"outcome": "failed", "message": ""}
     try:
         spec = parse_spec(raw_spec)
+        if spec.classes:
+            from .multi_gesture import run_multi
+
+            return run_multi(spec, out)
         recordings = load_spec_recordings(spec)
         check_labels(spec, recordings)
         say = lambda line: print(line, flush=True)  # noqa: E731

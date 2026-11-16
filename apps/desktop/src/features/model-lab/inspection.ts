@@ -1,3 +1,5 @@
+import type { Confusion } from "./training";
+
 /** What the Inspect view shows about a model: the trainer's inspection of it (`inspection.json`, see `label_train.py`). */
 
 export interface LearningCurveRow {
@@ -50,6 +52,8 @@ export interface Inspection {
   examples: { train: number; trainStarts: number; evaluation: number; evaluationStarts: number };
   /** Only when research checks were asked for. */
   research?: Research | null;
+  /** A model of a multi-gesture network: its gestures, their cut-offs and the confusion matrices. */
+  multiGesture?: { gestures: string[]; thresholds: Record<string, number>; confusion: Confusion } | null;
 }
 export interface ModelInspectionView {
   id: string;

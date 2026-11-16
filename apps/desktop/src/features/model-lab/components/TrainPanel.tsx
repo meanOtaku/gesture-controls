@@ -51,6 +51,8 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
   // CNN v2: the model to continue training from ("" trains a new one from scratch).
   const [startFrom, setStartFrom] = useSessionState("train.startFrom", "");
   const [startPoints, setStartPoints] = useState<StartPoint[]>([]);
+  // CNN v2: the other gestures one network learns with the target (a multi-gesture model).
+  const [alsoGestures, setAlsoGestures] = useSessionState<string[]>("train.gestures", []);
   const [plan, setPlan] = useState<TrainPlan | null>(null);
   const [environment, setEnvironment] = useState<TrainerEnvironment | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,12 +63,19 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
   // Sealed recordings are kept for the final test: never trained on, nor used to choose anything.
   const candidates = useMemo(() => inImportOrder(datasets.filter((dataset) => datasetLabels(dataset).length > 0 && !dataset.sealed)), [datasets]);
   const sealedCount = useMemo(() => datasets.filter((dataset) => dataset.sealed).length, [datasets]);
-  const others = useMemo(() => otherLabels(datasets, selected, target), [datasets, selected, target]);
+  // Gestures that can be learnt with the target: the other gesture labels in the recordings you can choose.
+  const gestureChoices = useMemo(() => target === "" ? [] : usable.filter((label) => label.role === "positiveGesture" && label.id !== target && candidates.some((dataset) => hasLabel(dataset, label.id))).map((label) => label.id),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [labels, candidates, target]);
+  const learnt = useMemo(() => (method === CNN_V2_METHOD ? alsoGestures.filter((id) => gestureChoices.includes(id)) : []), [method, alsoGestures, gestureChoices]);
+  const multi = learnt.length > 0;
+  // A gesture learnt too is not "something else": it has no role to choose.
+  const others = useMemo(() => otherLabels(datasets, selected, target).filter((label) => !learnt.includes(label)), [datasets, selected, target, learnt]);
   const chosen = useMemo(() => candidates.filter((dataset) => selected.has(dataset.id)), [candidates, selected]);
   const planStages = useMemo(() => (staged && method === CNN_METHOD ? stagesForRequest(stages, selected) : undefined), [staged, method, stages, selected]);
-  const startPoint = method === CNN_V2_METHOD ? startPoints.find((point) => point.versionId === startFrom) ?? null : null;
+  const startPoint = method === CNN_V2_METHOD && !multi ? startPoints.find((point) => point.versionId === startFrom) ?? null : null;
   const continuedFrom = startPoint?.versionId;
-  const request = useMemo(() => target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, research, labelOffsetMs: labelOffset, method, hardNegatives, stages: planStages, startFrom: continuedFrom }), [target, selected, others, roles, research, labelOffset, method, hardNegatives, planStages, continuedFrom]);
+  const request = useMemo(() => target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, research, labelOffsetMs: labelOffset, method, hardNegatives, stages: planStages, startFrom: continuedFrom, gestures: learnt }), [target, selected, others, roles, research, labelOffset, method, hardNegatives, planStages, continuedFrom, learnt]);
   // What the model continued from trained on and is not chosen now: left out, it may forget what it learnt there.
   const dropped = startPoint ? startPoint.trainedOn.filter((id) => !selected.has(id)).length : 0;
   const requestKey = JSON.stringify(request);
@@ -128,6 +137,7 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
   const chooseTarget = (label: string) => {
     setTarget(label);
     setStartFrom("");
+    setAlsoGestures([]);
     run.clearResult();
     setStaged(false);
     setStages([]);
@@ -241,7 +251,27 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
           {usable.length === 0 && <p className="field-hint">Add a label on the Labels page first.</p>}
         </div>
 
-        {target !== "" && method === CNN_V2_METHOD && (
+        {target !== "" && method === CNN_V2_METHOD && gestureChoices.length > 0 && (
+          <fieldset className="flex flex-col gap-2">
+            <legend className="label">Also learn in the same model</legend>
+            <div className="flex flex-wrap gap-4">
+              {gestureChoices.map((id) => (
+                <label key={id} className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={learnt.includes(id)} disabled={running !== null} aria-label={`Also learn ${id}`}
+                    onCheckedChange={(on) => setAlsoGestures((previous) => (on === true ? [...previous.filter((g) => g !== id), id] : previous.filter((g) => g !== id)))} />
+                  <LabelSwatch label={id} catalogue={labels} /><code>{id}</code>
+                </label>
+              ))}
+            </div>
+            <p className="field-hint">
+              {multi
+                ? `One network learns ${[target, ...learnt].join(", ")} together: they compete, so one movement is taken for one of them at most. Each gets its own model under Models, with its own cut-off, to activate on its own, and each is tested on the same recordings. Inspect shows which gesture is mistaken for which. It trains from scratch.`
+                : "Tick another gesture to learn it in the same network as this one, so the two compete instead of both going off on one movement. Each still gets its own model."}
+            </p>
+          </fieldset>
+        )}
+
+        {target !== "" && method === CNN_V2_METHOD && !multi && (
           <div className="field">
             <div className="field-head"><Label htmlFor={`${uid}-start-from`}>Start from</Label></div>
             <select id={`${uid}-start-from`} className={NATIVE_SELECT} value={startPoint?.versionId ?? ""} disabled={running !== null} onChange={(event) => chooseStartFrom(event.target.value)}>

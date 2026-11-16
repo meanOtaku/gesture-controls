@@ -5,6 +5,7 @@ import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import type { useTrainingRun } from "../hooks/useTrainingRun";
 import { describeEvents, describeMetrics, thresholdNote, type EventMetrics, type TrainingMetrics } from "../training";
+import { ConfusionMatrices } from "./ConfusionMatrices";
 
 /** The progress of a training run: whether it runs (with Cancel), the log and the result. */
 export function TrainingRunView({ run }: { run: ReturnType<typeof useTrainingRun> }) {
@@ -46,6 +47,12 @@ export function TrainingRunView({ run }: { run: ReturnType<typeof useTrainingRun
                 {result.outcome === "monitorOnly" && <p>It did not pass the checks for going live: {result.message}. You can still approve and activate it: it will score and show what it detects, but never start a recipe.</p>}
                 <p>{describeMetrics(result.metrics)}</p>
                 {result.metrics.events && <p>{describeEvents(result.metrics.events)}</p>}
+                {result.gestures && result.gestures.length > 1 && (
+                  <>
+                    <p>One network learnt {result.gestures.map((g) => g.label).join(", ")}. {result.gestures.map((g) => `${g.label}: ${g.outcome === "deployable" ? "added as a draft" : g.outcome === "monitorOnly" ? "added as a draft that can only run in Monitor" : `not added (${g.message})`}`).join("; ")}. The numbers above are {result.label}&apos;s; each model&apos;s are in its Inspect view.</p>
+                    {result.confusion && <ConfusionMatrices confusion={result.confusion} />}
+                  </>
+                )}
                 {result.metrics.startedFrom?.events && result.metrics.events && <StartComparison before={result.metrics.startedFrom} after={result.metrics.events} threshold={result.metrics.activationThreshold} />}
                 <p>{thresholdNote(result.metrics)}</p>
                 <p>Review it under Label models: mark it evaluated, approve it, then activate it.{result.outcome === "deployable" ? " Check it in Monitor before Live." : ""}</p>

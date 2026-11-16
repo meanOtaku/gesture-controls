@@ -375,6 +375,46 @@ describe("TrainPanel training plan", () => {
     await waitFor(() => expect(calls("plan_label_training").at(-1)?.[1]).not.toHaveProperty("request.startFrom"));
   });
 
+  it("learns other gestures in the same CNN v2, with no role for them, and never continues one", async () => {
+    setup();
+    choose("snap");
+    expect(screen.queryByRole("checkbox", { name: "Also learn idle" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn-v2" } });
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Also learn idle" }));
+    expect(screen.queryByLabelText("Role of idle")).toBeNull();
+    expect(screen.queryByLabelText("Start from")).toBeNull();
+    expect(screen.getByText(/One network learns snap, idle together/)).toBeInTheDocument();
+    await waitFor(() => expect(calls("plan_label_training").at(-1)?.[1]).toEqual({
+      request: { label: "snap", datasetIds: ["s1", "s2", "i1", "i2"], negatives: ["walking"], excludes: [], method: "ppg-imu-cnn-v2", gestures: ["idle"] },
+    }));
+    // Another model learns one gesture.
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn" } });
+    await waitFor(() => expect(calls("plan_label_training").at(-1)?.[1]).not.toHaveProperty("request.gestures"));
+  });
+
+  it("names each gesture's model and shows the confusion matrices when a multi-gesture model is trained", async () => {
+    setup();
+    choose("snap");
+    await screen.findByText(/It will train on/);
+    fireEvent.click(screen.getByRole("button", { name: "Train model" }));
+    await vi.waitFor(() => expect(handlers.has("label-training-event")).toBe(true));
+    act(() => handlers.get("label-training-event")?.({ payload: { kind: "finished", runId: "run-1", label: "snap", outcome: "deployable", message: "", versionId: "snap-1",
+      metrics: { windows: 50, positiveWindows: 20, negativeWindows: 30, precision: 0.9, recall: 0.8, f1: 0.85, falseActivationRate: 0.04, rocAuc: 0.95, activationThreshold: 0.97 },
+      gestures: [{ label: "snap", outcome: "deployable", message: "", versionId: "snap-1" }, { label: "idle", outcome: "monitorOnly", message: "too few", versionId: "idle-1" }],
+      confusion: {
+        events: { gestures: ["snap", "idle"], rows: [{ gesture: "snap", starts: 10, caughtBy: { snap: 9, idle: 1 }, missed: 1 }, { gesture: "idle", starts: 8, caughtBy: { snap: 0, idle: 7 }, missed: 1 }],
+          noGesture: { falseActivations: { snap: 2, idle: 0 }, hours: { snap: 0.5, idle: 0.5 }, falseActivationsPerHour: { snap: 4, idle: 0 } } },
+        moments: { labels: ["nothing", "snap", "idle"], counts: [[900, 3, 1], [2, 18, 0], [1, 0, 15]] },
+      } } }));
+    const result = await screen.findByRole("status", { name: "Training result" });
+    expect(result).toHaveTextContent("snap: added as a draft; idle: added as a draft that can only run in Monitor");
+    const live = within(result).getByRole("table", { name: "Gestures caught as each gesture, played through live" });
+    expect(live).toHaveTextContent("snap1091");
+    expect(live).toHaveTextContent("No gesture30 min2 (about 4 an hour)0");
+    const moments = within(result).getByRole("table", { name: "Each held-out moment by what it is and what the model said" });
+    expect(moments).toHaveTextContent("a start of snap2180");
+  });
+
   it("puts a continued model next to the one it began from, on the same test recordings", async () => {
     setup();
     choose("snap");

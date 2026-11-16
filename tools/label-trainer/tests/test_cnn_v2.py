@@ -122,3 +122,19 @@ def test_a_continued_run_is_compared_with_the_model_it_began_from_on_the_same_re
     assert before["events"]["gestures"] == again["metrics"]["events"]["gestures"] > 0
     provenance = json.loads((tmp_path / "again" / "bundle" / "manifest.json").read_text())["provenance"]
     assert provenance["continuedFrom"]["sha256"] == first["modelSha256"]
+
+
+def test_a_multi_gesture_network_scores_each_gesture_and_its_file_reproduces_it(monkeypatch):
+    monkeypatch.setattr(cnn_v2, "MEMBERS", 2)
+    rng = np.random.default_rng(4)
+    x = rng.random((400, 1000)).astype(np.float32)
+    y = rng.choice([0, 0, 0, 1, 2], 400)
+    model = cnn_v2.fit(x, y, 17, epochs=1, classes=("pinch_in", "pinch_out"))
+    p = model.predict_proba(x[:50])
+    assert p.shape == (50, 3) and np.allclose(p.sum(axis=1), 1.0)
+    data = cnn_v2.to_bytes(model)
+    import json
+    assert json.loads(data)["outputs"] == ["nothing", "pinch_in", "pinch_out"]
+    assert abs(cnn_v2.predict(data, x[:50]) - p).max() < cnn_v2.PARITY_TOLERANCE
+    with pytest.raises(ValueError):
+        cnn_v2.load(data)

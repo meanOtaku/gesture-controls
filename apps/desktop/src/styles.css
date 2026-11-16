@@ -526,6 +526,11 @@ html.overlay-document body::before { display:none; }
 .coverage-grid tbody th { text-align:left; font-weight:500; }
 .coverage-none { color:var(--destructive); }
 .coverage-thin { color:var(--warning); }
+/* A multi-gesture model's confusion matrices: right on the diagonal, mistaken off it. */
+.confusion-grid caption { caption-side:top; padding-bottom:.25rem; }
+.confusion-hit { font-weight:600; }
+.confusion-miss { color:var(--destructive); }
+.confusion-current { text-decoration:underline; text-underline-offset:3px; }
 .labelling-overview { position:relative; height:30px; border:1px solid var(--line); background:var(--surface-2); cursor:pointer; touch-action:none; }
 .labelling-overview:focus-visible { outline:2px solid var(--ring); outline-offset:1px; }
 .overview-span { position:absolute; height:9px; opacity:.85; pointer-events:none; }

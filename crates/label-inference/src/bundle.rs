@@ -430,7 +430,8 @@ pub fn validate_bundle(
     if manifest.input.dtype != "float32" || manifest.output.dtype != "float32" {
         return mismatch("inputs and outputs must be float32".into());
     }
-    if manifest.output.positive_index != 1 {
+    // A multi-gesture network's gesture models each read their own output (checked with its file below).
+    if manifest.output.positive_index != 1 && manifest.model.format != CNN_BRANCHES_MODEL_FORMAT {
         return mismatch("the positive class must be output 1".into());
     }
     if manifest.window.duration_ms != kind.window_ms()
@@ -479,6 +480,35 @@ pub fn validate_bundle(
         });
     }
     let network = Network::parse(&manifest.model.format, &model_bytes)?;
+    let network = match network {
+        Network::Branches(cnn) => {
+            let index = manifest.output.positive_index;
+            match cnn.outputs() {
+                Some(outputs) => {
+                    if manifest.output.shape != [None, Some(outputs.len() as u32)] {
+                        return mismatch(format!(
+                            "the output shape must be [batch, {}], one for nothing and each gesture",
+                            outputs.len()
+                        ));
+                    }
+                    if outputs.get(index).map(String::as_str)
+                        != Some(manifest.target_label.as_str())
+                    {
+                        return mismatch(format!(
+                            "output {index} of the multi-gesture model is not '{}'",
+                            manifest.target_label
+                        ));
+                    }
+                }
+                None if index != 1 => {
+                    return mismatch("the positive class must be output 1".into());
+                }
+                None => {}
+            }
+            Network::Branches(cnn.reading(index)?)
+        }
+        other => other,
+    };
     if network.features() != feature_count {
         return mismatch(format!(
             "the model file reads {} features, the manifest lists {feature_count}",
@@ -562,6 +592,42 @@ pub(crate) mod tests {
         assert_eq!(bundle.manifest.input_contract(), ModelKind::Cnn.contract());
         assert_eq!(bundle.manifest.threshold_config().trigger, Trigger::Peak);
         assert_eq!(bundle.manifest.thresholds.decision_delay_ms, Some(500));
+    }
+
+    #[test]
+    fn each_gesture_of_a_multi_gesture_model_reads_its_own_output() {
+        let dir = tempfile::tempdir().unwrap();
+        let model = fs::read(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/cnn_v2_multi_gesture/model.cnn"),
+        )
+        .unwrap();
+        fs::write(dir.path().join("model.cnn"), &model).unwrap();
+        let base: serde_json::Value =
+            serde_json::from_slice(&fs::read(cnn_v2_fixture_dir().join("manifest.json")).unwrap())
+                .unwrap();
+        let write = |target: &str, index: usize, width: usize| {
+            let mut manifest = base.clone();
+            manifest["targetLabel"] = target.into();
+            manifest["model"]["sha256"] = sha256_hex(&model).into();
+            manifest["output"]["shape"] = serde_json::json!([null, width]);
+            manifest["output"]["positiveIndex"] = index.into();
+            fs::write(dir.path().join("manifest.json"), manifest.to_string()).unwrap();
+        };
+        write("pinch_out", 2, 3);
+        let bundle = validate_bundle(dir.path(), None).unwrap();
+        let input = vec![0.5; bundle.network.features()];
+        let out = bundle.network.predict(&input);
+        write("pinch_in", 1, 3);
+        let other = validate_bundle(dir.path(), None)
+            .unwrap()
+            .network
+            .predict(&input);
+        assert!(out > 0.0 && other > 0.0 && out + other < 1.0 && (out - other).abs() > 1e-9);
+        write("pinch_out", 1, 3);
+        assert!(validate_bundle(dir.path(), None).is_err());
+        write("pinch_out", 2, 2);
+        assert!(validate_bundle(dir.path(), None).is_err());
     }
 
     #[test]

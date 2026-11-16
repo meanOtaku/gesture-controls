@@ -12,6 +12,7 @@ import { CNN_MODEL, modelDescription } from "../training";
 import { DeclaredFacts, DeclaredInputs, InspectInputs } from "./InspectInputs";
 import { InspectEvaluation } from "./InspectEvaluation";
 import { InspectResearch } from "./InspectResearch";
+import { ConfusionMatrices } from "./ConfusionMatrices";
 import { ModelStages } from "./ModelStages";
 
 const asStrings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
@@ -129,6 +130,13 @@ export function ModelInspector({ id, onClose, models = [] }: { id: string; onClo
             )}
             {howItWorks}
             <InspectEvaluation inspection={inspection} other={other} otherName={compare ? nameOf(compare.id) : undefined} model={models.find((entry) => entry.id === id) ?? null} desktopAvailable />
+            {inspection.multiGesture && (
+              <section aria-label="Which gesture is mistaken for which" className="flex flex-col gap-2">
+                <h3 className="label">Which gesture is mistaken for which</h3>
+                <p className="field-hint">This model reads one output of a network that learnt {inspection.multiGesture.gestures.join(", ")} together. On the test recordings:</p>
+                <ConfusionMatrices confusion={inspection.multiGesture.confusion} current={inspection.target} />
+              </section>
+            )}
             <InspectResearch inspection={inspection} />
             <InspectInputs inspection={inspection} />
           </>

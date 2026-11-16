@@ -579,6 +579,17 @@ never trained on, and the plan lists them per stage. A stage left with nothing t
 false alarms adds those moments to the last stage, and the models the threshold is chosen with follow the same plan. The
 plan is kept in the model's manifest (`trainingStages`).
 
+**Also learn in the same model** (CNN v2 only) trains one network for several gestures: tick the other gestures (for
+example Pinch out while teaching Pinch in). The network has an output for "nothing" and one for each gesture, through a
+softmax, so they compete: one movement is taken for one of them at most, where two separate models could both go off.
+Each gesture still gets its own model under **Models**, reading its own output of the shared network, with its own
+cut-off, to approve, activate and roll back on its own; all of them are tested on the same recordings, which hold
+every gesture on both sides. The training result and each model's **Inspect** view show the **confusion matrices**: each
+gesture's starts played through as the app runs live (caught as itself, caught as another gesture, or missed) with the
+false alarms when no gesture was under way, and every test moment by what it was and what the network said. A
+multi-gesture model trains from scratch (no Start from, no stages), and retraining one of its gestures means training the
+network again.
+
 **Start from** (CNN v2 only) continues training a CNN v2 you have instead of training a new one from scratch: for example
 to add everyday-noise recordings made with the watch buzzing like the volume knob. It takes fewer passes at a lower learning
 rate, so the new recordings adjust what the model learnt rather than overwrite it. Choosing it ticks the recordings that

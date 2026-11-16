@@ -54,6 +54,26 @@ describe("ModelInspector", () => {
     expect(screen.queryByText(/inspection could not be made/)).not.toBeInTheDocument();
   });
 
+  it("shows which gesture is mistaken for which for a model of a multi-gesture network, its own column marked", async () => {
+    const confusion = {
+      events: { gestures: ["pinch", "fist"], rows: [{ gesture: "pinch", starts: 10, caughtBy: { pinch: 8, fist: 2 }, missed: 0 }, { gesture: "fist", starts: 6, caughtBy: { pinch: 1, fist: 5 }, missed: 0 }],
+        noGesture: { falseActivations: { pinch: 1, fist: 3 }, hours: { pinch: 1, fist: 1 }, falseActivationsPerHour: { pinch: 1, fist: 3 } } },
+      moments: { labels: ["nothing", "pinch", "fist"], counts: [[500, 2, 4], [1, 20, 3], [0, 1, 11]] },
+    };
+    await open(view({ ...cnn, target: "pinch", multiGesture: { gestures: ["pinch", "fist"], thresholds: { pinch: 0.97, fist: 0.95 }, confusion } }, kindIs("ppg_imu_cnn_v2")));
+    const section = screen.getByRole("region", { name: "Which gesture is mistaken for which" });
+    expect(section).toHaveTextContent("learnt pinch, fist together");
+    const live = within(section).getByRole("table", { name: "Gestures caught as each gesture, played through live" });
+    expect(within(live).getByRole("columnheader", { name: "Caught as pinch" })).toHaveClass("confusion-current");
+    expect(live).toHaveTextContent("pinch1082");
+    expect(within(section).getByRole("table", { name: "Each held-out moment by what it is and what the model said" })).toHaveTextContent("a start of fist0111");
+  });
+
+  it("shows no confusion matrix for a model of one gesture", async () => {
+    await open(view(cnn, kindIs("ppg_imu_cnn_v2")));
+    expect(screen.queryByRole("region", { name: "Which gesture is mistaken for which" })).toBeNull();
+  });
+
   it("describes each kind of model by what its manifest says, not by what it was given to compare", async () => {
     await open(view(cnn, kindIs("ppg_imu_cnn")));
     expect(screen.getByRole("status", { name: "Model summary" })).toHaveTextContent("rolling scaling");

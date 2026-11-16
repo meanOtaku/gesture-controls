@@ -146,6 +146,28 @@ export interface TrainRequest {
   stages?: StageRequest[];
   /** CNN v2 only: the model (its version id) to train on from instead of from scratch. */
   startFrom?: string;
+  /** CNN v2 only: the other gestures one network learns with `label` (a multi-gesture model). */
+  gestures?: string[];
+}
+
+/** How one gesture's model of a multi-gesture run came out (`GestureOutcome` in `label_training.rs`). */
+export interface GestureOutcome {
+  label: string;
+  outcome: TrainingOutcome;
+  message: string;
+  versionId: string | null;
+}
+
+/** A multi-gesture model's confusion matrices on the held-out recordings (`multi_gesture.py`). */
+export interface Confusion {
+  /** Played through as it runs live: for each gesture's starts, which gesture's model caught them; with no gesture under way, each model's false alarms. */
+  events: {
+    gestures: string[];
+    rows: { gesture: string; starts: number; caughtBy: Record<string, number>; missed: number }[];
+    noGesture: { falseActivations: Record<string, number>; hours: Record<string, number>; falseActivationsPerHour: Record<string, number | null> };
+  };
+  /** Every held-out moment: rows what it was ("nothing" first), columns what the network said at the cut-offs. */
+  moments: { labels: string[]; counts: number[][] };
 }
 
 /** Mirrors `StartPointView` in `label_training.rs`: a v2 CNN a new model can continue training from. */
@@ -316,7 +338,10 @@ export type TrainingOutcome = "deployable" | "monitorOnly" | "failed" | "cancell
 export type TrainingEvent =
   | { kind: "started"; runId: string; label: string; backend: string }
   | { kind: "log"; runId: string; message: string }
-  | { kind: "finished"; runId: string; label: string; outcome: TrainingOutcome; message: string; versionId: string | null; metrics: TrainingMetrics | null };
+  | { kind: "finished"; runId: string; label: string; outcome: TrainingOutcome; message: string; versionId: string | null; metrics: TrainingMetrics | null;
+      /** A multi-gesture model's: each gesture's model, the target's first. */
+      gestures?: GestureOutcome[];
+      confusion?: Confusion | null };
 
 export interface TrainingStatus {
   running: { runId: string; label: string } | null;
@@ -352,6 +377,8 @@ export function buildRequest(input: {
   stages?: StageRequest[];
   /** Only for CNN v2: the model to continue from. */
   startFrom?: string;
+  /** Only for CNN v2: the other gestures to learn in the same model. */
+  gestures?: string[];
 }): TrainRequest {
   const role = (label: string): OtherRole => input.roles[label] ?? "negative";
   return {
@@ -364,7 +391,8 @@ export function buildRequest(input: {
     ...(input.method === CNN_METHOD || input.method === CNN_V2_METHOD ? { method: input.method } : {}),
     ...(input.hardNegatives ? { hardNegatives: true } : {}),
     ...(input.method === CNN_METHOD && input.stages?.length ? { stages: input.stages } : {}),
-    ...(input.method === CNN_V2_METHOD && input.startFrom ? { startFrom: input.startFrom } : {}),
+    ...(input.method === CNN_V2_METHOD && input.gestures?.length ? { gestures: [...input.gestures] } : {}),
+    ...(input.method === CNN_V2_METHOD && input.startFrom && !input.gestures?.length ? { startFrom: input.startFrom } : {}),
   };
 }
 

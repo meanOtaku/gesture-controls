@@ -80,6 +80,26 @@ def write(name: str, motion: bool, backend: str = lt.BACKEND, motion_hz: int | N
     print(f"wrote {out} ({len(data) / 1e6:.1f} MB model, {int(ok.sum())} scored decisions)")
 
 
+def write_multi_gesture() -> None:
+    """A small multi-gesture v2 network (one member, trained one pass on random inputs) and its outputs for a few inputs,
+    from the file alone: the runtime must give each gesture's output as the trainer does."""
+    cnn_v2_members = cnn_v2.MEMBERS
+    cnn_v2.MEMBERS = 1
+    try:
+        rng = np.random.default_rng(5)
+        x = rng.random((200, cnn_v2.CHANNELS * cnn_v2.LENGTH)).astype(np.float32)
+        y = rng.choice([0, 0, 1, 2], 200)
+        data = cnn_v2.to_bytes(cnn_v2.fit(x, y, 17, epochs=1, classes=("pinch_in", "pinch_out")))
+    finally:
+        cnn_v2.MEMBERS = cnn_v2_members
+    out = FIXTURES / "cnn_v2_multi_gesture"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "model.cnn").write_bytes(data)
+    inputs = x[:4].astype(np.float64)
+    (out / "expected.json").write_text(json.dumps({"inputs": inputs.tolist(), "outputs": cnn_v2.predict(data, inputs).tolist()}) + "\n")
+    print(f"wrote {out} ({len(data) / 1e6:.1f} MB model)")
+
+
 def main() -> None:
     write("ppg_onset_bundle", motion=False)
     # ppg_imu_onset_bundle is the first motion models', on the 50 Hz grid with no rate named: kept as it is, as the runtime
@@ -89,11 +109,14 @@ def main() -> None:
     write("ppg_imu_cnn_median_100hz_bundle", motion=True, backend=lt.CNN_BACKEND, motion_hz=100)
     # The v2 CNN: branches, the jerk envelope and the peak gate (its expected scores are gated, as the runtime's are).
     write("ppg_imu_cnn_v2_bundle", motion=True, backend=lt.CNN_V2_BACKEND, motion_hz=100)
+    write_multi_gesture()
 
 
 if __name__ == "__main__":
     if sys.argv[1:] == ["cnn"]:
         write("ppg_imu_cnn_median_100hz_bundle", motion=True, backend=lt.CNN_BACKEND, motion_hz=100)
+    elif sys.argv[1:] == ["multi-gesture"]:
+        write_multi_gesture()
     elif sys.argv[1:] == ["cnn-v2"]:
         write("ppg_imu_cnn_v2_bundle", motion=True, backend=lt.CNN_V2_BACKEND, motion_hz=100)
     else:

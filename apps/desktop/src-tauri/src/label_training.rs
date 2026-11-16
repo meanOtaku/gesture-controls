@@ -21,7 +21,8 @@ use std::sync::Mutex;
 use chrono::{SecondsFormat, Utc};
 use label_inference::{
     RecordingInfo, RunPlan, begin_run, cnn_contract_100, cnn_v2_contract, complete_run, fail_run,
-    monitor_only_run, pinch_start_contract, plan_split_sessions, stage_bundle, trainer_backend,
+    monitor_only_run, pinch_start_contract, plan_split_sessions_among, stage_bundle,
+    trainer_backend,
 };
 use model_lab_core::{
     ArtifactRef, ExampleRole, InputContract, LabelId, LabelMapping, QualityRules, RecordingId,
@@ -89,7 +90,14 @@ pub struct TrainRequest {
     /// recordings it trained on can then only train, never test, and it is replayed on the new model's test to compare.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start_from: Option<String>,
+    /// CNN v2 only: the other gestures one network learns with `label` (a multi-gesture model). Each gets its own model,
+    /// all reading the one network, split alike and trained in one run of the trainer. Empty: `label` alone.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gestures: Vec<String>,
 }
+
+/// At most this many gestures in one multi-gesture model (the trainer's `MAX_GESTURES`).
+pub const MAX_GESTURES: usize = 6;
 
 /// A v2 CNN to continue training from, as the trainer is told of it (`startFrom`).
 #[derive(Debug, Clone, PartialEq)]
@@ -401,6 +409,19 @@ struct Checked {
     start_from: Option<StartPoint>,
     /// Recordings that may train but never test: those the model continued from trained on.
     train_only: Vec<RecordingId>,
+    /// A multi-gesture model's gestures, `target` first; empty for one gesture.
+    gestures: Vec<LabelId>,
+}
+
+impl Checked {
+    /// The gestures the split must give both sides: a multi-gesture model's, or the target alone.
+    fn split_targets(&self) -> Vec<LabelId> {
+        if self.gestures.is_empty() {
+            vec![self.target.clone()]
+        } else {
+            self.gestures.clone()
+        }
+    }
 }
 
 fn label_id(raw: &str) -> Result<LabelId, String> {
@@ -519,6 +540,7 @@ fn check_request(
     }
     let (backend, input) = method_of(request)?;
     let stages = check_stages(request, backend)?;
+    let gestures = check_gestures(request, backend, &target, &mut entries)?;
     let label_timing = label_timing_of(&recordings_ids(&recordings), datasets, &target.to_string());
     Ok(Checked {
         target,
@@ -535,7 +557,75 @@ fn check_request(
         decide_from_ns: BTreeMap::new(),
         start_from: None,
         train_only: Vec::new(),
+        gestures,
     })
+}
+
+/// A multi-gesture request's gestures, checked: CNN v2 only, trained from scratch at once, 2 to [`MAX_GESTURES`]
+/// different gestures that are not standard labels, the target first. Each other gesture is "something else" in the
+/// target's mapping (each gesture's run then has its own gesture positive). Empty for one gesture.
+fn check_gestures(
+    request: &TrainRequest,
+    backend: &str,
+    target: &LabelId,
+    entries: &mut BTreeMap<LabelId, ExampleRole>,
+) -> Result<Vec<LabelId>, String> {
+    if request.gestures.is_empty() {
+        return Ok(Vec::new());
+    }
+    if backend != CNN_V2_BACKEND {
+        return Err("only CNN v2 can learn several gestures in one model: choose CNN v2".into());
+    }
+    if request.start_from.is_some() || !request.stages.is_empty() {
+        return Err(
+            "a multi-gesture model trains from scratch, on everything at once: leave Start from and stages off".into(),
+        );
+    }
+    let mut gestures = vec![target.clone()];
+    for raw in &request.gestures {
+        let gesture = label_id(raw)?;
+        if crate::label_registry::is_standard(raw) {
+            return Err(format!(
+                "'{raw}' is a standard label, not a gesture to learn"
+            ));
+        }
+        if gestures.contains(&gesture) {
+            return Err(format!("'{raw}' is named twice among the gestures"));
+        }
+        match entries.get(&gesture) {
+            Some(ExampleRole::Exclude) => {
+                return Err(format!(
+                    "'{raw}' is left out, so it cannot also be learnt: give it a role of something else"
+                ));
+            }
+            _ => {
+                entries.insert(gesture.clone(), ExampleRole::Negative);
+            }
+        }
+        gestures.push(gesture);
+    }
+    if gestures.len() > MAX_GESTURES {
+        return Err(format!(
+            "a multi-gesture model learns at most {MAX_GESTURES} gestures"
+        ));
+    }
+    Ok(gestures)
+}
+
+/// The mapping of one gesture's run of a multi-gesture model: that gesture positive, the others something else.
+fn mapping_for(mapping: &LabelMapping, gestures: &[LabelId], gesture: &LabelId) -> LabelMapping {
+    let mut entries = mapping.entries.clone();
+    for other in gestures {
+        entries.insert(
+            other.clone(),
+            if other == gesture {
+                ExampleRole::Positive
+            } else {
+                ExampleRole::Negative
+            },
+        );
+    }
+    LabelMapping { entries }
 }
 
 fn recordings_ids(recordings: &[RecordingInfo]) -> Vec<String> {
@@ -607,6 +697,7 @@ fn build_spec(
         // when the setting asks for the gate (`steady_starts_only`, set by the caller).
         "steadyStarts": false,
         "stages": spec_stages(&checked.stages, &ids(&split.train).into_iter().collect()),
+        "gestures": (!checked.gestures.is_empty()).then(|| checked.gestures.iter().map(ToString::to_string).collect::<Vec<_>>()),
         "startFrom": checked.start_from.as_ref().map(|point| serde_json::json!({
             "model": point.model,
             "name": point.name,
@@ -670,7 +761,33 @@ enum TrainingEvent {
         message: String,
         version_id: Option<String>,
         metrics: Option<serde_json::Value>,
+        /// A multi-gesture model's: how each gesture's model came out, the target's first. Empty for one gesture.
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        gestures: Vec<GestureOutcome>,
+        /// A multi-gesture model's confusion matrices (the trainer's `confusion`).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        confusion: Option<serde_json::Value>,
     },
+}
+
+/// How one gesture's model of a multi-gesture run came out.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GestureOutcome {
+    label: String,
+    /// `deployable`, `monitorOnly` or `failed`.
+    outcome: String,
+    message: String,
+    version_id: Option<String>,
+}
+
+/// One gesture's run of a training job: its run, its label, and where the trainer wrote its files in the job's folder
+/// (`""` for a one-gesture model, `"gestures/<label>/"` for one of a multi-gesture model's).
+#[derive(Debug, Clone)]
+struct GestureRun {
+    run_id: RunId,
+    target: LabelId,
+    from: String,
 }
 
 fn emit(app: &AppHandle, event: &TrainingEvent) {
@@ -1020,10 +1137,10 @@ pub async fn suggest_label_offset(
     request: TrainRequest,
 ) -> Result<Vec<OffsetScore>, String> {
     let checked = recordings_for(&app, &request)?;
-    let split = plan_split_sessions(
+    let split = plan_split_sessions_among(
         &checked.recordings,
         &checked.mapping,
-        &checked.target,
+        &checked.split_targets(),
         &checked.train_only,
         &checked.sessions,
     )
@@ -1083,10 +1200,10 @@ fn plan_label_training_blocking(app: &AppHandle, request: &TrainRequest) -> Plan
             contract.features.len()
         });
     let result = recordings_for(app, request).and_then(|checked| {
-        plan_split_sessions(
+        plan_split_sessions_among(
             &checked.recordings,
             &checked.mapping,
-            &checked.target,
+            &checked.split_targets(),
             &checked.train_only,
             &checked.sessions,
         )
@@ -1256,15 +1373,72 @@ pub async fn start_label_training(
                     serde_json::Value::String(point.version_id.clone()),
                 )
             }))
+            .chain((!checked.gestures.is_empty()).then(|| {
+                (
+                    "gestures".to_string(),
+                    serde_json::json!(
+                        checked
+                            .gestures
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                    ),
+                )
+            }))
             .collect(),
         },
         recordings: checked.recordings.clone(),
         train_only: checked.train_only.clone(),
         sessions: checked.sessions.clone(),
+        split_among: checked.gestures.clone(),
         unique,
     };
     let begun =
         host.with_store(|store| begin_run(store, &plan, &known, &now).map_err(|e| e.to_string()))?;
+    let mut runs = vec![GestureRun {
+        run_id: begun.run_id.clone(),
+        target: checked.target.clone(),
+        from: if checked.gestures.is_empty() {
+            String::new()
+        } else {
+            format!("gestures/{}/", checked.target)
+        },
+    }];
+    // A multi-gesture model: a run for each other gesture too, split alike, so each gets its own model of the network.
+    for gesture in checked.gestures.iter().skip(1) {
+        let mut theirs = plan.clone();
+        theirs.target = gesture.clone();
+        theirs.mapping = mapping_for(&checked.mapping, &checked.gestures, gesture);
+        theirs.unique = Uuid::new_v4().simple().to_string()[..10].to_string();
+        let begun_theirs = host
+            .with_store(|store| begin_run(store, &theirs, &known, &now).map_err(|e| e.to_string()));
+        match begun_theirs {
+            Ok(theirs_begun) if theirs_begun.split == begun.split => runs.push(GestureRun {
+                run_id: theirs_begun.run_id,
+                target: gesture.clone(),
+                from: format!("gestures/{gesture}/"),
+            }),
+            outcome => {
+                let message = match outcome {
+                    Ok(theirs_begun) => {
+                        record_failure(
+                            &app,
+                            &theirs_begun.run_id,
+                            "its gestures split differently",
+                        );
+                        format!(
+                            "the run for '{gesture}' split the recordings differently, so the model was not trained"
+                        )
+                    }
+                    Err(message) => format!("the run for '{gesture}' could not start: {message}"),
+                };
+                for run in &runs {
+                    record_failure(&app, &run.run_id, &message);
+                }
+                return Err(message);
+            }
+        }
+    }
     LabelRuntimeHost::announce_models_changed(&app);
     let run_id = begun.run_id.to_string();
 
@@ -1297,7 +1471,9 @@ pub async fn start_label_training(
     let (out, spec_path) = match setup {
         Ok(paths) => paths,
         Err(message) => {
-            record_failure(&app, &begun.run_id, &message);
+            for run in &runs {
+                record_failure(&app, &run.run_id, &message);
+            }
             return Err(message);
         }
     };
@@ -1317,7 +1493,9 @@ pub async fn start_label_training(
             let message = format!(
                 "could not start the trainer: {error}. Training needs uv (https://docs.astral.sh/uv/) on the PATH"
             );
-            record_failure(&app, &begun.run_id, &message);
+            for run in &runs {
+                record_failure(&app, &run.run_id, &message);
+            }
             return Err(message);
         }
     };
@@ -1348,8 +1526,7 @@ pub async fn start_label_training(
 
     let task_app = app.clone();
     let features = checked.input.features.clone();
-    let target = checked.target.clone();
-    let task_run = begun.run_id.clone();
+    let task_runs = runs;
     tauri::async_runtime::spawn(async move {
         let outcome = tokio::select! {
             status = child.wait() => match status {
@@ -1363,7 +1540,7 @@ pub async fn start_label_training(
                 Err("cancelled".to_string())
             }
         };
-        let event = finish(&task_app, &task_run, &target, &features, &out, outcome);
+        let event = finish(&task_app, &task_runs, &features, &out, outcome);
         if let Some(runtime) = task_app.try_state::<LabelTrainingRuntime>() {
             if let Ok(mut active) = runtime.active.lock() {
                 *active = None;
@@ -1389,19 +1566,22 @@ fn record_failure(app: &AppHandle, run_id: &RunId, message: &str) {
     LabelRuntimeHost::announce_models_changed(app);
 }
 
-/// Reads what the trainer wrote and records the end of the run. Whatever happened, the run is left finished.
+/// Reads what the trainer wrote and records the end of each run (one, or one for each gesture of a multi-gesture model,
+/// the target's first). Whatever happened, every run is left finished.
 fn finish(
     app: &AppHandle,
-    run_id: &RunId,
-    target: &LabelId,
+    runs: &[GestureRun],
     expected_features: &[String],
     out: &Path,
     exit: Result<(), String>,
 ) -> TrainingEvent {
-    let id = run_id.to_string();
-    let label = target.to_string();
+    let first = &runs[0];
+    let id = first.run_id.to_string();
+    let label = first.target.to_string();
     let failed = |outcome: &str, message: String| {
-        record_failure(app, run_id, &message);
+        for run in runs {
+            record_failure(app, &run.run_id, &message);
+        }
         TrainingEvent::Finished {
             run_id: id.clone(),
             label: label.clone(),
@@ -1409,6 +1589,8 @@ fn finish(
             message,
             version_id: None,
             metrics: None,
+            gestures: Vec::new(),
+            confusion: None,
         }
     };
     if let Err(message) = &exit
@@ -1429,75 +1611,141 @@ fn finish(
             );
         }
     };
-    let deployable = match result["outcome"].as_str() {
-        Some("deployable") => true,
-        Some("evaluationOnly") => false,
-        _ => {
-            let message = result["message"]
-                .as_str()
-                .unwrap_or("the trainer gave no reason")
-                .to_string();
-            return failed("failed", message);
-        }
-    };
-    let message = result["message"].as_str().unwrap_or_default().to_string();
-    let published = (|| -> Result<String, String> {
-        let lab = model_lab_dir(app)?;
-        let staged = stage_bundle(&out.join("bundle"), &lab).map_err(|e| e.to_string())?;
-        if staged.label() != target {
-            return Err("the trainer wrote a model for a different label".into());
-        }
-        if staged.manifest.input.features != expected_features {
-            return Err("the trainer used a different set of features than was planned".into());
-        }
-        let run_dir = format!("{RUNS_DIR}/{run_id}");
-        let mut artifacts = vec![ArtifactRef {
-            kind: "model".into(),
-            path: format!("{run_dir}/bundle/{}", staged.manifest.model.file),
-            sha256: staged.model_sha256.clone(),
-        }];
-        for (kind, file) in [
-            ("manifest", "bundle/manifest.json"),
-            ("evaluation", "evaluation.json"),
-            ("parity", "parity.json"),
-            ("inspection", "inspection.json"),
-        ] {
-            if let Ok(hash) = sha256_of_file(&out.join(file)) {
-                artifacts.push(ArtifactRef {
-                    kind: kind.into(),
-                    path: format!("{run_dir}/{file}"),
-                    sha256: hash,
-                });
-            }
-        }
-        let now = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
-        let host = app.state::<LabelRuntimeHost>();
-        let outcome = host.with_store(|store| {
-            if deployable {
-                complete_run(store, staged, &lab, run_id, artifacts, &now)
-            } else {
-                monitor_only_run(store, staged, &lab, run_id, &message, artifacts, &now)
-            }
-            .map_err(|e| e.to_string())
-        })?;
-        Ok(outcome.version_id.to_string())
-    })();
-    match published {
-        Ok(version) => TrainingEvent::Finished {
-            run_id: id,
-            label,
-            outcome: if deployable {
-                "deployable"
-            } else {
-                "monitorOnly"
-            }
-            .into(),
-            message,
-            version_id: Some(version),
-            metrics: Some(result["metrics"].clone()),
-        },
-        Err(message) => failed("failed", message),
+    if !matches!(
+        result["outcome"].as_str(),
+        Some("deployable" | "evaluationOnly")
+    ) {
+        let message = result["message"]
+            .as_str()
+            .unwrap_or("the trainer gave no reason")
+            .to_string();
+        return failed("failed", message);
     }
+    let multi = runs.len() > 1;
+    let mut outcomes = Vec::new();
+    for run in runs {
+        // A multi-gesture result says how each gesture came out; a one-gesture one is all about its gesture.
+        let own = if multi {
+            &result["gestures"][run.target.as_str()]
+        } else {
+            &result
+        };
+        let message = own["message"].as_str().unwrap_or_default().to_string();
+        let published = match own["outcome"].as_str() {
+            Some("deployable") => publish_run(
+                app,
+                run,
+                &first.run_id,
+                expected_features,
+                out,
+                true,
+                &message,
+            ),
+            Some("evaluationOnly") => publish_run(
+                app,
+                run,
+                &first.run_id,
+                expected_features,
+                out,
+                false,
+                &message,
+            ),
+            _ => Err(format!("the trainer gave no model for '{}'", run.target)),
+        };
+        let outcome = match (&published, own["outcome"].as_str()) {
+            (Ok(_), Some("deployable")) => "deployable",
+            (Ok(_), _) => "monitorOnly",
+            (Err(_), _) => "failed",
+        };
+        if let Err(problem) = &published {
+            record_failure(app, &run.run_id, problem);
+        }
+        outcomes.push(GestureOutcome {
+            label: run.target.to_string(),
+            outcome: outcome.into(),
+            message: published.as_ref().err().cloned().unwrap_or(message),
+            version_id: published.ok(),
+        });
+    }
+    let first_outcome = outcomes[0].clone();
+    TrainingEvent::Finished {
+        run_id: id,
+        label,
+        outcome: first_outcome.outcome,
+        message: first_outcome.message,
+        version_id: first_outcome.version_id,
+        metrics: Some(result["metrics"].clone()),
+        gestures: if multi { outcomes } else { Vec::new() },
+        confusion: multi.then(|| result["confusion"].clone()),
+    }
+}
+
+/// Publishes one run's model from the trainer's files (`run.from` in `out`) and records the run finished. A gesture of a
+/// multi-gesture model gets its evaluation, parity and inspection copied to its own run's folder, where Inspect looks.
+fn publish_run(
+    app: &AppHandle,
+    run: &GestureRun,
+    job: &RunId,
+    expected_features: &[String],
+    out: &Path,
+    deployable: bool,
+    message: &str,
+) -> Result<String, String> {
+    let lab = model_lab_dir(app)?;
+    let from = out.join(&run.from);
+    let staged = stage_bundle(&from.join("bundle"), &lab).map_err(|e| e.to_string())?;
+    if staged.label() != &run.target {
+        return Err("the trainer wrote a model for a different label".into());
+    }
+    if staged.manifest.input.features != expected_features {
+        return Err("the trainer used a different set of features than was planned".into());
+    }
+    let run_dir = runs_dir(app)?.join(run.run_id.to_string());
+    if !run.from.is_empty() {
+        fs::create_dir_all(&run_dir).map_err(|e| e.to_string())?;
+        for file in ["evaluation.json", "parity.json", "inspection.json"] {
+            if from.join(file).is_file() {
+                fs::copy(from.join(file), run_dir.join(file)).map_err(|e| e.to_string())?;
+            }
+        }
+    }
+    let bundle_dir = format!("{RUNS_DIR}/{job}/{}bundle", run.from);
+    let mut artifacts = vec![ArtifactRef {
+        kind: "model".into(),
+        path: format!("{bundle_dir}/{}", staged.manifest.model.file),
+        sha256: staged.model_sha256.clone(),
+    }];
+    if let Ok(hash) = sha256_of_file(&from.join("bundle/manifest.json")) {
+        artifacts.push(ArtifactRef {
+            kind: "manifest".into(),
+            path: format!("{bundle_dir}/manifest.json"),
+            sha256: hash,
+        });
+    }
+    for (kind, file) in [
+        ("evaluation", "evaluation.json"),
+        ("parity", "parity.json"),
+        ("inspection", "inspection.json"),
+    ] {
+        if let Ok(hash) = sha256_of_file(&run_dir.join(file)) {
+            artifacts.push(ArtifactRef {
+                kind: kind.into(),
+                path: format!("{RUNS_DIR}/{}/{file}", run.run_id),
+                sha256: hash,
+            });
+        }
+    }
+    let now = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+    let host = app.state::<LabelRuntimeHost>();
+    let outcome = host.with_store(|store| {
+        if deployable {
+            complete_run(store, staged, &lab, &run.run_id, artifacts, &now)
+        } else {
+            monitor_only_run(store, staged, &lab, &run.run_id, message, artifacts, &now)
+        }
+        .map_err(|e| e.to_string())
+    })?;
+    Ok(outcome.version_id.to_string())
 }
 
 #[tauri::command]
@@ -1533,6 +1781,7 @@ pub fn get_label_training_status(runtime: State<'_, LabelTrainingRuntime>) -> Tr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use label_inference::plan_split_sessions;
     use model_lab_core::StreamSource;
 
     fn dataset(id: &str, labels: &[&str]) -> DatasetSummary {
@@ -1576,6 +1825,7 @@ mod tests {
             hard_negatives: false,
             stages: vec![],
             start_from: None,
+            gestures: vec![],
         }
     }
 
@@ -2198,5 +2448,68 @@ mod tests {
                 .unwrap_err()
                 .contains("not the one registered")
         );
+    }
+
+    #[test]
+    fn a_multi_gesture_request_is_cnn_v2_from_scratch_with_each_gesture_its_own_positive() {
+        let data: Vec<DatasetSummary> = ["s1", "s2", "s3"]
+            .iter()
+            .map(|id| dataset(id, &["pinch"]))
+            .chain(["i1", "i2", "i3"].iter().map(|id| dataset(id, &["fist"])))
+            .collect();
+        let mut r = request();
+        r.method = Some(CNN_V2_BACKEND.into());
+        r.negatives = vec![];
+        r.gestures = vec!["fist".into()];
+        let checked = check_request(&r, &data, &sha).unwrap();
+        assert_eq!(
+            checked.gestures,
+            vec![label_id("pinch").unwrap(), label_id("fist").unwrap()]
+        );
+        assert_eq!(checked.split_targets(), checked.gestures);
+        assert_eq!(
+            checked.mapping.entries[&label_id("fist").unwrap()],
+            ExampleRole::Negative
+        );
+        let theirs = mapping_for(
+            &checked.mapping,
+            &checked.gestures,
+            &label_id("fist").unwrap(),
+        );
+        assert_eq!(
+            theirs.entries[&label_id("fist").unwrap()],
+            ExampleRole::Positive
+        );
+        assert_eq!(
+            theirs.entries[&label_id("pinch").unwrap()],
+            ExampleRole::Negative
+        );
+        let spec = build_spec(
+            &checked,
+            &model_lab_core::Split {
+                train: vec![],
+                evaluation: vec![],
+            },
+            &BTreeMap::new(),
+        );
+        assert_eq!(spec["gestures"], serde_json::json!(["pinch", "fist"]));
+        // One gesture: no list.
+        assert!(
+            check_request(&request(), &datasets(), &sha)
+                .unwrap()
+                .gestures
+                .is_empty()
+        );
+
+        let refused = |edit: fn(&mut TrainRequest)| {
+            let mut bad = r.clone();
+            edit(&mut bad);
+            check_request(&bad, &data, &sha).unwrap_err()
+        };
+        assert!(refused(|r| r.method = Some(CNN_BACKEND.into())).contains("only CNN v2"));
+        assert!(refused(|r| r.gestures = vec!["pinch".into()]).contains("named twice"));
+        assert!(refused(|r| r.gestures = vec!["everyday_noise".into()]).contains("standard label"));
+        assert!(refused(|r| r.start_from = Some("x".into())).contains("from scratch"));
+        assert!(refused(|r| r.excludes = vec!["fist".into()]).contains("left out"));
     }
 }
