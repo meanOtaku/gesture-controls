@@ -168,7 +168,7 @@ export function LabelModelsPanel({
       </span>
       {(model.gestures?.length ?? 0) > 1 && (
         <small className="text-xs text-muted-foreground">
-          Its {model.label} model of one network for {model.gestures!.join(", ")}: see Multi-gesture models below.
+          The {model.label} output of the {model.gestures!.join(" · ")} model: see Multi-gesture models below.
         </small>
       )}
       <small className="text-xs text-muted-foreground">
@@ -394,45 +394,69 @@ export function LabelModelsPanel({
         {networks.length > 0 && (
           <section className="flex flex-col gap-3" aria-label="Multi-gesture models">
             <h3 className="label">Multi-gesture models</h3>
-            <p className="field-hint">One network that learnt several gestures together, so they compete. Each gesture has a model of its own, activated on its own in its label&apos;s slot; Swap in all makes them the active ones together.</p>
+            <p className="field-hint">One model that tells several gestures apart: one network, an output for each gesture, which compete so one movement is taken for one of them at most. Each output has its own threshold; they go live together.</p>
             <ul className="flex flex-col gap-4">
               {networks.map((network) => {
+                const name = network.gestures.join(" · ");
                 const toActivate = network.models.filter((model) => !model.active && actionsFor(model)[0]?.kind === "activate");
+                const activeOnes = network.models.filter((model) => model.active);
+                const replaces = toActivate.some((model) => models.some((other) => other.label === model.label && other.active));
+                const monitorOnly = network.models.some((model) => model.monitorOnly);
+                const states = [...new Set(network.models.map((model) => (model.active ? "Active" : STATE_LABEL[model.state])))];
+                const value = (model: LabelModel, term: string) => modelStats(model).find((fact) => fact.term === term)?.value ?? "–";
                 return (
-                  <li key={network.key} className="flex flex-col gap-3 rounded-md border p-3" aria-label={`${network.gestures.join(", ")} network`}>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <strong>{network.gestures.join(" · ")}</strong>
-                      <Badge variant="outline">Multi-gesture</Badge>
-                      {network.models.every((model) => model.active) && <Badge>Active</Badge>}
-                      <small className="text-xs text-muted-foreground">Added {formatTime(network.createdAt)}</small>
-                      {toActivate.length > 1 && (
-                        <Button type="button" variant="outline" className="ml-auto" aria-label={`Swap in all of ${network.gestures.join(", ")}`}
-                          disabled={toActivate.some((model) => isPending(`${model.id}:activate`))}
-                          onClick={() => { setMoreOpen(null); void (async () => { for (const model of toActivate) await perform(model, actionsFor(model)[0]); })(); }}>
-                          Swap in all
-                        </Button>
-                      )}
+                  <li key={network.key} className="flex flex-col gap-3 rounded-md border p-3" aria-label={`${name} model`}>
+                    <div className="flex flex-wrap items-start gap-3">
+                      <div className="flex min-w-0 flex-1 flex-col gap-1">
+                        <strong className="text-sm">{name}</strong>
+                        <span className="flex flex-wrap items-center gap-2 text-sm">
+                          <small className="text-muted-foreground">{network.models[0].id.split("-").at(-1)}</small>
+                          <Badge variant="outline">Multi-gesture</Badge>
+                          {states.map((state) => <Badge key={state} variant={state === "Active" ? "default" : "secondary"}>{state === "Active" && activeOnes.length < network.models.length ? "Partly active" : state}</Badge>)}
+                          {monitorOnly && <Badge variant="outline">Monitor only</Badge>}
+                        </span>
+                        <small className="text-xs text-muted-foreground">
+                          Added {formatTime(network.createdAt)}
+                          {monitorOnly ? ". It did not pass the checks for going live: when active it scores and shows what it detects, but never starts a recipe, even in Live." : ""}
+                        </small>
+                      </div>
+                      <div className="recipe-item-actions">
+                        {toActivate.length > 0 && (
+                          <Button type="button" variant="outline" aria-label={`${replaces ? "Swap in" : "Activate"} ${name}`}
+                            disabled={toActivate.some((model) => isPending(`${model.id}:activate`))}
+                            onClick={() => { setMoreOpen(null); void (async () => { for (const model of toActivate) await perform(model, actionsFor(model)[0]); })(); }}>
+                            {replaces ? "Swap in" : "Activate"}
+                          </Button>
+                        )}
+                        {activeOnes.length > 0 && (
+                          <Button type="button" variant="ghost" aria-label={`Deactivate ${name}`}
+                            onClick={() => void attempt(`${network.key}:deactivate`, "Deactivate", async () => { for (const model of activeOnes) await invoke("deactivate_label_model", { label: model.label }); })}>
+                            Deactivate
+                          </Button>
+                        )}
+                        {onInspect && (
+                          <Button type="button" variant="ghost" aria-label={`Inspect ${name}`} onClick={() => onInspect(network.models[0].id)}>Inspect</Button>
+                        )}
+                      </div>
                     </div>
-                    <ul className="model-rows" aria-label={`${network.gestures.join(", ")} models`}>
-                      {network.models.map((model) => {
-                        const [next, ...secondary] = model.active ? [] : actionsFor(model);
-                        const swap = next?.kind === "activate" && models.some((other) => other.label === model.label && other.active);
-                        return (
-                          <li key={model.id} className={`model-row${model.active ? " rounded-md bg-muted/40 p-2" : ""}`} aria-label={`${model.label} model of the network`}>
-                            <span className="text-sm"><strong>{model.label}</strong>{model.active && <> <Badge>Active</Badge></>}</span>
-                            {identity(model)}
-                            {stats(model)}
-                            <div className="recipe-item-actions">
-                              {model.active
-                                ? actionsFor(model).map((action) => actionButton(model, action))
-                                : next && actionButton(model, next, "outline", swap ? "Swap in" : next.label)}
-                              {moreButton(model)}
-                            </div>
-                            {morePanel(model, model.active ? [] : secondary)}
-                          </li>
-                        );
-                      })}
-                    </ul>
+                    <table className="coverage-grid network-outputs" aria-label={`${name} outputs`}>
+                      <thead>
+                        <tr><th scope="col">Output</th><th scope="col">State</th><th scope="col">Threshold</th><th scope="col">Held-out recall</th><th scope="col">False / hour</th><th scope="col"><span className="sr-only">Actions</span></th></tr>
+                      </thead>
+                      <tbody>
+                        {network.models.map((model) => (
+                          <tr key={model.id}>
+                            <th scope="row">{model.label}</th>
+                            <td>{model.active ? <Badge>Active</Badge> : STATE_LABEL[model.state]}</td>
+                            <td className="tabular-nums">{value(model, "Threshold")}</td>
+                            <td className="tabular-nums">{value(model, "Held-out recall")}</td>
+                            <td className="tabular-nums">{value(model, "False / hour")}</td>
+                            <td>{moreButton(model)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {network.models.map((model) => <div key={model.id}>{morePanel(model, actionsFor(model))}</div>)}
                   </li>
                 );
               })}

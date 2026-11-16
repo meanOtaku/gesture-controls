@@ -636,6 +636,9 @@ number-flow-react {
 .model-row > .recipe-item-actions { justify-content: flex-end; }
 .model-row-stats { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(5.5rem, auto); column-gap: 1rem; font-size: .75rem; }
 .model-row-stats > div { display: flex; flex-direction: column; }
+/* A multi-gesture model's outputs, one row each. */
+.network-outputs { width:100%; font-size:.8rem; }
+.network-outputs td, .network-outputs th { text-align:left; }
 .model-row-more { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
 .model-rows { container-type: inline-size; }
 /* Too narrow for three columns (the card, not the window: the NERV panels take room): the name gets a line of its own and the figures and buttons share the next. */
