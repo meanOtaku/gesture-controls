@@ -24,6 +24,8 @@ export interface LabelModel {
   thresholdChanges?: ThresholdChange[];
   /** How it did on its held-out recordings, from its manifest; null when the manifest says nothing. */
   evaluation?: ModelEvaluation | null;
+  /** For one gesture's model of a multi-gesture network: every gesture it learnt, each with a model of its own. */
+  gestures?: string[];
 }
 
 /** Mirrors `model_lab_core::ThresholdChange`. */

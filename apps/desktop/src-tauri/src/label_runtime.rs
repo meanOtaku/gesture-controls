@@ -439,6 +439,10 @@ pub struct LabelModelView {
     pub threshold_changes: Vec<model_lab_core::ThresholdChange>,
     /// How it did on its held-out recordings, from its manifest; `None` when the manifest says nothing.
     pub evaluation: Option<ModelEvaluationView>,
+    /// For one gesture's model of a multi-gesture network: every gesture the network learnt (its manifest's
+    /// `provenance.gestures`), each with a model of its own. Empty for a model of one gesture.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub gestures: Vec<String>,
 }
 
 /// A model's held-out results as its bundle's manifest records them (`provenance.evaluation*`).
@@ -1106,29 +1110,37 @@ impl LabelRuntimeHost {
         registry
             .versions
             .values()
-            .map(|v| LabelModelView {
-                id: v.id.to_string(),
-                label: v.label.to_string(),
-                name: v.name.clone(),
-                state: v.state,
-                deployable: v.deployable,
-                monitor_only: v.monitor_only,
-                imported: matches!(v.origin, model_lab_core::ModelOrigin::Imported),
-                model_sha256: v.model_sha256.clone(),
-                created_at: v.created_at.clone(),
-                active: registry.active_by_label.get(&v.label) == Some(&v.id),
-                activation: v.thresholds.activation,
-                release: v.thresholds.release,
-                threshold_changes: v.threshold_changes.clone(),
-                evaluation: ModelEvaluationView::for_version(
-                    v,
-                    model_lab_dir
-                        .and_then(|dir| {
-                            std::fs::read(dir.join(&v.artifact_dir).join("manifest.json")).ok()
+            .map(|v| {
+                let manifest: Option<serde_json::Value> = model_lab_dir
+                    .and_then(|dir| {
+                        std::fs::read(dir.join(&v.artifact_dir).join("manifest.json")).ok()
+                    })
+                    .and_then(|bytes| serde_json::from_slice(&bytes).ok());
+                LabelModelView {
+                    id: v.id.to_string(),
+                    label: v.label.to_string(),
+                    name: v.name.clone(),
+                    state: v.state,
+                    deployable: v.deployable,
+                    monitor_only: v.monitor_only,
+                    imported: matches!(v.origin, model_lab_core::ModelOrigin::Imported),
+                    model_sha256: v.model_sha256.clone(),
+                    created_at: v.created_at.clone(),
+                    active: registry.active_by_label.get(&v.label) == Some(&v.id),
+                    activation: v.thresholds.activation,
+                    release: v.thresholds.release,
+                    threshold_changes: v.threshold_changes.clone(),
+                    evaluation: ModelEvaluationView::for_version(v, manifest.as_ref()),
+                    gestures: manifest
+                        .as_ref()
+                        .and_then(|m| m["provenance"]["gestures"].as_array().cloned())
+                        .map(|list| {
+                            list.iter()
+                                .filter_map(|g| g.as_str().map(String::from))
+                                .collect()
                         })
-                        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-                        .as_ref(),
-                ),
+                        .unwrap_or_default(),
+                }
             })
             .collect()
     }

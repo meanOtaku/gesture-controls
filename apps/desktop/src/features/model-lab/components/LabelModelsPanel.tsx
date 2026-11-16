@@ -159,8 +159,14 @@ export function LabelModelsPanel({
         {!model.active && <Badge variant="secondary">{STATE_LABEL[model.state]}</Badge>}
         {model.imported && <Badge variant="outline">Imported</Badge>}
         {model.monitorOnly && <Badge variant="outline">Monitor only</Badge>}
+        {(model.gestures?.length ?? 0) > 1 && <Badge variant="outline" title="One network learnt these gestures together; each has a model of its own, in its label's list">Multi-gesture</Badge>}
         {justImported === model.id && <Badge>New</Badge>}
       </span>
+      {(model.gestures?.length ?? 0) > 1 && (
+        <small className="text-xs text-muted-foreground">
+          One network for {model.gestures!.join(", ")}: this is its {model.label} model; the others are in {model.gestures!.filter((g) => g !== model.label).join(" and ")}&apos;s lists, with the same id ending.
+        </small>
+      )}
       <small className="text-xs text-muted-foreground">
         Added {formatTime(model.createdAt)}
         {model.monitorOnly ? ". It did not pass the checks for going live: when active it scores and shows what it detects, but never starts a recipe, even in Live." : ""}

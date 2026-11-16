@@ -242,4 +242,16 @@ describe("LabelModelsPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Archive snap-abc" }));
     await waitFor(() => expect(calls("set_label_model_state")).toEqual([["set_label_model_state", { id: "snap-abc", state: "archived" }]]));
   });
+
+  it("marks each model of a multi-gesture network and names the gestures it learnt with", async () => {
+    const gestures = ["pinch_in", "pinch_hold", "pinch_out"];
+    setup([
+      { ...draft, id: "pinch_in-8f79", label: "pinch_in", gestures },
+      { ...draft, id: "pinch_hold-8f79", label: "pinch_hold", gestures },
+      { ...draft, id: "pinch_in-old", label: "pinch_in" },
+    ]);
+    const slot = await screen.findByRole("listitem", { name: "pinch_in slot" });
+    expect(within(slot).getAllByText("Multi-gesture")).toHaveLength(1);
+    expect(slot).toHaveTextContent("One network for pinch_in, pinch_hold, pinch_out: this is its pinch_in model; the others are in pinch_hold and pinch_out's lists");
+  });
 });
