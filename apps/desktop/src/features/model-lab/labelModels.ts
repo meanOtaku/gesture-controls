@@ -33,6 +33,8 @@ export interface ThresholdChange {
   toActivation: number;
   toRelease: number;
   at: string;
+  /** How it did at the new threshold, when the Threshold card measured it as it was set. */
+  figures?: { recall: number | null; falseActivationsPerHour: number | null; recordings: number } | null;
 }
 
 /** Mirrors `ModelEvaluationView` in `label_runtime.rs`. */
@@ -40,6 +42,10 @@ export interface ModelEvaluation {
   /** The share of gesture starts it caught, 0 to 1. */
   recall: number | null;
   falseActivationsPerHour: number | null;
+  /** The threshold they were measured at. */
+  atThreshold?: number | null;
+  /** `training`: from training, at the threshold it chose; `thresholdCard`: replayed at the threshold set on the Threshold card. */
+  measured?: "training" | "thresholdCard";
 }
 
 /** The longest name a model may be given (the registry's `MAX_MODEL_NAME_CHARS`). */
@@ -107,9 +113,13 @@ export const LABEL_MODELS_EVENT = "label-models-changed";
 export function modelStats(model: Pick<LabelModel, "activation" | "evaluation">): { term: string; value: string }[] {
   const facts: { term: string; value: string }[] = [];
   if (model.activation != null) facts.push({ term: "Threshold", value: model.activation.toFixed(2) });
-  if (model.evaluation?.recall != null) facts.push({ term: "Held-out recall", value: `${Math.round(model.evaluation.recall * 100)}%` });
+  const at = model.evaluation?.atThreshold;
+  // Figures measured at another threshold than the one it runs at say which, so they are not taken for its own.
+  const elsewhere = at != null && model.activation != null && Math.abs(at - model.activation) > 1e-9;
+  const note = elsewhere ? ` at ${at.toFixed(2)}${model.evaluation?.measured === "training" ? ", when trained" : ""}` : "";
+  if (model.evaluation?.recall != null) facts.push({ term: "Held-out recall", value: `${Math.round(model.evaluation.recall * 100)}%${note}` });
   const perHour = model.evaluation?.falseActivationsPerHour;
-  if (perHour != null) facts.push({ term: "False / hour", value: perHour.toFixed(perHour < 10 ? 1 : 0) });
+  if (perHour != null) facts.push({ term: "False / hour", value: `${perHour.toFixed(perHour < 10 ? 1 : 0)}${note}` });
   return facts;
 }
 

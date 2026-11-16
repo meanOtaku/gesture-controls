@@ -74,6 +74,22 @@ pub struct ThresholdChange {
     pub to_activation: f64,
     pub to_release: f64,
     pub at: String,
+    /// How the model did at the new thresholds on its held-out recordings, when it was measured as they were set (the
+    /// Threshold card replays them). Absent: not measured then.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub figures: Option<ThresholdFigures>,
+}
+
+/// A model's held-out results at one threshold, played through its test recordings as it runs live.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThresholdFigures {
+    /// The share of gesture starts it caught, 0 to 1; absent with no gesture in the recordings.
+    pub recall: Option<f64>,
+    /// False activations an hour with no gesture under way; absent with no such time.
+    pub false_activations_per_hour: Option<f64>,
+    /// How many test recordings they come from.
+    pub recordings: usize,
 }
 
 /// The longest name a model may be given, in characters.

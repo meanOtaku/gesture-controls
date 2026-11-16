@@ -369,6 +369,20 @@ impl Registry {
         release: f64,
         at: &str,
     ) -> Result<(), RegistryError> {
+        self.set_thresholds_measured(id, activation, release, None, at)
+    }
+
+    /// [`Registry::set_thresholds`], keeping how the model did at the new thresholds (`figures`) with the change. Given
+    /// figures for the thresholds it already has, they are recorded as a change to the same values, so the model's
+    /// figures are those measured last.
+    pub fn set_thresholds_measured(
+        &mut self,
+        id: &ModelVersionId,
+        activation: f64,
+        release: f64,
+        figures: Option<crate::ThresholdFigures>,
+        at: &str,
+    ) -> Result<(), RegistryError> {
         let version = self.version_mut(id)?;
         let next = Thresholds {
             activation,
@@ -377,7 +391,7 @@ impl Registry {
         };
         next.validate()
             .map_err(|e| RegistryError::BadThresholds(e.to_string()))?;
-        if next == version.thresholds {
+        if next == version.thresholds && figures.is_none() {
             return Ok(());
         }
         version.threshold_changes.push(ThresholdChange {
@@ -386,6 +400,7 @@ impl Registry {
             to_activation: activation,
             to_release: release,
             at: at.to_string(),
+            figures,
         });
         version.thresholds = next;
         Ok(())
@@ -1149,6 +1164,7 @@ pub(crate) mod tests {
                 to_activation: 0.95,
                 to_release: 0.8,
                 at: "2026-11-10T10:00:00Z".into(),
+                figures: None,
             }]
         );
         r.validate().unwrap();
@@ -1158,6 +1174,21 @@ pub(crate) mod tests {
             1,
             "no change, nothing recorded"
         );
+        // Measured at the same thresholds: kept, as the latest figures.
+        let measured = crate::ThresholdFigures {
+            recall: Some(0.9),
+            false_activations_per_hour: Some(2.0),
+            recordings: 8,
+        };
+        r.set_thresholds_measured(&id("a1"), 0.95, 0.8, Some(measured.clone()), "measured")
+            .unwrap();
+        let last = r.versions[&id("a1")]
+            .threshold_changes
+            .last()
+            .unwrap()
+            .clone();
+        assert_eq!((last.from_activation, last.to_activation), (0.95, 0.95));
+        assert_eq!(last.figures, Some(measured));
         for (activation, release) in [(0.5, 0.6), (0.0, 0.0), (1.2, 0.5), (f64::NAN, 0.5)] {
             assert!(matches!(
                 r.set_thresholds(&id("a1"), activation, release, "t"),

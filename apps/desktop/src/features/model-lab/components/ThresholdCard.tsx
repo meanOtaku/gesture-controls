@@ -144,7 +144,12 @@ export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: 
     setApplying(true);
     setError(null);
     try {
-      await invoke("set_label_model_threshold", { id: model.id, activation });
+      // How it does there, from the replay just made, kept with the change so its card shows it at this threshold.
+      const at = sweep && sweep.points.length > 0 ? pointAt(sweep, activation) : null;
+      const figures = at && Math.abs(at.threshold - activation) < 1e-6
+        ? { recall: at.starts > 0 ? caughtShare(at) : null, falseActivationsPerHour: at.falseActivationsPerHour ?? null, recordings: sweep!.recordings }
+        : null;
+      await invoke("set_label_model_threshold", { id: model.id, activation, figures });
       setApplied(`${modelName(model)} now runs at ${activation.toFixed(2)}${model.active ? ", from now on" : ""}.`);
       setSweep((previous) => (previous ? { ...previous, threshold: activation } : previous));
       setConfirmOver(false);

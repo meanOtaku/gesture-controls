@@ -36,7 +36,7 @@ pub use snapshot::{DatasetSnapshot, RecordingRef, SnapshotDraft, SnapshotError, 
 pub use store::{FileStore, Persist, RegistryStore, StoreError, load_registry_file, open_registry};
 pub use version::{
     LifecycleState, MAX_MODEL_NAME_CHARS, ModelOrigin, ModelVersion, StateTransition,
-    ThresholdChange, VersionError, legal_transition,
+    ThresholdChange, ThresholdFigures, VersionError, legal_transition,
 };
 
 /// Lower-case hex SHA-256 of `bytes`.

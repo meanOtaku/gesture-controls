@@ -448,6 +448,11 @@ pub struct ModelEvaluationView {
     /// The share of gesture starts it caught, 0 to 1.
     pub recall: Option<f64>,
     pub false_activations_per_hour: Option<f64>,
+    /// The threshold they were measured at: the one training chose, or the one set later and measured as it was set.
+    pub at_threshold: Option<f64>,
+    /// Where they come from: `training` (its manifest, at the threshold training chose) or `thresholdCard` (played
+    /// through its test recordings at the threshold it runs at, when that was set).
+    pub measured: &'static str,
 }
 
 impl ModelEvaluationView {
@@ -458,8 +463,31 @@ impl ModelEvaluationView {
         let view = Self {
             recall: figure("evaluationGestureRecall"),
             false_activations_per_hour: figure("evaluationFalseActivationsPerHour"),
+            at_threshold: manifest
+                .get("thresholds")
+                .and_then(|t| t.get("activation"))
+                .and_then(serde_json::Value::as_f64),
+            measured: "training",
         };
         (view.recall.is_some() || view.false_activations_per_hour.is_some()).then_some(view)
+    }
+
+    /// The figures to show for a model running at `thresholds`: those measured when its threshold was last set, if that
+    /// is the one it runs at, else its manifest's (`from_manifest`), which say the threshold they are at.
+    fn for_version(
+        version: &model_lab_core::ModelVersion,
+        manifest: Option<&serde_json::Value>,
+    ) -> Option<Self> {
+        let latest = version.threshold_changes.last().and_then(|change| {
+            let figures = change.figures.as_ref()?;
+            ((change.to_activation - version.thresholds.activation).abs() < 1e-9).then_some(Self {
+                recall: figures.recall,
+                false_activations_per_hour: figures.false_activations_per_hour,
+                at_threshold: Some(change.to_activation),
+                measured: "thresholdCard",
+            })
+        });
+        latest.or_else(|| manifest.and_then(Self::from_manifest))
     }
 }
 
@@ -988,12 +1016,13 @@ impl LabelRuntimeHost {
         id: &str,
         activation: f64,
         release: Option<f64>,
+        figures: Option<model_lab_core::ThresholdFigures>,
     ) -> Result<(), String> {
         let version = self.version_for(id)?;
         let release = release.unwrap_or_else(|| default_release(&version.thresholds, activation));
         let now = Self::now_rfc3339();
         self.change_registry(app, |r| {
-            r.set_thresholds(&version.id, activation, release, &now)
+            r.set_thresholds_measured(&version.id, activation, release, figures, &now)
         })?;
         info!(model = %version.id, activation, release, "changed a model's thresholds");
         Ok(())
@@ -1091,11 +1120,15 @@ impl LabelRuntimeHost {
                 activation: v.thresholds.activation,
                 release: v.thresholds.release,
                 threshold_changes: v.threshold_changes.clone(),
-                evaluation: model_lab_dir.and_then(|dir| {
-                    let bytes =
-                        std::fs::read(dir.join(&v.artifact_dir).join("manifest.json")).ok()?;
-                    ModelEvaluationView::from_manifest(&serde_json::from_slice(&bytes).ok()?)
-                }),
+                evaluation: ModelEvaluationView::for_version(
+                    v,
+                    model_lab_dir
+                        .and_then(|dir| {
+                            std::fs::read(dir.join(&v.artifact_dir).join("manifest.json")).ok()
+                        })
+                        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+                        .as_ref(),
+                ),
             })
             .collect()
     }
@@ -1817,8 +1850,9 @@ pub fn set_label_model_threshold(
     id: String,
     activation: f64,
     release: Option<f64>,
+    figures: Option<model_lab_core::ThresholdFigures>,
 ) -> Result<(), String> {
-    host.set_model_threshold(&app, &id, activation, release)
+    host.set_model_threshold(&app, &id, activation, release, figures)
 }
 
 #[tauri::command]
@@ -1867,13 +1901,58 @@ mod tests {
 
     #[test]
     fn a_manifests_held_out_results_are_read_when_it_has_them() {
-        let manifest = serde_json::json!({"provenance": {"evaluationGestureRecall": 0.83, "evaluationFalseActivationsPerHour": 0.0}});
+        let manifest = serde_json::json!({"thresholds": {"activation": 0.95}, "provenance": {"evaluationGestureRecall": 0.83, "evaluationFalseActivationsPerHour": 0.0}});
         assert_eq!(
             super::ModelEvaluationView::from_manifest(&manifest),
             Some(super::ModelEvaluationView {
                 recall: Some(0.83),
-                false_activations_per_hour: Some(0.0)
+                false_activations_per_hour: Some(0.0),
+                at_threshold: Some(0.95),
+                measured: "training",
             })
+        );
+
+        // Measured when its threshold was set: shown while it runs at that threshold; its training figures otherwise.
+        let mut version = model_lab_core::ModelVersion::new(
+            model_lab_core::ModelVersionId::new("pinch_out-1").unwrap(),
+            model_lab_core::ProjectId::new("p-pinch_out").unwrap(),
+            model_lab_core::LabelId::new("pinch_out").unwrap(),
+            model_lab_core::ModelOrigin::Imported,
+            false,
+            None,
+            "label-models/pinch_out-1".into(),
+            label_inference::cnn_v2_contract(),
+            model_lab_core::Thresholds::default(),
+            model_lab_core::QualityRules::default(),
+            "2026-11-16T00:00:00Z",
+        )
+        .unwrap();
+        let mut registry = model_lab_core::Registry::default();
+        registry
+            .versions
+            .insert(version.id.clone(), version.clone());
+        let figures = model_lab_core::ThresholdFigures {
+            recall: Some(0.93),
+            false_activations_per_hour: Some(5.0),
+            recordings: 8,
+        };
+        registry
+            .set_thresholds_measured(&version.id, 0.99, 0.85, Some(figures), "now")
+            .unwrap();
+        version = registry.versions[&version.id].clone();
+        let shown = super::ModelEvaluationView::for_version(&version, Some(&manifest)).unwrap();
+        assert_eq!(
+            (shown.recall, shown.at_threshold, shown.measured),
+            (Some(0.93), Some(0.99), "thresholdCard")
+        );
+        registry
+            .set_thresholds(&version.id, 0.97, 0.8, "later")
+            .unwrap();
+        version = registry.versions[&version.id].clone();
+        let shown = super::ModelEvaluationView::for_version(&version, Some(&manifest)).unwrap();
+        assert_eq!(
+            (shown.recall, shown.at_threshold, shown.measured),
+            (Some(0.83), Some(0.95), "training")
         );
         assert_eq!(
             super::ModelEvaluationView::from_manifest(&serde_json::json!({"provenance": {}})),

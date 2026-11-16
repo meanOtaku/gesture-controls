@@ -56,7 +56,7 @@ describe("the threshold card", () => {
     expect(screen.queryByRole("button", { name: /^Use / })).toBeNull(); // its own threshold: nothing to change
     fireEvent.change(screen.getByLabelText("Threshold to look at"), { target: { value: "2" } }); // 0.70
     fireEvent.click(screen.getByRole("button", { name: "Use 0.70" }));
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_label_model_threshold", { id: "v1", activation: 0.7 }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_label_model_threshold", { id: "v1", activation: 0.7, figures: { recall: 0.4, falseActivationsPerHour: 20, recordings: 3 } }));
     expect(await screen.findByText("v1 now runs at 0.70, from now on.")).toBeInTheDocument();
   });
 
@@ -70,7 +70,7 @@ describe("the threshold card", () => {
     expect(invoke).not.toHaveBeenCalledWith("set_label_model_threshold", expect.anything());
     expect(screen.getByText(/more often than the budget allows/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Use 0.60 anyway" }));
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_label_model_threshold", { id: "v1", activation: 0.6 }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_label_model_threshold", { id: "v1", activation: 0.6, figures: { recall: 0.6, falseActivationsPerHour: 40, recordings: 3 } }));
   });
 
   it("sets an imported model's threshold by number, with no curve, and shows its last change", async () => {
@@ -86,7 +86,7 @@ describe("the threshold card", () => {
     expect(screen.getByRole("button", { name: "Use this threshold" })).toBeDisabled();
     fireEvent.change(screen.getByLabelText("New threshold"), { target: { value: "0.9" } });
     fireEvent.click(screen.getByRole("button", { name: "Use this threshold" }));
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_label_model_threshold", { id: "imp", activation: 0.9 }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_label_model_threshold", { id: "imp", activation: 0.9, figures: null }));
   });
 
   it("steps the threshold one point at a time", async () => {
