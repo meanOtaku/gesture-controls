@@ -68,6 +68,10 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
   const [editError, setEditError] = useState<string | null>(null);
   const [cascade, setCascade] = useState<CascadePlan | null>(null);
   const openCascade = (mode: CascadeMode, id: string) => planFor && setCascade(planFor(mode, id));
+  // Shown under the label it is for, so a label far down the list (a gesture's phase) shows it where it was clicked.
+  const cascadePanel = cascade && onRunPlan
+    ? <CascadePanel key={`${cascade.mode}-${cascade.label}`} plan={cascade} onCancel={() => setCascade(null)} onOpenLabel={(other) => openCascade("delete", other)} onRun={onRunPlan} />
+    : null;
 
   const saveEdit = async (event: FormEvent) => {
     event.preventDefault();
@@ -166,7 +170,8 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
             <AlertDescription>{listError}</AlertDescription>
           </Alert>
         )}
-        {cascade && onRunPlan && <CascadePanel key={`${cascade.mode}-${cascade.label}`} plan={cascade} onCancel={() => setCascade(null)} onOpenLabel={(other) => openCascade("delete", other)} onRun={onRunPlan} />}
+        {/* Under the label it is for (below); here only for a label not in the list. */}
+        {cascade && onRunPlan && !rows.some((row) => row.id === cascade.label) && cascadePanel}
         {editing && (
           <form className="flex flex-col gap-3" aria-label={`Edit ${editing.id}`} onSubmit={(event) => void saveEdit(event)}>
             <div className="field">
@@ -223,6 +228,7 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
                       {row.description ? ` · ${row.description}` : ""}
                     </small>
                     {usageFor && usageCount(usageFor(row.id)) > 0 && <UsageList usage={usageFor(row.id)} onOpenTab={onOpenTab} label={row.id} />}
+                    {cascade?.label === row.id && cascadePanel}
                   </div>
                   <div className="recipe-item-actions label-actions">
                     {onAddPhases && full && isGesture(full) && !row.archived && !labels.some((label) => label.parent === full.id) && (

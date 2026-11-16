@@ -1,5 +1,5 @@
 import { AnimatedNumber } from "../../components/app/AnimatedNumber";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -29,6 +29,11 @@ export function CascadePanel({ plan, onCancel, onOpenLabel, onRun }: Props) {
   const needsTyping = plan.mode === "delete" && plan.steps.length > 1;
   const blocked = plan.blockers.length > 0 || (needsTyping && typed.trim().toLowerCase() !== plan.label.toLowerCase());
   const title = `${TITLES[plan.mode]} “${plan.label}”`;
+  const root = useRef<HTMLDivElement>(null);
+  // Brought into view as it opens: the label it is for may be far down the list.
+  useEffect(() => {
+    root.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  }, []);
 
   const confirm = async () => {
     setFailure(null);
@@ -39,7 +44,7 @@ export function CascadePanel({ plan, onCancel, onOpenLabel, onRun }: Props) {
   };
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border p-3" role="alertdialog" aria-label={title} aria-describedby={`${uid}-lines`}>
+    <div ref={root} className="flex flex-col gap-3 rounded-lg border p-3" role="alertdialog" aria-label={title} aria-describedby={`${uid}-lines`}>
       <strong>{title} and what uses it</strong>
       <p className="text-sm">This is what will happen:</p>
       <ul id={`${uid}-lines`} className="list-disc pl-5 text-sm" aria-label="What will happen">

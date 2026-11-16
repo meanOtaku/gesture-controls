@@ -166,4 +166,18 @@ describe("LabelCoverage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add phases to fist" }));
     await waitFor(() => expect(onAddPhases).toHaveBeenCalledWith("fist"));
   });
+
+  it("opens a phase's delete under the phase itself, and deletes it", async () => {
+    const phase = (id: string, name: string, parent: string, p: "start" | "hold" | "end") => ({ ...label(id, name), parent, phase: p });
+    const plan = { mode: "delete" as const, label: "fist_in", steps: [{ kind: "deleteLabel" as const }], lines: ["Delete the label."], blockers: [] };
+    const planFor = vi.fn().mockReturnValue(plan);
+    const onRunPlan = vi.fn().mockResolvedValue({ ok: true, done: 1 });
+    setup({ labels: [label("fist", "Fist"), phase("fist_in", "Fist in", "fist", "start"), phase("fist_out", "Fist out", "fist", "end")], planFor, onRunPlan });
+    fireEvent.click(screen.getByRole("button", { name: "Delete fist_in" }));
+    expect(planFor).toHaveBeenCalledWith("delete", "fist_in");
+    const row = screen.getByRole("button", { name: "Delete fist_in" }).closest("li")!;
+    const panel = within(row).getByRole("alertdialog", { name: "Delete “fist_in”" });
+    fireEvent.click(within(panel).getByRole("button", { name: /^Delete/ }));
+    await waitFor(() => expect(onRunPlan).toHaveBeenCalledWith(plan, expect.any(Function)));
+  });
 });
