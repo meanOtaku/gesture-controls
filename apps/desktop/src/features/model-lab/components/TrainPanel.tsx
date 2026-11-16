@@ -13,6 +13,7 @@ import { Label } from "../../../components/ui/label";
 import { useSessionState } from "../hooks/useSessionState";
 import { useTrainingRun } from "../hooks/useTrainingRun";
 import { CNN_METHOD, CNN_MODEL, CNN_V2_METHOD, CNN_V2_MODEL, PULSE_MODEL, TREES_METHOD, buildRequest, defaultStages, hasLabel, otherLabels, recordingsWithLabel, stagesForRequest, type OtherRole, type StageDraft, type StartPoint, type TrainMethod, type TrainPlan, type TrainerEnvironment } from "../training";
+import { inTreeOrder } from "../../labels/gestures";
 import { GestureMultiSelect } from "./GestureMultiSelect";
 import { TrainingPlanEditor } from "./TrainingPlanEditor";
 import { datasetLabels, inImportOrder, recordingNumber, type DatasetLabel, type DatasetSummary } from "../types";
@@ -265,7 +266,7 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
         <div className="field">
           <div className="field-head"><Label required>Gestures to teach</Label></div>
           <GestureMultiSelect label="Gestures to teach" placeholder="Choose one or more…" catalogue={labels} disabled={running !== null}
-            options={usable.map((label) => ({ id: label.id, displayName: label.displayName }))} value={chosenGestures} onChange={chooseGestures} />
+            options={inTreeOrder(usable).map(({ label, depth }) => ({ id: label.id, displayName: label.displayName, depth }))} value={chosenGestures} onChange={chooseGestures} />
           {usable.length === 0 ? (
             <p className="field-hint">Add a label on the Labels page first.</p>
           ) : multi ? (

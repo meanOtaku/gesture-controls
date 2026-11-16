@@ -42,6 +42,38 @@ export interface GuidedPlan {
   cueLabelled?: string[];
   /** What each gesture's cue says, in place of "<name> now" (for pinch: "Pinch"). */
   cueTexts?: Record<string, string>;
+  /**
+   * For a held gesture the session labels itself: its phases' labels. The cue then labels a short start
+   * (`PHASE_MARK_MS`), the hold to the end of the hold time, and a short end as you let go, in place of the gesture's
+   * own label over the hold.
+   */
+  phases?: Record<string, { start?: string; hold?: string; end?: string }>;
+}
+
+/** How long a start or end phase lasts when the session labels it (as the camera marks pinch in and out). */
+export const PHASE_MARK_MS = 300;
+
+/**
+ * The label the session puts on at `elapsedMs`: `labelAt`, but for a cue of a gesture with `phases`, its start for the
+ * first PHASE_MARK_MS, then its hold, and its end for PHASE_MARK_MS after the hold.
+ */
+export function sessionLabelAt(plan: GuidedPlan, steps: GuidedStep[], elapsedMs: number): string | null {
+  const now = stepAt(steps, elapsedMs);
+  if (!now) return null;
+  const { step, index } = now;
+  if (step.kind === "cue") {
+    const phases = plan.phases?.[step.label];
+    if (!phases) return step.label;
+    const into = elapsedMs - step.atMs;
+    if (into < PHASE_MARK_MS) return phases.start ?? phases.hold ?? null;
+    return phases.hold ?? null;
+  }
+  if (step.kind === "rest") {
+    const previous = steps[index - 1];
+    if (previous?.kind === "cue" && elapsedMs - step.atMs < PHASE_MARK_MS) return plan.phases?.[previous.label]?.end ?? null;
+    return null;
+  }
+  return step.label;
 }
 
 /** The gestures a plan cues: `labels`, or `label` alone. */

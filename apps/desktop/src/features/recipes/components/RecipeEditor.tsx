@@ -45,6 +45,8 @@ type RecipeEditorProps = {
   modelLabels?: string[];
   /** Gesture library gestures, offered when adding a camera step. */
   cameraGestures?: { id: string; name: string }[];
+  /** Held gestures (with a start and an end phase), offered for a grab / release step: their start grabs, their end releases. */
+  heldGestures?: { id: string; name: string; start: string; end: string }[];
   /** Resolves to an error message from the backend, or null once saved. */
   onSave: (recipe: Recipe) => Promise<string | null>;
   onCancel: () => void;
@@ -55,7 +57,7 @@ const NATIVE_SELECT = "recipe-select";
 const UNUSED_SPEC: NumberSpec = { label: "Unused", min: 0, max: 0, step: 1, defaultValue: 0 };
 
 /** Builds or edits one recipe: the steps that must hold, the wrist rotation that follows, and the device it turns. */
-export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestures = [], onSave, onCancel }: RecipeEditorProps) {
+export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestures = [], heldGestures = [], onSave, onCancel }: RecipeEditorProps) {
   const uid = useId();
   const [name, setName] = useState(recipe.name);
   const [nameTouched, setNameTouched] = useState(false);
@@ -194,7 +196,7 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
                       event.target.value === "headAt"
                         ? { kind: "headAt", location: locationOptions[0]?.value ?? "" }
                         : event.target.value === "modelPair"
-                          ? { kind: "modelPair", startLabel: "pinch_in", endLabel: "pinch_out" }
+                          ? { kind: "modelPair", startLabel: (heldGestures.find((g) => g.id === "pinch") ?? heldGestures[0])?.start ?? "pinch_in", endLabel: (heldGestures.find((g) => g.id === "pinch") ?? heldGestures[0])?.end ?? "pinch_out" }
                         : event.target.value === "model"
                           ? { kind: "model", label: modelLabels[0] ?? "", hold: "held" }
                           : event.target.value === "camera"
@@ -206,7 +208,7 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
                   <option value="headAt">Look at</option>
                   <option value="hold">Gesture</option>
                   <option value="model">Model label</option>
-                  {!trigger && <option value="modelPair">Pinch grab / release</option>}
+                  {!trigger && <option value="modelPair">Grab / release</option>}
                   <option value="camera">Camera gesture</option>
                 </select>
                 {step.kind === "headAt" ? (
@@ -246,9 +248,23 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
                   </>
                 ) : step.kind === "modelPair" ? (
                   <>
+                    {heldGestures.length > 0 && (
+                      <select
+                        className={NATIVE_SELECT}
+                        aria-label={`${label} held gesture`}
+                        value={heldGestures.find((g) => g.start === step.startLabel && g.end === step.endLabel)?.id ?? ""}
+                        onChange={(event) => {
+                          const gesture = heldGestures.find((g) => g.id === event.target.value);
+                          if (gesture) setStep(index, { ...step, startLabel: gesture.start, endLabel: gesture.end });
+                        }}
+                      >
+                        {!heldGestures.some((g) => g.start === step.startLabel && g.end === step.endLabel) && <option value="">Other labels (below)</option>}
+                        {heldGestures.map((gesture) => <option key={gesture.id} value={gesture.id}>{gesture.name}</option>)}
+                      </select>
+                    )}
                     <label>Grab label<input className={NATIVE_SELECT} aria-label={`${label} grab label`} list={`${uid}-labels`} value={step.startLabel} onChange={(e) => setStep(index, { ...step, startLabel: e.target.value.trim().toLowerCase() })} /></label>
                     <label>Release label<input className={NATIVE_SELECT} aria-label={`${label} release label`} list={`${uid}-labels`} value={step.endLabel} onChange={(e) => setStep(index, { ...step, endLabel: e.target.value.trim().toLowerCase() })} /></label>
-                    <p className="field-hint">Pinch In grabs; turn left to decrease, right to increase; Pinch Out releases. Use Reverse direction if your watch orientation reverses the movement.</p>
+                    <p className="field-hint">The gesture's start grabs (pinch in, for pinch); turn left to decrease, right to increase; its end releases. Choose any held gesture (one with start and end phases, made on the Labels page), or type the two labels. Use Reverse direction if your watch orientation reverses the movement.</p>
                   </>
                 ) : step.kind === "model" ? (
                   <>

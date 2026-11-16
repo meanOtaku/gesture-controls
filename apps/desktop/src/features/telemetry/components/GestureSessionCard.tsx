@@ -12,7 +12,9 @@ import { getCameraController } from "../../camera/cameraService";
 import { cameraAssist } from "../../gestureLibrary/cameraAssist";
 import { definitionsForLabels, type GestureDefinition } from "../../gestureLibrary/definition";
 import { listGestureDefinitions } from "../../gestureLibrary/gestureLibraryApi";
-import { PINCH_HOLD, PINCH_IN, PINCH_LABELS, PINCH_OUT } from "../../gestureLibrary/pinchEdgeMarker";
+import type { PhasedGesture } from "../../gestureLibrary/phaseMarker";
+import { PINCH_HOLD, PINCH_IN, PINCH_OUT } from "../../gestureLibrary/pinchEdgeMarker";
+import { gestureGroups, isHeld, recordedLabels, type GestureGroup } from "../../labels/gestures";
 import { GestureMultiSelect } from "../../model-lab/components/GestureMultiSelect";
 import type { DatasetLabel } from "../../model-lab/types";
 import { guidedRunner } from "../recording/guidedRunner";
@@ -20,12 +22,12 @@ import { planProblem, planSteps, totalMs, type GuidedPlan } from "../recording/g
 import { telemetryStore } from "../store/telemetryStore";
 import { GuidedRunningView } from "./GuidedRunningView";
 
-/** Pinch in, hold and out as one choice: one cue ("Pinch"), the camera marking where the fingers meet and part. */
+/** The pinch gesture: its phases (pinch in, hold, out) are marked from the finger distance, where the fingers meet and part. */
 export const PINCH = "pinch";
 
 /** What the person can change about a gesture session; the rest of the plan is fixed. */
 export interface GestureSessionSettings {
-  /** What to cue: label ids, and `PINCH` for pinch in / hold / out. */
+  /** The gestures to cue (gesture label ids; a held one is recorded in its phases). */
   gestures: string[];
   /** How many times each gesture is cued. */
   each: number;
@@ -64,15 +66,15 @@ function saveSettings(settings: GestureSessionSettings): void {
   }
 }
 
-/** The label a choice is cued (and recorded) as: pinch in for `PINCH`, the label itself otherwise. */
-const cueLabel = (gesture: string) => (gesture === PINCH ? PINCH_IN : gesture);
-
-/** How each chosen gesture gets its labels: the camera's finger distance (pinch), its library gesture, or the cue. */
+/** How each chosen gesture gets its labels: the camera's finger distance (pinch), its library rule, or the cue. */
 export type Marking = "pinch" | "camera" | "cue";
 
-export function markingOf(gesture: string, definitions: GestureDefinition[], cameraMarks: boolean): Marking {
-  if (gesture === PINCH) return "pinch";
-  return cameraMarks && definitionsForLabels(definitions, [gesture]).length > 0 ? "camera" : "cue";
+/** A gesture and its phases' labels, as the library rules and the session see them. */
+const allLabels = (group: GestureGroup) => [group.gesture.id, ...recordedLabels(group)];
+
+export function markingOf(group: GestureGroup, definitions: GestureDefinition[], cameraMarks: boolean): Marking {
+  if (group.gesture.id === PINCH && isHeld(group)) return "pinch";
+  return cameraMarks && definitionsForLabels(definitions, allLabels(group)).length > 0 ? "camera" : "cue";
 }
 
 /**
@@ -80,8 +82,10 @@ export function markingOf(gesture: string, definitions: GestureDefinition[], cam
  * between. Pinch is cued "Pinch" and, like any gesture the camera marks, labelled by the camera; the session labels the
  * others itself, from the cue to the end of the hold.
  */
-export function sessionPlan(settings: GestureSessionSettings, marking: Record<string, Marking>, nameOf: (label: string) => string = (l) => l): GuidedPlan {
-  const labels = settings.gestures.map(cueLabel);
+export function sessionPlan(settings: GestureSessionSettings, marking: Record<string, Marking>, nameOf: (label: string) => string = (l) => l,
+  groups: GestureGroup[] = []): GuidedPlan {
+  const labels = settings.gestures;
+  const held = groups.filter((group) => labels.includes(group.gesture.id) && isHeld(group) && marking[group.gesture.id] === "cue");
   return {
     label: labels[0] ?? "",
     labels,
@@ -91,8 +95,10 @@ export function sessionPlan(settings: GestureSessionSettings, marking: Record<st
     maxGapSeconds: settings.maxRestSeconds,
     everydayLabel: null,
     activities: [],
-    cueLabelled: settings.gestures.filter((g) => marking[g] === "cue").map(cueLabel),
-    cueTexts: Object.fromEntries(settings.gestures.map((g) => [cueLabel(g), g === PINCH ? "Pinch" : `${nameOf(g)} now`])),
+    cueLabelled: settings.gestures.filter((g) => marking[g] === "cue"),
+    cueTexts: Object.fromEntries(settings.gestures.map((g) => [g, g === PINCH ? "Pinch" : `${nameOf(g)} now`])),
+    // A held gesture the session labels: its start, hold and end, in place of its own label.
+    ...(held.length > 0 ? { phases: Object.fromEntries(held.map((group) => [group.gesture.id, { start: group.phases.start?.id, hold: group.phases.hold?.id, end: group.phases.end?.id }])) } : {}),
   };
 }
 
@@ -138,34 +144,33 @@ export function GestureSessionCard({ recording, watchConnected, desktopAvailable
   };
 
   const live = (id: string) => labels?.some((label) => label.id === id && label.archivedAt === null) ?? false;
-  const nameOf = (id: string) => (id === PINCH ? "Pinch" : labels?.find((label) => label.id === id)?.displayName ?? id.replaceAll("_", " "));
-  // Every gesture label but the pinch ones, which are one choice.
-  const options = [
-    { id: PINCH, displayName: "Pinch (in / hold / out)" },
-    ...(labels ?? []).filter((label) => label.archivedAt === null && label.role === "positiveGesture" && !label.standard && !PINCH_LABELS.includes(label.id))
-      .map((label) => ({ id: label.id, displayName: label.displayName })),
-  ];
-  const chosen = settings.gestures.filter((g) => options.some((option) => option.id === g) || g === PINCH);
+  const nameOf = (id: string) => labels?.find((label) => label.id === id)?.displayName ?? id.replaceAll("_", " ");
+  // Each gesture is one choice; a held one (with phases) is recorded in its phases. Pinch is offered even before its
+  // labels exist: the checks below add them.
+  const groups = gestureGroups(labels ?? []);
+  const pinchGroup: GestureGroup = groups.find((group) => group.gesture.id === PINCH)
+    ?? { gesture: { id: PINCH, displayName: "Pinch", description: "", color: "#65e6ff", role: "positiveGesture", archivedAt: null }, phases: {} };
+  const choices = [pinchGroup, ...groups.filter((group) => group.gesture.id !== PINCH)];
+  const options = choices.map((group) => ({ id: group.gesture.id, displayName: `${group.gesture.displayName}${isHeld(group) || group.gesture.id === PINCH ? " (start / hold / end)" : ""}` }));
+  const groupOf = (id: string) => choices.find((group) => group.gesture.id === id)!;
+  const chosen = settings.gestures.filter((g) => choices.some((group) => group.gesture.id === g));
   const hasPinch = chosen.includes(PINCH);
+  const pinchReady = live(PINCH) && live(PINCH_IN) && live(PINCH_HOLD) && live(PINCH_OUT) && isHeld(pinchGroup);
   const cameraReady = cam.status === "on" && cam.recordLandmarks;
   const cameraMarks = cameraReady && markingOn;
-  const marking: Record<string, Marking> = Object.fromEntries(chosen.map((g) => [g, markingOf(g, definitions, cameraMarks)]));
+  const marking: Record<string, Marking> = Object.fromEntries(chosen.map((g) => [g, g === PINCH ? "pinch" : markingOf(groupOf(g), definitions, cameraMarks)]));
   const byCamera = chosen.filter((g) => marking[g] === "camera");
   const byCue = chosen.filter((g) => marking[g] === "cue");
-  const withRule = chosen.filter((g) => g !== PINCH && definitionsForLabels(definitions, [g]).length > 0);
+  const withRule = chosen.filter((g) => g !== PINCH && definitionsForLabels(definitions, allLabels(groupOf(g))).length > 0);
 
   const createPinchLabels = async () => {
     setError(null);
     try {
-      for (const [id, displayName, description] of [
-        [PINCH_IN, "Pinch in", "The moment thumb and index finger meet."],
-        [PINCH_HOLD, "Pinch hold", "Thumb and index finger held together, between pinch in and pinch out."],
-        [PINCH_OUT, "Pinch out", "The moment thumb and index finger part again."],
-      ] as const) {
-        if (!labels?.some((label) => label.id === id)) {
-          await invoke("create_model_label", { input: { id, displayName, description, color: "#65e6ff", role: "positiveGesture" } });
-        }
+      // The pinch gesture, then its phases: pinch in, hold and out (those that exist already are linked to it by name).
+      if (!labels?.some((label) => label.id === PINCH)) {
+        await invoke("create_model_label", { input: { id: PINCH, displayName: "Pinch", description: "Thumb and index finger touching: pinch in, hold, pinch out.", color: "#65e6ff", role: "positiveGesture" } });
       }
+      await invoke("add_gesture_phases", { gesture: PINCH });
     } catch (err) {
       setError(`Could not add the labels: ${String(err)}`);
     }
@@ -179,8 +184,8 @@ export function GestureSessionCard({ recording, watchConnected, desktopAvailable
     { id: "gestures", done: chosen.length > 0, text: chosen.length > 0 ? `${chosen.length === 1 ? "One gesture" : `${chosen.length} gestures`} to record` : "Choose the gestures to record" },
     ...(hasPinch ? [{
       id: "labels",
-      done: live(PINCH_IN) && live(PINCH_HOLD) && live(PINCH_OUT),
-      text: live(PINCH_IN) && live(PINCH_HOLD) && live(PINCH_OUT) ? "Labels pinch in, pinch hold and pinch out" : "Add the labels pinch in, pinch hold and pinch out",
+      done: pinchReady,
+      text: pinchReady ? "Pinch, with pinch in, pinch hold and pinch out" : "Add the labels pinch, pinch in, pinch hold and pinch out",
       fix: desktopAvailable ? { label: "Add them", run: createPinchLabels } : undefined,
     }] : []),
     ...(wantsCamera ? [{
@@ -199,14 +204,14 @@ export function GestureSessionCard({ recording, watchConnected, desktopAvailable
     }] : []),
   ];
   const ready = checks.every((check) => check.done);
-  const plan = sessionPlan({ ...settings, gestures: chosen }, marking, nameOf);
+  const plan = sessionPlan({ ...settings, gestures: chosen }, marking, nameOf, choices);
   const problem = chosen.length === 0 ? null : planProblem(plan);
   const length = totalMs(planSteps(plan, () => 0.5));
 
   const start = () => {
     setError(null);
-    // The recording's labels: the gestures cued (pinch with its hold and out), and nothing else.
-    const recorded = [...new Set(chosen.flatMap((g) => (g === PINCH ? [PINCH_IN, PINCH_HOLD, PINCH_OUT] : [g])))];
+    // The recording's labels: each gesture's phases (or the gesture itself, when it has none), and nothing else.
+    const recorded = [...new Set(chosen.flatMap((g) => recordedLabels(groupOf(g))))];
     telemetryStore.selectDatasetLabel(recorded[0]);
     for (const extra of telemetryStore.getExtraLabels()) if (!recorded.includes(extra)) telemetryStore.toggleExtraLabel(extra);
     for (const wanted of recorded.slice(1)) if (!telemetryStore.getExtraLabels().includes(wanted)) telemetryStore.toggleExtraLabel(wanted);
@@ -214,15 +219,19 @@ export function GestureSessionCard({ recording, watchConnected, desktopAvailable
       setError("Could not start: stop the recording under way first.");
       return;
     }
-    const marked = [...(hasPinch ? [PINCH_IN, PINCH_HOLD, PINCH_OUT] : []), ...byCamera];
-    if (marked.length > 0) cameraAssist.arm(marked, definitionsForLabels(definitions, byCamera));
+    // The camera marks pinch from the finger distance, a held gesture in its phases from its rule, any other from its rule.
+    const heldByCamera = byCamera.map(groupOf).filter(isHeld);
+    const phased: PhasedGesture[] = heldByCamera.map((group) => ({ gesture: group.gesture.id, start: group.phases.start?.id, hold: group.phases.hold?.id, end: group.phases.end?.id }));
+    const marked = [...(hasPinch ? [PINCH_IN, PINCH_HOLD, PINCH_OUT] : []), ...byCamera.flatMap((g) => recordedLabels(groupOf(g)))];
+    const rules = definitionsForLabels(definitions, byCamera.flatMap((g) => allLabels(groupOf(g))));
+    if (marked.length > 0) cameraAssist.arm(marked, rules, phased);
   };
 
   if (session?.source === "gesture") {
     return (
       <GuidedRunningView
         session={session}
-        nameOf={(label) => (label === PINCH_IN ? "Pinch" : nameOf(label))}
+        nameOf={nameOf}
         onStop={onStop}
         title="Gesture session"
         description="Make each gesture at its cue, hold it, and let go; keep your hand still in between. The recording stops and is saved by itself at the end."

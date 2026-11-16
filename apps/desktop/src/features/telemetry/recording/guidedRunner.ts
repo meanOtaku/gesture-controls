@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { telemetryStore } from "../store/telemetryStore";
-import { CUE_BUZZ_MS, labelAt, labelsCue, planSteps, stepAt, totalMs, type GuidedPlan, type GuidedStep } from "./guidedSession";
+import { CUE_BUZZ_MS, labelsCue, planSteps, sessionLabelAt, stepAt, totalMs, type GuidedPlan, type GuidedStep } from "./guidedSession";
 import { timedCapture } from "./timedCapture";
 
 /** How often the runner checks the clock: a cue's label starts within this of the cue. */
@@ -65,9 +65,10 @@ function tick() {
     session.lastCueIndex = now.index;
     buzz(session);
   }
-  // The session labels the cues the camera does not mark; for the others it only cues.
-  const at = labelAt(session.steps, elapsed);
-  const wanted = at !== null && now?.step.kind === "cue" && !labelsCue(session.plan, at) ? null : at;
+  // The session labels the cues the camera does not mark (a held gesture's in its phases); for the others it only cues.
+  const at = sessionLabelAt(session.plan, session.steps, elapsed);
+  const cued = now?.step.kind === "cue" ? now.step.label : now?.step.kind === "rest" && now.index > 0 && session.steps[now.index - 1].kind === "cue" ? (session.steps[now.index - 1] as { label: string }).label : null;
+  const wanted = at !== null && cued !== null && !labelsCue(session.plan, cued) ? null : at;
   if (session.plan.labelCues !== false && wanted !== session.applied && telemetryStore.setTimelineLabel(wanted, "guided_cue")) session.applied = wanted;
   publish();
 }

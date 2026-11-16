@@ -61,6 +61,30 @@ pub enum LabelRole {
     CalibrationOnly,
 }
 
+/// Which part of a held gesture a label is: the moment it starts (`pinch_in`), while it is held (`pinch_hold`), or the
+/// moment it ends (`pinch_out`). A gesture with phases is held; one without is momentary (a tap, a flick), its own label
+/// its start.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
+#[serde(rename_all = "camelCase")]
+pub enum Phase {
+    Start,
+    Hold,
+    End,
+}
+
+impl Phase {
+    pub const ALL: [Phase; 3] = [Phase::Start, Phase::Hold, Phase::End];
+
+    /// The id suffix of this phase's label (`<gesture>_in`, `_hold`, `_out`), as pinch's were named.
+    pub fn suffix(self) -> &'static str {
+        match self {
+            Phase::Start => "in",
+            Phase::Hold => "hold",
+            Phase::End => "out",
+        }
+    }
+}
+
 /// What archiving a label everywhere switched off, so restoring it can switch the same things back.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -89,6 +113,13 @@ pub struct LabelRecord {
     /// Set when the label was archived together with what uses it; cleared when it is restored.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub archive_log: Option<ArchiveLog>,
+    /// For a phase of a gesture: the gesture's label (`pinch` for `pinch_in`). Only the hierarchy: the label's id, and
+    /// so every recording, model and recipe using it, stays as it is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
+    /// Which phase of `parent` it is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<Phase>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -99,6 +130,11 @@ pub struct CreateLabelInput {
     pub description: String,
     pub color: String,
     pub role: LabelRole,
+    /// For a phase: its gesture and which phase it is (both or neither).
+    #[serde(default)]
+    pub parent: Option<String>,
+    #[serde(default)]
+    pub phase: Option<Phase>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -167,10 +203,115 @@ fn listed(index: &LabelIndex) -> Vec<LabelRecord> {
                 standard: true,
                 archived_at: None,
                 archive_log: None,
+                parent: None,
+                phase: None,
             }),
     );
+    link_phases(&mut labels);
     labels.sort_by(|a, b| a.id.cmp(&b.id));
     labels
+}
+
+/// Links labels named as a gesture's phases (`<gesture>_in`, `_hold`, `_out`) to that gesture when they say nothing
+/// themselves, so the labels made before phases existed (pinch's) are shown as one gesture. Nothing is written.
+fn link_phases(labels: &mut [LabelRecord]) {
+    let gestures: BTreeSet<String> = labels
+        .iter()
+        .filter(|label| !label.standard && label.parent.is_none())
+        .map(|label| label.id.clone())
+        .collect();
+    for label in labels.iter_mut() {
+        if label.parent.is_some() || label.standard {
+            continue;
+        }
+        for phase in Phase::ALL {
+            if let Some(base) = label.id.strip_suffix(&format!("_{}", phase.suffix()))
+                && gestures.contains(base)
+            {
+                label.parent = Some(base.to_string());
+                label.phase = Some(phase);
+                break;
+            }
+        }
+    }
+}
+
+/// A new label's place among the gestures, checked: a phase names a gesture that is a label and not itself a phase, and
+/// the gesture has no other label for that phase.
+fn check_phase(labels: &[LabelRecord], input: &CreateLabelInput) -> Result<(), String> {
+    match (&input.parent, input.phase) {
+        (None, None) => Ok(()),
+        (Some(parent), Some(phase)) => {
+            let gesture = labels
+                .iter()
+                .find(|label| &label.id == parent)
+                .ok_or_else(|| format!("there is no gesture '{parent}' to add a phase to"))?;
+            if gesture.parent.is_some() || gesture.standard {
+                return Err(format!("'{parent}' is not a gesture that can have phases"));
+            }
+            if labels
+                .iter()
+                .any(|label| label.parent.as_deref() == Some(parent) && label.phase == Some(phase))
+            {
+                return Err(format!("'{parent}' already has a {phase:?} phase").to_lowercase());
+            }
+            Ok(())
+        }
+        _ => Err("a phase needs both its gesture and which phase it is".into()),
+    }
+}
+
+/// The labels for `gesture`'s phases it does not have yet: `<gesture>_in`, `_hold`, `_out`, named after it ("Fist in")
+/// and in its colour. Refused for a label that is a phase or standard, or one whose phase ids are taken by other labels.
+fn phases_to_add(labels: &[LabelRecord], gesture: &str) -> Result<Vec<LabelRecord>, String> {
+    let parent = labels
+        .iter()
+        .find(|label| label.id == gesture)
+        .ok_or_else(|| format!("there is no label '{gesture}'"))?;
+    if parent.parent.is_some() || parent.standard {
+        return Err(format!("'{gesture}' is not a gesture that can have phases"));
+    }
+    let mut added = Vec::new();
+    for phase in Phase::ALL {
+        if labels
+            .iter()
+            .any(|label| label.parent.as_deref() == Some(gesture) && label.phase == Some(phase))
+        {
+            continue;
+        }
+        let id = format!("{gesture}_{}", phase.suffix());
+        if labels.iter().any(|label| label.id == id) {
+            return Err(format!(
+                "'{id}' is already a label of its own: rename the gesture or that label first"
+            ));
+        }
+        if id.len() > 48 {
+            return Err(format!("'{gesture}' is too long to name its phases after"));
+        }
+        added.push(LabelRecord {
+            id,
+            display_name: format!("{} {}", parent.display_name, phase.suffix()),
+            description: match phase {
+                Phase::Start => {
+                    format!("The moment {} starts.", parent.display_name.to_lowercase())
+                }
+                Phase::Hold => format!(
+                    "{} held, between its start and its end.",
+                    parent.display_name
+                ),
+                Phase::End => format!("The moment {} ends.", parent.display_name.to_lowercase()),
+            },
+            color: parent.color.clone(),
+            role: LabelRole::PositiveGesture,
+            built_in: false,
+            standard: false,
+            archived_at: None,
+            archive_log: None,
+            parent: Some(gesture.to_string()),
+            phase: Some(phase),
+        });
+    }
+    Ok(added)
 }
 
 fn refuse_standard(id: &str) -> Result<(), String> {
@@ -247,6 +388,8 @@ fn apply_update(index: &mut LabelIndex, input: &UpdateLabelInput) -> Result<(), 
         description: input.description.clone(),
         color: "#000000".to_string(),
         role: input.role,
+        parent: None,
+        phase: None,
     })?;
     let label = index
         .labels
@@ -291,8 +434,9 @@ pub fn create_model_label(
     if index.labels.iter().any(|label| label.id == input.id) {
         return Err(format!("label '{}' already exists", input.id));
     }
+    check_phase(&listed(&index), &input)?;
     index.labels.push(LabelRecord {
-        id: input.id,
+        id: input.id.clone(),
         display_name: input.display_name.trim().to_string(),
         description: input.description.trim().to_string(),
         color: input.color.to_lowercase(),
@@ -301,6 +445,8 @@ pub fn create_model_label(
         standard: false,
         archived_at: None,
         archive_log: None,
+        parent: input.parent.clone(),
+        phase: input.phase,
     });
     index.labels.sort_by(|a, b| a.id.cmp(&b.id));
     write_index_atomic(&app, &index)?;
@@ -320,6 +466,35 @@ pub fn update_model_label(
         .map_err(|_| "label registry lock was poisoned".to_string())?;
     let mut index = load_index(&app);
     apply_update(&mut index, &input)?;
+    write_index_atomic(&app, &index)?;
+    emit(&app, &index);
+    Ok(listed(&index))
+}
+
+/// Gives `gesture` the labels of its phases it does not have yet (start, hold, end: `<gesture>_in`, `_hold`, `_out`), so
+/// it is recorded, marked and trained as a held gesture. The links found by name are written down with them.
+#[tauri::command]
+pub fn add_gesture_phases(
+    gesture: String,
+    app: AppHandle,
+    runtime: State<'_, LabelRegistryRuntime>,
+) -> Result<Vec<LabelRecord>, String> {
+    let _guard = runtime
+        .lock
+        .lock()
+        .map_err(|_| "label registry lock was poisoned".to_string())?;
+    let mut index = load_index(&app);
+    let shown = listed(&index);
+    let added = phases_to_add(&shown, &gesture)?;
+    // Keep the links found by name, so they hold even if the gesture is renamed later.
+    for label in &mut index.labels {
+        if let Some(linked) = shown.iter().find(|l| l.id == label.id) {
+            label.parent = linked.parent.clone();
+            label.phase = linked.phase;
+        }
+    }
+    index.labels.extend(added);
+    index.labels.sort_by(|a, b| a.id.cmp(&b.id));
     write_index_atomic(&app, &index)?;
     emit(&app, &index);
     Ok(listed(&index))
@@ -496,6 +671,8 @@ pub(crate) fn add_gesture_labels_at(
             standard: false,
             archived_at: None,
             archive_log: None,
+            parent: None,
+            phase: None,
         });
         added.push(id.to_string());
     }
@@ -525,6 +702,8 @@ mod tests {
             standard: false,
             archived_at: None,
             archive_log: None,
+            parent: None,
+            phase: None,
         }
     }
 
@@ -626,6 +805,8 @@ mod tests {
             description: "User-defined gesture".to_string(),
             color: "#12aBcD".to_string(),
             role: LabelRole::PositiveGesture,
+            parent: None,
+            phase: None,
         };
         assert!(validate_input(&input).is_ok());
     }
@@ -637,6 +818,8 @@ mod tests {
             description: String::new(),
             color: "#000000".to_string(),
             role: LabelRole::NegativeBackground,
+            parent: None,
+            phase: None,
         };
         assert!(validate_input(&input).is_err());
         input.id = "safe".to_string();
@@ -655,6 +838,8 @@ mod tests {
             standard: false,
             archived_at: None,
             archive_log: None,
+            parent: None,
+            phase: None,
         }
     }
 
@@ -694,9 +879,95 @@ mod tests {
             description: String::new(),
             color: "#000000".into(),
             role: LabelRole::PositiveGesture,
+            parent: None,
+            phase: None,
         };
         assert!(validate_input(&input).is_ok());
         input.id = "a".repeat(49);
         assert!(validate_input(&input).is_err());
+    }
+
+    #[test]
+    fn a_gesture_s_phases_are_found_by_name_and_new_ones_named_after_it() {
+        let mut fist = plain_record("fist");
+        fist.display_name = "Fist".into();
+        fist.color = "#ff8a3d".into();
+        let index = LabelIndex {
+            labels: [
+                "pinch",
+                "pinch_in",
+                "pinch_hold",
+                "pinch_out",
+                "fist",
+                "hand_in_pocket",
+            ]
+            .iter()
+            .map(|id| {
+                if *id == "fist" {
+                    fist.clone()
+                } else {
+                    plain_record(id)
+                }
+            })
+            .collect(),
+        };
+        let shown = listed(&index);
+        let of = |id: &str| {
+            let label = shown.iter().find(|l| l.id == id).unwrap();
+            (label.parent.as_deref(), label.phase)
+        };
+        assert_eq!(of("pinch_in"), (Some("pinch"), Some(Phase::Start)));
+        assert_eq!(of("pinch_hold"), (Some("pinch"), Some(Phase::Hold)));
+        assert_eq!(of("pinch_out"), (Some("pinch"), Some(Phase::End)));
+        assert_eq!(of("pinch"), (None, None));
+        // "hand_in_pocket" ends in neither suffix of a gesture that exists.
+        assert_eq!(of("hand_in_pocket"), (None, None));
+
+        let added = phases_to_add(&shown, "fist").unwrap();
+        assert_eq!(
+            added
+                .iter()
+                .map(|l| (l.id.as_str(), l.display_name.as_str(), l.phase))
+                .collect::<Vec<_>>(),
+            [
+                ("fist_in", "Fist in", Some(Phase::Start)),
+                ("fist_hold", "Fist hold", Some(Phase::Hold)),
+                ("fist_out", "Fist out", Some(Phase::End)),
+            ]
+        );
+        assert!(
+            added
+                .iter()
+                .all(|l| l.parent.as_deref() == Some("fist") && l.color == "#ff8a3d")
+        );
+        assert!(phases_to_add(&shown, "pinch").unwrap().is_empty());
+        assert!(phases_to_add(&shown, "pinch_in").is_err());
+        assert!(phases_to_add(&shown, "everyday_noise").is_err());
+    }
+
+    #[test]
+    fn a_new_phase_must_name_a_gesture_that_lacks_it() {
+        let shown = listed(&LabelIndex {
+            labels: vec![
+                plain_record("pinch"),
+                plain_record("pinch_in"),
+                plain_record("wave"),
+            ],
+        });
+        let input = |parent: Option<&str>, phase: Option<Phase>| CreateLabelInput {
+            id: "x".into(),
+            display_name: "X".into(),
+            description: String::new(),
+            color: "#000000".into(),
+            role: LabelRole::PositiveGesture,
+            parent: parent.map(String::from),
+            phase,
+        };
+        assert!(check_phase(&shown, &input(None, None)).is_ok());
+        assert!(check_phase(&shown, &input(Some("wave"), Some(Phase::Start))).is_ok());
+        assert!(check_phase(&shown, &input(Some("pinch"), Some(Phase::Start))).is_err());
+        assert!(check_phase(&shown, &input(Some("pinch_in"), Some(Phase::Hold))).is_err());
+        assert!(check_phase(&shown, &input(Some("nope"), Some(Phase::Hold))).is_err());
+        assert!(check_phase(&shown, &input(Some("wave"), None)).is_err());
     }
 }

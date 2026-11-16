@@ -8,6 +8,7 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
+import { inTreeOrder, isGesture } from "../../labels/gestures";
 import { CascadePanel } from "../../labels/CascadePanel";
 import type { CascadeMode, CascadePlan, CascadeResult } from "../../labels/labelCascade";
 import { usageCount, type LabelUsage } from "../../labels/labelUsage";
@@ -47,10 +48,12 @@ type LabelCoverageProps = {
   onOpenTab?: (tab: UsageTab) => void;
   /** Resolves to an error message, or null once deleted. */
   onDelete: (id: string) => Promise<string | null>;
+  /** Gives a gesture its start, hold and end labels; absent hides the button. */
+  onAddPhases?: (gesture: string) => Promise<string | null>;
 };
 
 /** Your labels: what each is called, how many recordings cover it, and how far along its model is. */
-export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSetArchived, onUpdate, gestureCountByLabel, recorderCountByLabel, usageFor, planFor, onRunPlan, onOpenTab, onDelete }: LabelCoverageProps) {
+export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSetArchived, onUpdate, gestureCountByLabel, recorderCountByLabel, usageFor, planFor, onRunPlan, onOpenTab, onDelete, onAddPhases }: LabelCoverageProps) {
   const uid = useId();
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
@@ -103,7 +106,8 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
   const live = labels.filter((label) => label.archivedAt === null);
   const archived = labels.filter((label) => label.archivedAt !== null);
   // A standard label is the app's: listed, never edited, archived or deleted.
-  const rows = [...live.map((label) => ({ id: label.id, name: label.displayName, description: label.description, archived: false, managed: !label.standard, standard: label.standard === true })), ...stray.map((labelId) => ({ id: labelId, name: labelId.replaceAll("_", " "), description: "", archived: false, managed: false, standard: false })), ...(showArchived ? archived.map((label) => ({ id: label.id, name: label.displayName, description: label.description, archived: true, managed: true, standard: false })) : [])];
+  // Each gesture with its phases indented under it (start, hold, end).
+  const rows = [...inTreeOrder(live).map(({ label, depth }) => ({ id: label.id, name: label.displayName, description: label.description, archived: false, managed: !label.standard, standard: label.standard === true, depth, phase: label.phase ?? null })), ...stray.map((labelId) => ({ id: labelId, name: labelId.replaceAll("_", " "), description: "", archived: false, managed: false, standard: false, depth: 0, phase: null })), ...(showArchived ? archived.map((label) => ({ id: label.id, name: label.displayName, description: label.description, archived: true, managed: true, standard: false, depth: 0, phase: null })) : [])];
 
   const act = async (work: () => Promise<string | null | void>) => {
     setListError(null);
@@ -202,12 +206,14 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
               const inUse = sessions > 0 || labelModels.length > 0 || gestures > 0 || (usageFor ? usageCount(usageFor(row.id)) > 0 : false);
               const full = labels.find((label) => label.id === row.id);
               return (
-                <li key={row.id} className="recipe-item label-row">
+                <li key={row.id} className={`recipe-item label-row${row.depth > 0 ? " label-row-phase" : ""}`} aria-level={row.depth + 1}>
                   <div className="flex min-w-0 flex-col gap-1">
                     <span className="text-sm">
                       {row.name}{row.name !== row.id && <> <code>{row.id}</code></>}{" "}
                       {row.archived && <Badge variant="outline">Archived</Badge>}
                       {row.standard && <Badge variant="outline" title="The app's own label, the same for every model: always “not the gesture” when training">Standard</Badge>}
+                      {row.phase && <Badge variant="outline" title={`The ${row.phase} of ${full?.parent ?? "its gesture"}`}>{row.phase}</Badge>}
+                      {full && isGesture(full) && !row.archived && labels.some((label) => label.parent === full.id) && <Badge variant="secondary">Held gesture</Badge>}
                     </span>
                     <small className="text-xs text-muted-foreground">
                       {recorderCountByLabel ? <><AnimatedNumber value={recorderRecordings} />{" in Recorder recordings · "}</> : ""}
@@ -219,6 +225,10 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
                     {usageFor && usageCount(usageFor(row.id)) > 0 && <UsageList usage={usageFor(row.id)} onOpenTab={onOpenTab} label={row.id} />}
                   </div>
                   <div className="recipe-item-actions label-actions">
+                    {onAddPhases && full && isGesture(full) && !row.archived && !labels.some((label) => label.parent === full.id) && (
+                      <Button type="button" variant="ghost" aria-label={`Add phases to ${row.id}`} title="Make it a held gesture: add its start, hold and end labels, so it is recorded and marked in three parts like pinch"
+                        onClick={() => void act(() => onAddPhases(full.id))}>Add phases</Button>
+                    )}
                     {row.managed && onUpdate && full && (
                       <Button type="button" variant="ghost" aria-label={`Edit ${row.id}`} onClick={() => { setEditError(null); setEditing({ id: full.id, displayName: full.displayName, description: full.description, role: full.role }); }}>Edit</Button>
                     )}

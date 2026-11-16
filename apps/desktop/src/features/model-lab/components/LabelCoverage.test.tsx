@@ -148,4 +148,22 @@ describe("LabelCoverage", () => {
     expect(screen.getByRole("button", { name: "Delete everything above" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
   });
+
+  it("lists each gesture with its phases under it, and offers phases to a gesture without them", async () => {
+    const phase = (id: string, name: string, parent: string, p: "start" | "hold" | "end") => ({ ...label(id, name), parent, phase: p });
+    const onAddPhases = vi.fn().mockResolvedValue(null);
+    setup({
+      labels: [label("fist", "Fist"), label("pinch", "Pinch"), phase("pinch_hold", "Pinch hold", "pinch", "hold"), phase("pinch_in", "Pinch in", "pinch", "start"), phase("pinch_out", "Pinch out", "pinch", "end")],
+      onAddPhases,
+    });
+    const rows = within(screen.getByRole("list", { name: "Labels" })).getAllByRole("listitem").filter((row) => row.classList.contains("label-row"));
+    expect(rows.map((row) => row.querySelector("code")?.textContent ?? row.textContent?.slice(0, 5))).toEqual(["fist", "pinch", "pinch_in", "pinch_hold", "pinch_out"]);
+    expect(rows[2]).toHaveClass("label-row-phase");
+    expect(rows[2]).toHaveTextContent("start");
+    expect(rows[1]).toHaveTextContent("Held gesture");
+    expect(screen.queryByRole("button", { name: "Add phases to pinch" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add phases to pinch_in" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Add phases to fist" }));
+    await waitFor(() => expect(onAddPhases).toHaveBeenCalledWith("fist"));
+  });
 });

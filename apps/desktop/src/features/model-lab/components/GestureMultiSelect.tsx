@@ -11,7 +11,8 @@ import type { DatasetLabel } from "../types";
 export function GestureMultiSelect({ label, options, value, onChange, disabled, placeholder = "Choose…", catalogue }: {
   /** The field's name, for the button and the list. */
   label: string;
-  options: { id: string; displayName: string }[];
+  /** In order; `depth` 1 indents an option under the one before (a gesture's phase under the gesture). */
+  options: { id: string; displayName: string; depth?: number }[];
   value: string[];
   onChange: (next: string[]) => void;
   disabled?: boolean;
@@ -59,7 +60,7 @@ export function GestureMultiSelect({ label, options, value, onChange, disabled, 
           {options.map((option) => {
             const chosen = value.includes(option.id);
             return (
-              <li key={option.id} role="option" aria-selected={chosen} tabIndex={0} className="multi-select-option"
+              <li key={option.id} role="option" aria-selected={chosen} tabIndex={0} className={`multi-select-option${option.depth ? " multi-select-option-nested" : ""}`}
                 onClick={() => toggle(option.id)}
                 onKeyDown={(event) => {
                   if (event.key === " " || event.key === "Enter") {

@@ -130,6 +130,10 @@ export interface DatasetLabel {
   standard?: boolean;
   /** What archiving this label everywhere switched off, for restoring it. */
   archiveLog?: { disabledRecipes: string[]; archivedModels: string[] } | null;
+  /** For a phase of a held gesture: the gesture's label (`pinch` for `pinch_in`). See `labels/gestures.ts`. */
+  parent?: string | null;
+  /** Which phase of `parent` it is. */
+  phase?: "start" | "hold" | "end" | null;
 }
 
 /** The recordings in the order they were imported: oldest first. Without a sequence they keep the order they came in. */

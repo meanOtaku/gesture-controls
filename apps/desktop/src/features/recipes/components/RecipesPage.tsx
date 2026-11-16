@@ -14,6 +14,9 @@ import { listGestureDefinitions } from "../../gestureLibrary/gestureLibraryApi";
 import { pinchVolumeRecipe, blankRecipe, describeRecipe, offGesturesUsed, type DeviceKind } from "../recipeModel";
 import { ConflictAlerts } from "./ConflictAlerts";
 import { RecipeEditor } from "./RecipeEditor";
+import { invoke } from "@tauri-apps/api/core";
+import { gestureGroups, isHeld } from "../../labels/gestures";
+import type { DatasetLabel } from "../../model-lab/types";
 
 type RecipesPageProps = {
   automation: AutomationState | null;
@@ -36,9 +39,15 @@ export function RecipesPage({ automation, calibration, pendingRecipeIds, error, 
   const locations = calibration?.targets ?? [];
   // The Gesture library's gestures, which a recipe step can use. Read once when the page opens.
   const [gestures, setGestures] = useState<{ id: string; name: string }[]>([]);
+  const [held, setHeld] = useState<{ id: string; name: string; start: string; end: string }[]>([]);
   useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
     void listGestureDefinitions().then((all) => setGestures(all.map(({ id, name }) => ({ id, name })))).catch(() => setGestures([]));
+    // Held gestures, for a grab / release step: their start grabs, their end releases.
+    void invoke<DatasetLabel[]>("list_model_labels")
+      .then((labels) => setHeld(gestureGroups(Array.isArray(labels) ? labels : []).filter(isHeld)
+        .map((group) => ({ id: group.gesture.id, name: group.gesture.displayName, start: group.phases.start!.id, end: group.phases.end!.id }))))
+      .catch(() => setHeld([]));
   }, []);
   const gestureName = (id: string) => gestures.find((gesture) => gesture.id === id)?.name ?? "a removed gesture";
   const locationName = (id: string) => locations.find((location) => location.id === id)?.name ?? "a removed location";
@@ -83,7 +92,7 @@ export function RecipesPage({ automation, calibration, pendingRecipeIds, error, 
             />
           </CardHeader>
           <CardContent>
-            <RecipeEditor recipe={editing} locations={locations} modelLabels={automation?.loadedLabels ?? []} cameraGestures={gestures} onSave={save} onCancel={() => setEditing(null)} />
+            <RecipeEditor recipe={editing} locations={locations} modelLabels={automation?.loadedLabels ?? []} cameraGestures={gestures} heldGestures={held} onSave={save} onCancel={() => setEditing(null)} />
           </CardContent>
         </Card>
       )}

@@ -456,6 +456,16 @@ exception: Recordings says so and offers **Add to Datasets**, or you can delete 
 
 The **Labels** tab (first under Labels) is the one place labels are made and managed. A label is a short name for a gesture or an everyday activity the app can learn or recognise. Each label has an id (letters, digits and underscores, made from the name), a display name, optional notes and a role.
 
+- **Gestures and their phases.** A gesture you hold (Pinch, Fist) has three phases, each a label of its own under it:
+  its **start** (`pinch_in`, the moment it begins), its **hold** (`pinch_hold`) and its **end** (`pinch_out`, the moment
+  it is let go). The list shows each gesture with its phases indented under it, marked start, hold and end, and the
+  gesture as a **Held gesture**. **Add phases** on a gesture without them adds `<gesture>_in`, `_hold` and `_out`, named
+  after it and in its colour. A gesture without phases is momentary (a tap, a flick): its own label is its start. Labels
+  named like a gesture's phases (`fist_in` beside `fist`) are shown as its phases. Only the hierarchy is new: every
+  label keeps its id, so recordings, models and recipes are unchanged. A held gesture is recorded in its phases (the
+  Gesture session marks them with the camera from its Gesture library rule, or labels them at the cue: a short start,
+  the hold, a short end), trained phase by phase (the Train dropdown lists them under it), and offered for a recipe's
+  **Grab / release** (its start grabs, its end releases).
 - **Standard labels.** Three labels are the app's own and always listed, marked **Standard**: **Everyday noise**
   (`everyday_noise`, ordinary use of the hand with no gesture), **Hand still** (`still`, the hand held as still as you can)
   and **Hand on a support** (`supported`, resting on a desk, armrest or lap, flat or angled). They mean the

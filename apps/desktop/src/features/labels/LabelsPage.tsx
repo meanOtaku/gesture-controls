@@ -34,6 +34,7 @@ export function LabelsPage({ onOpen }: { onOpen?: (tab: UsageTab) => void }) {
         onOpenTab={onOpen}
         onCreate={catalogue.create}
         onUpdate={catalogue.update}
+        onAddPhases={catalogue.addPhases}
         onSetArchived={catalogue.setArchived}
         onDelete={catalogue.remove}
       />

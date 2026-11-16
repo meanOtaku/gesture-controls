@@ -2,6 +2,7 @@ import { OperationFeedback } from "../../components/app/OperationFeedback";
 import { telemetryStore } from "../telemetry/store/telemetryStore";
 import { startCameraMarking } from "./cameraMarker";
 import type { GestureDefinition } from "./definition";
+import { startPhaseMarking, type PhasedGesture } from "./phaseMarker";
 import { PINCH_HOLD, PINCH_LABELS, startPinchEdgeMarking, wantsPinchEdges } from "./pinchEdgeMarker";
 
 const KEY = "cameraMarkingOn";
@@ -77,20 +78,21 @@ class CameraAssist {
    * Called as a recording starts: marks `labels` (one or several) with `definitions`, or with the gestures the card
    * checked for them. Marking runs until `finish` or `disarm`, wherever the person goes in the app meanwhile.
    */
-  arm(labels: string | string[], definitions?: GestureDefinition[]): void {
+  arm(labels: string | string[], definitions?: GestureDefinition[], phased: PhasedGesture[] = []): void {
     this.stop();
     this.armedLabels = typeof labels === "string" ? [labels] : [...labels];
     const gestures = definitions ?? (sameLabels(this.armedLabels, this.readyLabels) ? this.readyDefinitions : []);
-    // Pinch in and pinch out are the moments the fingers meet and part, from the camera's thumb-to-index distance; any other
-    // gesture in the same recording (a gesture session of several) is marked from its library gesture alongside.
-    if (wantsPinchEdges(this.armedLabels)) {
-      const stops = [startPinchEdgeMarking(undefined, undefined, this.armedLabels.includes(PINCH_HOLD))];
-      const rest = this.armedLabels.filter((label) => !PINCH_LABELS.includes(label));
-      if (rest.length > 0) stops.push(startCameraMarking(rest, gestures));
-      this.stopMarking = () => stops.forEach((stop) => stop());
-    } else {
-      this.stopMarking = startCameraMarking(this.armedLabels, gestures);
-    }
+    // Pinch in and pinch out are the moments the fingers meet and part, from the camera's thumb-to-index distance; held
+    // gestures (`phased`) are marked in their phases from their library rules; any other gesture in the same recording (a
+    // gesture session of several) is marked from its library gesture alongside.
+    const stops: (() => void)[] = [];
+    const pinch = wantsPinchEdges(this.armedLabels);
+    if (pinch) stops.push(startPinchEdgeMarking(undefined, undefined, this.armedLabels.includes(PINCH_HOLD)));
+    const inPhases = new Set(phased.flatMap((g) => [g.start, g.hold, g.end].filter((l): l is string => l !== undefined)));
+    if (phased.length > 0) stops.push(startPhaseMarking(phased, gestures));
+    const rest = this.armedLabels.filter((label) => !(pinch && PINCH_LABELS.includes(label)) && !inPhases.has(label));
+    if (rest.length > 0) stops.push(startCameraMarking(rest, gestures));
+    this.stopMarking = () => stops.forEach((stop) => stop());
   }
   disarm(): void {
     this.stop();

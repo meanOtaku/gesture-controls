@@ -111,6 +111,17 @@ export function useLabelCatalogue() {
     }
   }, []);
 
+  /** Gives a gesture its start, hold and end labels (`<gesture>_in`, `_hold`, `_out`), so it is recorded and marked as held. */
+  const addPhases = useCallback(async (gesture: string): Promise<string | null> => {
+    try {
+      setLabels(await invoke<DatasetLabel[]>("add_gesture_phases", { gesture }));
+      OperationFeedback.success("Add phases", `Added the start, hold and end of ${gesture.replaceAll("_", " ")}.`);
+      return null;
+    } catch (err) {
+      return String(err);
+    }
+  }, []);
+
   const setArchived = useCallback(async (id: string, archived: boolean) => {
     try {
       setLabels(await invoke<DatasetLabel[]>("set_model_label_archived", { id, archived }));
@@ -128,5 +139,5 @@ export function useLabelCatalogue() {
     }
   }, []);
 
-  return { desktopAvailable, labels, models, coverageByLabel, gestureCountByLabel, recorderCountByLabel, usageFor, planFor, execute, error, create, update, setArchived, remove };
+  return { desktopAvailable, labels, models, coverageByLabel, gestureCountByLabel, recorderCountByLabel, usageFor, planFor, execute, error, create, update, addPhases, setArchived, remove };
 }

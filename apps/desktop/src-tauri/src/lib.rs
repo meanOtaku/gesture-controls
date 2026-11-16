@@ -333,6 +333,7 @@ pub fn run() {
             gesture_samples::save_gesture_samples,
             label_registry::list_model_labels,
             label_registry::create_model_label,
+            label_registry::add_gesture_phases,
             label_registry::update_model_label,
             label_registry::set_model_label_archived,
             label_registry::save_label_archive_log,

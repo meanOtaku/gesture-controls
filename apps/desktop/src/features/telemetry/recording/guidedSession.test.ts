@@ -68,3 +68,19 @@ describe("a guided session's plan", () => {
     expect(planProblem({ ...plan, activities: [{ activity: "", seconds: 10 }] })).toMatch(/activity/);
   });
 });
+
+describe("sessionLabelAt", () => {
+  it("labels a held gesture's start, hold and end around its cue, and a gesture without phases over its hold", async () => {
+    const { sessionLabelAt, planSteps: steps, LEAD_IN_MS: lead, PHASE_MARK_MS, DEFAULT_PLAN: base } = await import("./guidedSession");
+    const plan = { ...base, label: "fist", cues: 1, holdMs: 1000, activities: [], phases: { fist: { start: "fist_in", hold: "fist_hold", end: "fist_out" } } };
+    const s = steps(plan, () => 0.5);
+    expect(sessionLabelAt(plan, s, lead - 1)).toBeNull();
+    expect(sessionLabelAt(plan, s, lead + 10)).toBe("fist_in");
+    expect(sessionLabelAt(plan, s, lead + PHASE_MARK_MS + 10)).toBe("fist_hold");
+    expect(sessionLabelAt(plan, s, lead + 1000 + 10)).toBe("fist_out");
+    expect(sessionLabelAt(plan, s, lead + 1000 + PHASE_MARK_MS + 10)).toBeNull();
+    const plain = { ...plan, phases: undefined };
+    expect(sessionLabelAt(plain, s, lead + PHASE_MARK_MS + 10)).toBe("fist");
+    expect(sessionLabelAt(plain, s, lead + 1000 + 10)).toBeNull();
+  });
+});
