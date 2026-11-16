@@ -157,15 +157,17 @@ export function formatSeconds(ms: number): string {
   return `${(ms / 1000).toFixed(3)} s`;
 }
 
-/** A detection 680 to 1,280 ms after a start of its gesture catches it, as the trainer and the research count them. */
-export const CATCH_FROM_MS = 680;
-export const CATCH_TO_MS = 1280;
+/**
+ * A detection 680 to 1,280 ms after a start of its gesture catches it for the trees, which decide 880 ms after a start;
+ * each replay says its model's own window (100 to 900 ms for a CNN), as the trainer and the desktop count them.
+ */
+export const TREES_CATCH_WINDOW = { fromMs: 680, toMs: 1280, atMs: 880 } as const;
 /** Training takes a moment 880 ms after each labelled start; a span starting this long before a false detection puts it there. */
 export const DECISION_DELAY_MS = 880;
 
-/** Whether each detection caught a start of its gesture (one of `startsMs`), in order. */
-export function caughtStarts(detections: Span[], startsMs: number[]): boolean[] {
-  return detections.map((detection) => startsMs.some((start) => detection.startMs - start >= CATCH_FROM_MS && detection.startMs - start <= CATCH_TO_MS));
+/** Whether each detection caught a start of its gesture (one of `startsMs`), in order, by the model's catch window. */
+export function caughtStarts(detections: Span[], startsMs: number[], window: { fromMs: number; toMs: number } = TREES_CATCH_WINDOW): boolean[] {
+  return detections.map((detection) => startsMs.some((start) => detection.startMs - start >= window.fromMs && detection.startMs - start <= window.toMs));
 }
 
 /**

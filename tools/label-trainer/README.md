@@ -52,7 +52,7 @@ this trainer in a `spec.json`.
 5. Fits the decision threshold on the training recordings (each scored by a model trained without it), then evaluates on
    the held-out recordings: per moment, and replayed as a detector over each whole recording, at every pulse sample, through
    the runtime's own detection rule (`events.py`, kept equal to the runtime by `tests/fixtures/detection_cases.json`),
-   counting starts caught (680 to 1,280 ms after they began), delay, and false activations per hour.
+   counting starts caught (680 to 1,280 ms after they began for the trees; 100 to 900 ms for a CNN, `Spec.match_window_ms`), delay, and false activations per hour.
 6. Writes the trees as `model.trees` (`trees.py`: plain node arrays, read by `crates/label-inference/src/trees.rs`), and
    checks the file reproduces the trained model to 1e-6.
 7. Writes `bundle/` (manifest and model), `evaluation.json`, `inspection.json` and `result.json`. A model that does not pass

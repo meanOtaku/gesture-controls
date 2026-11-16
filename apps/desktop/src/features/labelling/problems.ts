@@ -1,4 +1,4 @@
-import { caughtStarts, LEFT_OUT, NO_LABEL, paint, PAIRING_WINDOW_MS, type Span } from "./labellingModel";
+import { TREES_CATCH_WINDOW, caughtStarts, LEFT_OUT, NO_LABEL, paint, PAIRING_WINDOW_MS, type Span } from "./labellingModel";
 
 /** A place where the labels, the camera and a model disagree: worth a look. */
 export interface Problem {
@@ -29,7 +29,7 @@ export function problemsIn(input: {
   contacts: { startMs: number; endMs: number }[] | null;
   /** Labels that are gestures (the camera's contacts are about them). */
   gestures: Set<string>;
-  models: { label: string; detections: Span[] }[];
+  models: { label: string; detections: Span[]; catchWindow?: { fromMs: number; toMs: number } }[];
   nameOf: (label: string) => string;
 }): Problem[] {
   const spans = effectiveSpans(input.recorded, input.byHand);
@@ -51,11 +51,13 @@ export function problemsIn(input: {
   }
   for (const model of input.models) {
     const starts = spans.filter((span) => span.label === model.label).map((span) => span.startMs);
-    caughtStarts(model.detections, starts).forEach((caught, i) => {
-      if (!caught) found.push({ atMs: model.detections[i].startMs, text: `The ${input.nameOf(model.label)} model fired with no ${input.nameOf(model.label)} starting 0.68 to 1.28 s before` });
+    const window = model.catchWindow ?? TREES_CATCH_WINDOW;
+    const seconds = (ms: number) => (ms / 1000).toFixed(ms % 100 === 0 ? 1 : 2);
+    caughtStarts(model.detections, starts, window).forEach((caught, i) => {
+      if (!caught) found.push({ atMs: model.detections[i].startMs, text: `The ${input.nameOf(model.label)} model fired with no ${input.nameOf(model.label)} starting ${seconds(window.fromMs)} to ${seconds(window.toMs)} s before` });
     });
     for (const start of starts) {
-      if (!caughtStarts(model.detections, [start]).some(Boolean)) found.push({ atMs: start, text: `The ${input.nameOf(model.label)} model missed this ${input.nameOf(model.label)}` });
+      if (!caughtStarts(model.detections, [start], window).some(Boolean)) found.push({ atMs: start, text: `The ${input.nameOf(model.label)} model missed this ${input.nameOf(model.label)}` });
     }
   }
   return found.sort((a, b) => a.atMs - b.atMs);

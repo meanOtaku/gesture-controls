@@ -74,6 +74,10 @@ V2_THRESHOLD_CANDIDATES = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.
 # accelerometer and gyroscope carry a random stretch of a training everyday-noise recording's motion (less its mean),
 # scaled by a factor in OVERLAY_SCALE. So the model sees its pinches made with the arm moving.
 OVERLAY_COPIES = 2
+# A CNN's catches count from this long after a start (`Spec.match_window_ms`), not from 300 ms (200 ms before its
+# 500 ms decision delay). On 2026-11-16, on the same 59 camera-timed pinch-outs, a v2 CNN fired with full confidence 150
+# to 290 ms after 12 of them and the first CNN after 9: counted as missed, though the model had caught them.
+CNN_MATCH_EARLIEST_MS = 100
 OVERLAY_SCALE = (0.5, 1.0)
 CNN_WINDOW_MS = 11_000
 PPG_SOURCES = ("watchPpg",)
@@ -192,6 +196,14 @@ class Spec:
     # The v2 CNN only: the gestures one network learns together (`multi_gesture.run_multi`), `target` the first of them.
     # Empty: one gesture, `target`.
     classes: tuple[str, ...] = ()
+
+    @property
+    def match_window_ms(self) -> tuple[int, int]:
+        """How long after a start a detection may come and still catch it: `ppg_onset.match_window_ms` for the model's
+        decision delay, but from CNN_MATCH_EARLIEST_MS for a CNN, which often fires as the gesture's motion starts, before
+        a window built around its decision delay opens."""
+        earliest, latest = ppg_onset.match_window_ms(self.decision_delay_ms)
+        return (CNN_MATCH_EARLIEST_MS, latest) if self.cnn else (earliest, latest)
 
     @property
     def gestures(self) -> tuple[str, ...]:
@@ -935,7 +947,7 @@ def detections(spec: Spec, recording: Recording, times: np.ndarray, scores: np.n
     `falseOn` counts the false activations by the label held where the start it fired for would be (`decision_delay_ms`
     before it), "unlabelled" where none is."""
     held = ppg_onset.holds(recording.timestamps_ns, recording.raw_labels)
-    earliest_ms, latest_ms = ppg_onset.match_window_ms(spec.decision_delay_ms)
+    earliest_ms, latest_ms = spec.match_window_ms
     latest_ns = latest_ms * 1_000_000
     starts = [s for s, _, label in held if label == spec.target and times[0] <= s + earliest_ms * 1_000_000 <= times[-1]]
     ignored = [(s, e) for s, e, label in held if label in set(spec.excludes)]
@@ -944,7 +956,7 @@ def detections(spec: Spec, recording: Recording, times: np.ndarray, scores: np.n
         # The runtime withholds a start the hand was not still before.
         still = still_mask(recording, np.array(rises, dtype=np.int64), spec.decision_delay_ms).tolist()
         rises = [rise for rise, ok in zip(rises, still) if ok]
-    pairs = ppg_onset.match_pairs(rises, starts, spec.decision_delay_ms)
+    pairs = ppg_onset.match_pairs(rises, starts, spec.decision_delay_ms, spec.match_window_ms)
     caught_rises, caught_starts = {i for i, _ in pairs}, {starts[j] for _, j in pairs}
     # Each gesture under way: from its start to the later of its end and its match window's.
     under_way = [(s, max(e, s + latest_ns), s in caught_starts) for s, e in gesture_episodes(held, spec.target)]

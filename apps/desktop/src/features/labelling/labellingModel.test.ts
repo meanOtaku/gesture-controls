@@ -73,6 +73,13 @@ describe("checking a model on a recording", () => {
     expect(caughtStarts(detections, [1000, 8000])).toEqual([true, false, false]);
   });
 
+  it("counts a CNN's detection by its own window, from 100 ms after a start", () => {
+    const early: Span[] = [{ startMs: 1200, endMs: 1240, label: "pinch" }];
+    expect(caughtStarts(early, [1000])).toEqual([false]);
+    expect(caughtStarts(early, [1000], { fromMs: 100, toMs: 900 })).toEqual([true]);
+    expect(caughtStarts([{ startMs: 1050, endMs: 1090, label: "pinch" }], [1000], { fromMs: 100, toMs: 900 })).toEqual([false]);
+  });
+
   it("labels a false detection from 880 ms before it, so training takes that moment as a negative", () => {
     expect(negativeSpanFor(5000)).toEqual({ startMs: 4120, endMs: 5120 });
     expect(negativeSpanFor(300).startMs).toBe(0);

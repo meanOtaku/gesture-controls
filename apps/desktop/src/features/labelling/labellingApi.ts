@@ -100,6 +100,15 @@ export interface ModelReplay {
   rejections: string[];
   /** Where detections would start at other thresholds (the same scores through the same rule). */
   sweep?: { threshold: number; risesMs: number[] }[];
+  /** When its detections catch a start: from its kind and decision delay (`sealed_test::CatchWindow`). */
+  catchWindow?: CatchWindow;
+}
+
+/** A detection `fromMs` to `toMs` after a start catches it. */
+export interface CatchWindow {
+  fromMs: number;
+  toMs: number;
+  atMs: number;
 }
 
 /** Runs every active model over the recording, in Monitor; read-only. */

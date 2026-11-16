@@ -36,7 +36,7 @@ Do **not** define "no activation rate" as the fraction of quiet sample windows. 
 - The positive unit is one labelled `pinch_in` start.
 - A **gesture under way** runs from that start through the parts of the same gesture that follow it without a gap (`pinch_hold`, `pinch_out`: labels with the same name before the first `_`), and at least to the end of the start's match window.
 - Each emitted event is exactly one of:
-  - **catch**: the event paired with a start inside its match window (680–1,280 ms after the start for the trees, which decide 880 ms after it). This is the valid activation for that pinch.
+  - **catch**: the event paired with a start inside its match window (680–1,280 ms after the start for the trees, which decide 880 ms after it; 100–900 ms for the CNNs, which decide at 500 ms but often fire as the motion starts: on 2026-11-16 both CNNs fired 150–290 ms after camera-timed pinch-out starts they had clearly caught). This is the valid activation for that pinch.
   - **repeat**: another event while a caught gesture is under way.
   - **late**: an event while a gesture is under way that was not caught in its window. The gesture counts as missed; the event is not a false activation.
   - **false activation**: any other event, that is, one with no gesture under way. An event after a pinch has ended, for example when the hand opens, is a false activation: the user would see a second action.

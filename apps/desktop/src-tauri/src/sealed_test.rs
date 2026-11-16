@@ -7,8 +7,9 @@
 //!
 //! A gesture's starts are counted as the trainer counts them: runs of the label each row trains on (its hand label where it
 //! has one), joined across gaps under 400 ms, kept when they last at least 200 ms. A detection catches a start when it rises
-//! 680 to 1,280 ms after it (the one closest to 880 ms, each start caught once); any other is a repeat, late, or a false
-//! activation, as `detector_events` counts them.
+//! in the model's [`CatchWindow`] after it (680 to 1,280 ms for the trees, 100 to 900 ms for the CNNs; each start caught
+//! once); any other is a repeat, late, or a false activation, as `detector_events` counts
+//! them.
 
 use std::fs;
 use std::path::Path;
@@ -23,9 +24,51 @@ use crate::labelling;
 use crate::model_lab;
 
 const LOG_FILE: &str = "sealed-tests.json";
-const CATCH_FROM_MS: f64 = 680.0;
-pub(crate) const CATCH_TO_MS: f64 = 1280.0;
-const CATCH_AT_MS: f64 = 880.0;
+
+/// When a detection catches a start: `from_ms` to `to_ms` after it, the start it is closest to `at_ms` after. It follows
+/// the model's decision delay as the trainer's `Spec.match_window_ms` does: from 200 ms before the delay to 400 ms after
+/// it (680 to 1,280 ms for the trees, which decide 880 ms after a start), but for a CNN (500 ms), which often fires as the
+/// gesture's motion starts, from [`CNN_CATCH_FROM_MS`].
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatchWindow {
+    pub from_ms: f64,
+    pub to_ms: f64,
+    pub at_ms: f64,
+}
+
+/// The trainer's `CNN_MATCH_EARLIEST_MS`.
+pub const CNN_CATCH_FROM_MS: f64 = 100.0;
+
+impl CatchWindow {
+    /// The window of a model of `kind` that decides `decision_delay_ms` after a start.
+    pub fn for_model(kind: label_inference::ModelKind, decision_delay_ms: u32) -> Self {
+        let delay = f64::from(decision_delay_ms);
+        Self {
+            from_ms: match kind {
+                label_inference::ModelKind::Cnn
+                | label_inference::ModelKind::CnnMedian
+                | label_inference::ModelKind::CnnV2 => CNN_CATCH_FROM_MS,
+                label_inference::ModelKind::PpgOnly | label_inference::ModelKind::PpgImu => {
+                    delay - 200.0
+                }
+            },
+            to_ms: delay + 400.0,
+            at_ms: delay,
+        }
+    }
+}
+
+impl Default for CatchWindow {
+    /// The trees' window, which decide 880 ms after a start.
+    fn default() -> Self {
+        Self {
+            from_ms: 680.0,
+            to_ms: 1280.0,
+            at_ms: 880.0,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -94,9 +137,13 @@ pub(crate) fn starts_of(pair: &Pair, label: &str) -> Result<(Vec<f64>, f64), Str
     Ok((starts, duration))
 }
 
-/// For each detection, in order, the unmatched start it catches: one it rises 680 to 1,280 ms after (the one closest to
-/// 880 ms). None for a false activation.
-pub(crate) fn assign(detections: &[f64], starts: &[f64]) -> Vec<Option<usize>> {
+/// For each detection, in order, the unmatched start it catches: one it rises within `window` after (the one closest to
+/// `window.at_ms`). None for a false activation.
+pub(crate) fn assign(
+    detections: &[f64],
+    starts: &[f64],
+    window: CatchWindow,
+) -> Vec<Option<usize>> {
     let mut used = vec![false; starts.len()];
     detections
         .iter()
@@ -105,12 +152,12 @@ pub(crate) fn assign(detections: &[f64], starts: &[f64]) -> Vec<Option<usize>> {
                 .iter()
                 .enumerate()
                 .filter(|(i, start)| {
-                    !used[*i] && (CATCH_FROM_MS..=CATCH_TO_MS).contains(&(detection - **start))
+                    !used[*i] && (window.from_ms..=window.to_ms).contains(&(detection - **start))
                 })
                 .min_by(|a, b| {
-                    ((detection - a.1) - CATCH_AT_MS)
+                    ((detection - a.1) - window.at_ms)
                         .abs()
-                        .total_cmp(&((detection - b.1) - CATCH_AT_MS).abs())
+                        .total_cmp(&((detection - b.1) - window.at_ms).abs())
                 })
                 .map(|(i, _)| i);
             if let Some(i) = best {
@@ -135,15 +182,20 @@ fn median(values: &mut [f64]) -> Option<f64> {
 }
 
 /// The detections that count: not those judging a moment inside a stretch left out on the Labelling page, which is
-/// neither the gesture nor not it. A detection judges the moment 880 ms before it, as training does.
-pub(crate) fn outside_left_out(detections: &[f64], holds: &[dataset_files::Hold]) -> Vec<f64> {
+/// neither the gesture nor not it. A detection judges the moment the model's decision delay (`delay_ms`) before it, as
+/// training does.
+pub(crate) fn outside_left_out(
+    detections: &[f64],
+    holds: &[dataset_files::Hold],
+    delay_ms: f64,
+) -> Vec<f64> {
     detections
         .iter()
         .copied()
         .filter(|&at| {
             !holds.iter().any(|hold| {
                 hold.label == dataset_files::LEFT_OUT_LABEL
-                    && (hold.start_ms..=hold.end_ms).contains(&(at - CATCH_AT_MS))
+                    && (hold.start_ms..=hold.end_ms).contains(&(at - delay_ms))
             })
         })
         .collect()
@@ -200,6 +252,7 @@ fn test_recording(
         &label,
         excluded,
         judged_span(&replay, duration_ms),
+        replay.catch_window,
     );
     let delays = counted.latencies(&starts);
     Ok((counted.totals, duration_ms / 60_000.0, delays))
@@ -390,10 +443,38 @@ mod tests {
         // 900 ms catches the start at 0; 950 ms finds it taken; 5 s is near no start; 9.2 s catches the start at 8 s, and 9.3 s
         // would be too late for it.
         assert_eq!(
-            assign(&[900.0, 950.0, 5000.0, 9200.0], &[0.0, 8000.0]),
+            assign(
+                &[900.0, 950.0, 5000.0, 9200.0],
+                &[0.0, 8000.0],
+                CatchWindow::default()
+            ),
             [Some(0), None, None, Some(1)]
         );
-        assert_eq!(assign(&[9300.0], &[8000.0]), [None]);
+        assert_eq!(assign(&[9300.0], &[8000.0], CatchWindow::default()), [None]);
+    }
+
+    #[test]
+    fn the_catch_window_follows_the_model_s_decision_delay_and_opens_early_for_a_cnn() {
+        use label_inference::ModelKind;
+        let window = |kind, delay| {
+            let w = CatchWindow::for_model(kind, delay);
+            (w.from_ms, w.to_ms, w.at_ms)
+        };
+        assert_eq!(window(ModelKind::PpgImu, 880), (680.0, 1280.0, 880.0));
+        assert_eq!(
+            CatchWindow::default(),
+            CatchWindow::for_model(ModelKind::PpgImu, 880)
+        );
+        for kind in [ModelKind::Cnn, ModelKind::CnnMedian, ModelKind::CnnV2] {
+            assert_eq!(window(kind, 500), (100.0, 900.0, 500.0));
+        }
+        // A CNN firing 200 or 400 ms after a start catches it; with the trees' window it would not.
+        let cnn = CatchWindow::for_model(ModelKind::CnnMedian, 500);
+        assert_eq!(assign(&[1200.0], &[1000.0], cnn), [Some(0)]);
+        assert_eq!(assign(&[1400.0], &[1000.0], cnn), [Some(0)]);
+        assert_eq!(assign(&[1400.0], &[1000.0], CatchWindow::default()), [None]);
+        // Before 100 ms is not a catch.
+        assert_eq!(assign(&[1050.0], &[1000.0], cnn), [None]);
     }
 
     #[test]

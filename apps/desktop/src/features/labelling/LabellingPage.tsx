@@ -552,7 +552,7 @@ export function LabellingPage() {
           ? { ...ran, threshold: point.threshold, detections: point.risesMs.map((at) => ({ startMs: at, endMs: at + 40, label: ran.label })) }
           : ran;
         const starts = [...(recording?.labelIntervals ?? []), ...spans].filter((span) => span.label === replay.label).map((span) => span.startMs);
-        const caught = caughtStarts(replay.detections, starts);
+        const caught = caughtStarts(replay.detections, starts, ran.catchWindow);
         return { replay, own: ran.threshold, caught, starts: starts.length };
       }),
     [replays, tried, recording, spans],

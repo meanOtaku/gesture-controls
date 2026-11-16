@@ -2,8 +2,8 @@
 //! does (`label_train.detections`, `label_train.cohort`), for the desktop's own replays: the Threshold card, the Mistakes
 //! list, model comparison and the final test.
 //!
-//! Each detection is exactly one of: a **catch** (paired with a start of the gesture it rises 680 to 1,280 ms after,
-//! `sealed_test::assign`), a **repeat** (another detection while a caught gesture is under way), **late** (one while a gesture
+//! Each detection is exactly one of: a **catch** (paired with a start of the gesture it rises within the model's
+//! `sealed_test::CatchWindow` after, `sealed_test::assign`), a **repeat** (another detection while a caught gesture is under way), **late** (one while a gesture
 //! is under way that was not caught in its window: the gesture counts as missed), or a **false activation** (one with no
 //! gesture under way). A gesture is under way from its start, through the holds of the same gesture that follow it without a
 //! gap (`pinch_in`, then `pinch_hold` and `pinch_out`), and at least to the end of its match window. False activations are
@@ -158,13 +158,14 @@ pub fn count(
     target: &str,
     excluded: &[String],
     span: (f64, f64),
+    window: sealed_test::CatchWindow,
 ) -> Counted {
     let ignored: Vec<(f64, f64)> = holds
         .iter()
         .filter(|hold| excluded.contains(&hold.label))
         .map(|hold| (hold.start_ms, hold.end_ms))
         .collect();
-    let rises: Vec<f64> = sealed_test::outside_left_out(detections, holds)
+    let rises: Vec<f64> = sealed_test::outside_left_out(detections, holds, window.at_ms)
         .into_iter()
         .filter(|rise| {
             !ignored
@@ -172,7 +173,7 @@ pub fn count(
                 .any(|(start, end)| (*start..=*end).contains(rise))
         })
         .collect();
-    let assigned = sealed_test::assign(&rises, starts);
+    let assigned = sealed_test::assign(&rises, starts, window);
     let caught: Vec<bool> = (0..starts.len())
         .map(|i| assigned.contains(&Some(i)))
         .collect();
@@ -180,7 +181,7 @@ pub fn count(
         .into_iter()
         .filter_map(|(start, end)| {
             let i = starts.iter().position(|s| *s == start)?;
-            Some((start, end.max(start + sealed_test::CATCH_TO_MS), i))
+            Some((start, end.max(start + window.to_ms), i))
         })
         .collect();
     let mut totals = EventTotals {
@@ -360,6 +361,7 @@ mod tests {
             "pinch_in",
             &[],
             (0.0, 19_990.0),
+            sealed_test::CatchWindow::default(),
         );
         let t = &counted.totals;
         assert_eq!(
@@ -405,6 +407,7 @@ mod tests {
             "pinch",
             &["walking".into()],
             (0.0, 10_000.0),
+            sealed_test::CatchWindow::default(),
         );
         let t = &counted.totals;
         // 6.5 s judges 5.62 s, left out; 8.5 s rises during walking, excluded; 9.5 s is false.

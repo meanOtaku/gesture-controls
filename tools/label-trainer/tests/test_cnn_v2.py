@@ -138,3 +138,14 @@ def test_a_multi_gesture_network_scores_each_gesture_and_its_file_reproduces_it(
     assert abs(cnn_v2.predict(data, x[:50]) - p).max() < cnn_v2.PARITY_TOLERANCE
     with pytest.raises(ValueError):
         cnn_v2.load(data)
+
+
+def test_a_cnn_catches_a_start_from_100_ms_the_trees_from_680():
+    raw = {"version": 1, "target": "pinch_in", "recordings": {}, "train": [], "evaluation": []}
+    assert lt.parse_spec({**raw, "backend": lt.CNN_BACKEND, "sources": ["watchPpg", "watchOrientation"]}).match_window_ms == (lt.CNN_MATCH_EARLIEST_MS, 900)
+    assert lt.parse_spec({**raw, "backend": lt.CNN_V2_BACKEND}).match_window_ms == (lt.CNN_MATCH_EARLIEST_MS, 900)
+    assert lt.parse_spec(raw).match_window_ms == (680, 1280)
+    from label_trainer import ppg_onset
+    ms = 1_000_000
+    assert ppg_onset.match_pairs([1200 * ms], [1000 * ms], 500, (100, 900)) == [(0, 0)]
+    assert ppg_onset.match_pairs([1200 * ms], [1000 * ms], 500) == []

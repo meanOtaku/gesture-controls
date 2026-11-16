@@ -718,6 +718,8 @@ pub struct ModelReplay {
     /// Where detections would start at other thresholds: these scores through the same detection rule, from `SWEEP_FROM`
     /// to `SWEEP_TO` and then each of `SWEEP_FINE`. Close to a run at that threshold, but not exact where a stretch was not scored.
     pub sweep: Vec<SweepPoint>,
+    /// When its detections catch a start (from its kind and decision delay), as the trainer and the desktop count them.
+    pub catch_window: crate::sealed_test::CatchWindow,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -818,6 +820,10 @@ pub(crate) fn replay(
             detections: Vec::new(),
             rejections: Vec::new(),
             sweep: Vec::new(),
+            catch_window: crate::sealed_test::CatchWindow::for_model(
+                model.kind,
+                model.decision_delay_ms,
+            ),
         })
         .collect();
     let thresholds: Vec<model_lab_core::Thresholds> =

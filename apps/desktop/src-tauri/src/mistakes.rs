@@ -20,8 +20,6 @@ use crate::sealed_test;
 /// (often the hand opening).
 const NEAR_BEFORE_MS: f64 = 500.0;
 const AFTER_END_MS: f64 = 2000.0;
-/// Training takes a decision 880 ms after the moment it describes: what was going on then is what fooled the model.
-const DECISION_DELAY_MS: f64 = 880.0;
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -109,7 +107,15 @@ fn mistakes_in(
         span,
     } = *recording;
     let rises: Vec<f64> = replay.detections.iter().map(|d| d.start_ms).collect();
-    let counted = detector_events::count(&rises, starts, holds, target, excluded, span);
+    let counted = detector_events::count(
+        &rises,
+        starts,
+        holds,
+        target,
+        excluded,
+        span,
+        replay.catch_window,
+    );
     let mut mistakes = Vec::new();
     for (i, &start) in starts.iter().enumerate() {
         if !counted.caught[i] {
@@ -120,7 +126,7 @@ fn mistakes_in(
                     &replay.times_ms,
                     &replay.scores,
                     start,
-                    start + sealed_test::CATCH_TO_MS,
+                    start + replay.catch_window.to_ms,
                 ),
                 why: None,
                 during: Some(replay.label.clone()),
@@ -156,7 +162,8 @@ fn mistakes_in(
                 (
                     "false",
                     Some(why),
-                    label_at(holds, rise - DECISION_DELAY_MS).or_else(|| label_at(holds, rise)),
+                    label_at(holds, rise - replay.catch_window.at_ms)
+                        .or_else(|| label_at(holds, rise)),
                 )
             }
         };
@@ -286,6 +293,7 @@ fn add_sweep(
             recording.target,
             recording.excluded,
             recording.span,
+            replay.catch_window,
         );
         if rows.len() <= i {
             rows.push((point.threshold, Vec::new()));
@@ -517,6 +525,7 @@ mod tests {
                 .collect(),
             rejections: Vec::new(),
             sweep: Vec::new(),
+            catch_window: sealed_test::CatchWindow::default(),
         }
     }
 

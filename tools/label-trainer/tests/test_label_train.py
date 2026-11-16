@@ -288,7 +288,8 @@ def test_a_false_activation_is_counted_by_the_label_it_fell_on() -> None:
     labels[(t >= 2_000 * ms) & (t < 2_400 * ms)] = "pinch_in"
     labels[(t >= 8_000 * ms) & (t < 10_000 * ms)] = "pinch"
     recording = type("R", (), {"timestamps_ns": t, "raw_labels": labels})()
-    spec = type("S", (), {"target": "pinch_in", "excludes": (), "decision_delay_ms": 500, "steady_starts": False})()
+    spec = type("S", (), {"target": "pinch_in", "excludes": (), "decision_delay_ms": 500, "steady_starts": False,
+                          "match_window_ms": (lt.CNN_MATCH_EARLIEST_MS, 900)})()
     scores = np.zeros(len(t))
     for at_ms in (2_500, 8_600, 15_000):  # a catch, one during 'pinch', one in nothing
         scores[(t >= at_ms * ms) & (t < (at_ms + 60) * ms)] = 1.0
