@@ -21,7 +21,7 @@ group("readiness", () => {
   });
 
   it("says what to do in a few words", () => {
-    expect(describe("ready")).toMatchObject({ title: "Ready to pinch", tone: "ok" });
+    expect(describe("ready")).toMatchObject({ title: "Ready for a gesture", tone: "ok" });
     expect(describe("settling")).toMatchObject({ title: "Hold still", tone: "wait" });
     expect(describe("gap")).toMatchObject({ title: "Signal dropped", tone: "off", countdown: "back in " });
   });

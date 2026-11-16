@@ -13,6 +13,7 @@ import { Label } from "../../../components/ui/label";
 import { useSessionState } from "../hooks/useSessionState";
 import { useTrainingRun } from "../hooks/useTrainingRun";
 import { CNN_METHOD, CNN_MODEL, CNN_V2_METHOD, CNN_V2_MODEL, PULSE_MODEL, TREES_METHOD, buildRequest, defaultStages, hasLabel, otherLabels, recordingsWithLabel, stagesForRequest, type OtherRole, type StageDraft, type StartPoint, type TrainMethod, type TrainPlan, type TrainerEnvironment } from "../training";
+import { GestureMultiSelect } from "./GestureMultiSelect";
 import { TrainingPlanEditor } from "./TrainingPlanEditor";
 import { datasetLabels, inImportOrder, recordingNumber, type DatasetLabel, type DatasetSummary } from "../types";
 import { LabelTiming } from "./LabelTiming";
@@ -63,12 +64,15 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
   // Sealed recordings are kept for the final test: never trained on, nor used to choose anything.
   const candidates = useMemo(() => inImportOrder(datasets.filter((dataset) => datasetLabels(dataset).length > 0 && !dataset.sealed)), [datasets]);
   const sealedCount = useMemo(() => datasets.filter((dataset) => dataset.sealed).length, [datasets]);
-  // Gestures that can be learnt with the target: the other gesture labels in the recordings you can choose.
-  const gestureChoices = useMemo(() => target === "" ? [] : usable.filter((label) => label.role === "positiveGesture" && label.id !== target && candidates.some((dataset) => hasLabel(dataset, label.id))).map((label) => label.id),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [labels, candidates, target]);
-  const learnt = useMemo(() => (method === CNN_V2_METHOD ? alsoGestures.filter((id) => gestureChoices.includes(id)) : []), [method, alsoGestures, gestureChoices]);
+  // The gestures ticked to teach: the target first, then the others one CNN v2 learns with it (a stable list, so the
+  // recordings list is not drawn again for nothing).
+  const usableKey = usable.map((label) => label.id).join(",");
+  const alsoTicked = useMemo(() => alsoGestures.filter((id) => id !== target && usableKey.split(",").includes(id)), [alsoGestures, target, usableKey]);
+  const chosenGestures = useMemo(() => (target === "" ? [] : [target, ...alsoTicked]), [target, alsoTicked]);
+  const learnt = useMemo(() => (method === CNN_V2_METHOD ? alsoTicked : []), [method, alsoTicked]);
   const multi = learnt.length > 0;
+  // Several ticked with a model that learns one gesture: only the first is taught.
+  const ignoredGestures = method === CNN_V2_METHOD ? [] : alsoTicked;
   // A gesture learnt too is not "something else": it has no role to choose.
   const others = useMemo(() => otherLabels(datasets, selected, target).filter((label) => !learnt.includes(label)), [datasets, selected, target, learnt]);
   const chosen = useMemo(() => candidates.filter((dataset) => selected.has(dataset.id)), [candidates, selected]);
@@ -133,6 +137,22 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
       else next.add(id);
       return next;
     }), [setSelected]);
+
+  /** The gestures ticked: the first is the target; ticking a second makes the model CNN v2, which can learn several. */
+  const chooseGestures = (next: string[]) => {
+    if (next.length === 0) {
+      chooseTarget("");
+      return;
+    }
+    if (target === "") chooseTarget(next[0]);
+    else if (next[0] !== target) {
+      setTarget(next[0]);
+      setStartFrom("");
+      run.clearResult();
+    }
+    setAlsoGestures(next.slice(1));
+    if (next.length > 1 && method !== CNN_V2_METHOD) setMethod(CNN_V2_METHOD);
+  };
 
   const chooseTarget = (label: string) => {
     setTarget(label);
@@ -243,33 +263,19 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
         </section>
 
         <div className="field">
-          <div className="field-head"><Label htmlFor={`${uid}-label`} required>Label to teach</Label></div>
-          <select id={`${uid}-label`} className={NATIVE_SELECT} value={target} disabled={running !== null} onChange={(event) => chooseTarget(event.target.value)}>
-            <option value="">Choose a label…</option>
-            {usable.map((label) => <option key={label.id} value={label.id}>{label.displayName}</option>)}
-          </select>
-          {usable.length === 0 && <p className="field-hint">Add a label on the Labels page first.</p>}
+          <div className="field-head"><Label required>Gestures to teach</Label></div>
+          <GestureMultiSelect label="Gestures to teach" placeholder="Choose one or more…" catalogue={labels} disabled={running !== null}
+            options={usable.map((label) => ({ id: label.id, displayName: label.displayName }))} value={chosenGestures} onChange={chooseGestures} />
+          {usable.length === 0 ? (
+            <p className="field-hint">Add a label on the Labels page first.</p>
+          ) : multi ? (
+            <p className="field-hint">One network learns {chosenGestures.join(", ")} together: they compete, so one movement is taken for one of them at most. Each gets its own model under Models, with its own cut-off, to activate on its own, and each is tested on the same recordings; Inspect shows which gesture is mistaken for which. It trains from scratch.</p>
+          ) : ignoredGestures.length > 0 ? (
+            <p className="field-hint"><strong>Only CNN v2 learns several gestures in one model:</strong> with this model only {target} is taught. Choose CNN v2 to teach {chosenGestures.join(", ")} together.</p>
+          ) : (
+            <p className="field-hint">Tick one gesture for a model of its own, or several for one CNN v2 that learns them together, so they compete instead of all going off on one movement.</p>
+          )}
         </div>
-
-        {target !== "" && method === CNN_V2_METHOD && gestureChoices.length > 0 && (
-          <fieldset className="flex flex-col gap-2">
-            <legend className="label">Also learn in the same model</legend>
-            <div className="flex flex-wrap gap-4">
-              {gestureChoices.map((id) => (
-                <label key={id} className="flex items-center gap-2 text-sm">
-                  <Checkbox checked={learnt.includes(id)} disabled={running !== null} aria-label={`Also learn ${id}`}
-                    onCheckedChange={(on) => setAlsoGestures((previous) => (on === true ? [...previous.filter((g) => g !== id), id] : previous.filter((g) => g !== id)))} />
-                  <LabelSwatch label={id} catalogue={labels} /><code>{id}</code>
-                </label>
-              ))}
-            </div>
-            <p className="field-hint">
-              {multi
-                ? `One network learns ${[target, ...learnt].join(", ")} together: they compete, so one movement is taken for one of them at most. Each gets its own model under Models, with its own cut-off, to activate on its own, and each is tested on the same recordings. Inspect shows which gesture is mistaken for which. It trains from scratch.`
-                : "Tick another gesture to learn it in the same network as this one, so the two compete instead of both going off on one movement. Each still gets its own model."}
-            </p>
-          </fieldset>
-        )}
 
         {target !== "" && method === CNN_V2_METHOD && !multi && (
           <div className="field">
@@ -292,7 +298,7 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
 
         {target !== "" && (
           <>
-            <TrainingRecordings candidates={candidates} selected={selected} disabled={running !== null} labels={labels} target={target} sealedCount={sealedCount} sessionOf={sessionOf} toggleRecording={toggleRecording} />
+            <TrainingRecordings candidates={candidates} selected={selected} disabled={running !== null} labels={labels} gestures={chosenGestures} sealedCount={sealedCount} sessionOf={sessionOf} toggleRecording={toggleRecording} />
 
             {others.length > 0 && (
               <fieldset className="flex flex-col gap-2">
@@ -365,7 +371,7 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
                     <legend className="label">Training plan</legend>
                     <div className="flex items-start gap-2 text-sm">
                       <Checkbox checked={staged} disabled={running !== null} onCheckedChange={toggleStaged} aria-label="Train in stages" />
-                      <span><strong>Train in stages</strong> <small className="text-muted-foreground">Choose the order it learns from the recordings, such as pinches, then everyday noise, then pinches again. Each stage carries on from where the one before left it. Off, it learns from all of them at once.</small></span>
+                      <span><strong>Train in stages</strong> <small className="text-muted-foreground">Choose the order it learns from the recordings, such as the gesture, then everyday noise, then the gesture again. Each stage carries on from where the one before left it. Off, it learns from all of them at once.</small></span>
                     </div>
                     {staged && <TrainingPlanEditor stages={stages} onChange={setStages} chosen={chosen} datasets={datasets} target={target} disabled={running !== null} />}
                   </fieldset>
@@ -432,8 +438,10 @@ function SplitCoverageTable({ rows, label }: { rows: SplitCondition[]; label: st
 
 
 /** Progress and runtime polling must not rebuild the recording checkboxes and swatches. */
-const TrainingRecordings = memo(function TrainingRecordings({ candidates, selected, disabled, labels, target, sealedCount, sessionOf, toggleRecording }: {
-  candidates: DatasetSummary[]; selected: Set<string>; disabled: boolean; labels: DatasetLabel[]; target: string; sealedCount: number;
+const TrainingRecordings = memo(function TrainingRecordings({ candidates, selected, disabled, labels, gestures, sealedCount, sessionOf, toggleRecording }: {
+  candidates: DatasetSummary[]; selected: Set<string>; disabled: boolean; labels: DatasetLabel[];
+  /** The gestures being taught: each recording says which of them it holds. */
+  gestures: string[]; sealedCount: number;
   /** For a chosen recording that shares a session with others: which set (from 1), and how many are in it. */
   sessionOf: ReadonlyMap<string, { number: number; size: number }>;
   toggleRecording: (id: string) => void;
@@ -451,7 +459,7 @@ const TrainingRecordings = memo(function TrainingRecordings({ candidates, select
                       <span>{dataset.sequence ? <strong className="mr-2 font-mono">{recordingNumber(dataset)}</strong> : null}{recordingTitle(dataset)}{dataset.camera ? "" : <span className="text-muted-foreground"> · no camera</span>}{dataset.labelsFrom === "motion" ? <span className="text-muted-foreground"> · estimated labels</span> : null}</span>
                       <Badge variant="outline" aria-label={`Dataset group: ${dataset.group?.trim() || "Ungrouped"}`}>Group: {dataset.group?.trim() || "Ungrouped"}</Badge>
                       <small className="text-muted-foreground">{datasetLabels(dataset).map((label) => <LabelSwatch key={label} label={label} catalogue={labels} />)}{datasetLabels(dataset).join(", ")}</small>
-                      {hasLabel(dataset, target) && <Badge variant="secondary">has {target}</Badge>}
+                      {gestures.filter((gesture) => hasLabel(dataset, gesture)).map((gesture) => <Badge key={gesture} variant="secondary">has {gesture}</Badge>)}
                       {sessionOf.has(dataset.id) && (
                         <Badge variant="outline" className="session-badge" data-session={(sessionOf.get(dataset.id)!.number - 1) % 6}
                           title={`Shares watch samples with ${sessionOf.get(dataset.id)!.size - 1} other chosen recording${sessionOf.get(dataset.id)!.size === 2 ? "" : "s"}: they train or test together, and each moment counts once.`}>

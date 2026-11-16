@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { telemetryStore } from "../store/telemetryStore";
-import { CUE_BUZZ_MS, labelAt, planSteps, stepAt, totalMs, type GuidedPlan, type GuidedStep } from "./guidedSession";
+import { CUE_BUZZ_MS, labelAt, labelsCue, planSteps, stepAt, totalMs, type GuidedPlan, type GuidedStep } from "./guidedSession";
 import { timedCapture } from "./timedCapture";
 
 /** How often the runner checks the clock: a cue's label starts within this of the cue. */
@@ -19,7 +19,7 @@ interface Running {
 }
 
 /** Which card started the session, so only that one shows its prompts. */
-export type GuidedSource = "guided" | "pinch" | "noise";
+export type GuidedSource = "guided" | "gesture" | "noise";
 
 export interface GuidedSnapshot {
   steps: GuidedStep[];
@@ -65,11 +65,10 @@ function tick() {
     session.lastCueIndex = now.index;
     buzz(session);
   }
-  // With the camera marking the recording, the session only cues.
-  if (session.plan.labelCues !== false) {
-    const wanted = labelAt(session.steps, elapsed);
-    if (wanted !== session.applied && telemetryStore.setTimelineLabel(wanted, "guided_cue")) session.applied = wanted;
-  }
+  // The session labels the cues the camera does not mark; for the others it only cues.
+  const at = labelAt(session.steps, elapsed);
+  const wanted = at !== null && now?.step.kind === "cue" && !labelsCue(session.plan, at) ? null : at;
+  if (session.plan.labelCues !== false && wanted !== session.applied && telemetryStore.setTimelineLabel(wanted, "guided_cue")) session.applied = wanted;
   publish();
 }
 

@@ -47,11 +47,11 @@ afterEach(() => {
 describe("ModelPipeline", () => {
   it("shows both kinds of model's pipelines and research results", () => {
     render(<ModelPipeline />);
-    const pipeline = screen.getByRole("region", { name: "PPG + IMU pinch-start model pipeline" });
+    const pipeline = screen.getByRole("region", { name: "PPG + IMU gesture-start model pipeline" });
     expect(within(pipeline).getAllByRole("listitem")).toHaveLength(6);
     expect(within(pipeline).getByRole("list", { name: "Pipeline stages" })).toHaveTextContent("ExtraTrees");
     expect(within(pipeline).getByLabelText("Research results")).toHaveTextContent("0.873");
-    const cnn = screen.getByRole("region", { name: "CNN pinch-start model pipeline" });
+    const cnn = screen.getByRole("region", { name: "CNN gesture-start model pipeline" });
     expect(within(cnn).getAllByRole("listitem")).toHaveLength(5);
     expect(within(cnn).getByRole("list", { name: "Pipeline stages" })).toHaveTextContent("median and spread");
     expect(within(cnn).getByLabelText("Research results")).toHaveTextContent("69%");
@@ -61,9 +61,9 @@ describe("ModelPipeline", () => {
 describe("Model Lab, where the Network lab was", () => {
   it("folds how the models work away, and opens it from the Train card's link", async () => {
     render(<ModelLab />);
-    expect(screen.queryByRole("region", { name: "CNN pinch-start model pipeline" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "CNN gesture-start model pipeline" })).not.toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "See how it works" }));
-    expect(await screen.findByRole("region", { name: "CNN pinch-start model pipeline" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "CNN gesture-start model pipeline" })).toBeInTheDocument();
   });
 
   it("looks inside a model from its More menu, and closes it", async () => {

@@ -45,7 +45,7 @@ export type Tone = "ok" | "wait" | "off";
 /** What the light says: its words, how it looks, and whether a countdown goes with it. */
 export function describe(state: ReadinessState): { title: string; tone: Tone; countdown: string | null } {
   switch (state) {
-    case "ready": return { title: "Ready to pinch", tone: "ok", countdown: null };
+    case "ready": return { title: "Ready for a gesture", tone: "ok", countdown: null };
     case "settling": return { title: "Hold still", tone: "wait", countdown: "" };
     case "moving": return { title: "Wrist moving", tone: "wait", countdown: null };
     case "warmingUp": return { title: "Starting up", tone: "wait", countdown: "" };

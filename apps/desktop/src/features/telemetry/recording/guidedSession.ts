@@ -32,6 +32,27 @@ export interface GuidedPlan {
   labelCues?: boolean;
   /** What a cue says, in place of "<label> now". */
   cueText?: string;
+  /**
+   * Several gestures to cue, `label` among them: each is cued `cues` times, in a shuffled order, so which comes next
+   * cannot be guessed. Absent: `label` alone.
+   */
+  labels?: string[];
+  /** With `labels`: the ones the session labels at the cue itself; the others the camera marks. Absent: all, or none
+   *  when `labelCues` is false. */
+  cueLabelled?: string[];
+  /** What each gesture's cue says, in place of "<name> now" (for pinch: "Pinch"). */
+  cueTexts?: Record<string, string>;
+}
+
+/** The gestures a plan cues: `labels`, or `label` alone. */
+export function planLabels(plan: GuidedPlan): string[] {
+  return plan.labels && plan.labels.length > 0 ? plan.labels : plan.label.trim() === "" ? [] : [plan.label];
+}
+
+/** Whether the session labels a cue of `label` itself, rather than leaving it to the camera. */
+export function labelsCue(plan: GuidedPlan, label: string): boolean {
+  if (plan.labelCues === false) return false;
+  return plan.cueLabelled === undefined || plan.cueLabelled.includes(label);
 }
 
 export type GuidedStep =
@@ -133,8 +154,9 @@ export function planProblem(plan: GuidedPlan): string | null {
     }
     return null;
   }
-  if (plan.label.trim() === "") return "Choose the gesture to cue.";
+  if (planLabels(plan).length === 0) return "Choose the gesture to cue.";
   if (!Number.isInteger(plan.cues) || plan.cues < 1 || plan.cues > 500) return "Cue it 1 to 500 times.";
+  if (plan.cues * planLabels(plan).length > 500) return "Cue at most 500 times in all: fewer of each, or fewer gestures.";
   if (!(plan.holdMs >= 100 && plan.holdMs <= 5000)) return "Hold each one 0.1 to 5 s.";
   if (!(plan.minGapSeconds >= 1 && plan.maxGapSeconds >= plan.minGapSeconds && plan.maxGapSeconds <= 60)) {
     return "Rest 1 to 60 s between cues, the shortest no longer than the longest.";
@@ -154,13 +176,15 @@ export function planSteps(plan: GuidedPlan, random: () => number = Math.random):
     at += step.durationMs;
   };
   push({ kind: "rest", atMs: 0, durationMs: LEAD_IN_MS });
-  for (let number = 1; number <= plan.cues; number += 1) {
+  const order = cueOrder(plan, random);
+  order.forEach((label, index) => {
+    const number = index + 1;
     if (number > 1) {
       const gap = plan.minGapSeconds + random() * (plan.maxGapSeconds - plan.minGapSeconds);
       push({ kind: "rest", atMs: at, durationMs: Math.round(gap * 1000) });
     }
-    push({ kind: "cue", atMs: at, durationMs: plan.holdMs, label: plan.label, number, of: plan.cues });
-  }
+    push({ kind: "cue", atMs: at, durationMs: plan.holdMs, label, number, of: order.length });
+  });
   for (const entry of plan.activities) {
     push({ kind: "rest", atMs: at, durationMs: ACTIVITY_CHANGE_MS });
     push({ kind: "activity", atMs: at, durationMs: entry.seconds * 1000, label: entry.label ?? plan.everydayLabel, activity: entry.activity });
@@ -168,6 +192,19 @@ export function planSteps(plan: GuidedPlan, random: () => number = Math.random):
   // A little quiet at the end, so the last step is not cut by the stop.
   push({ kind: "rest", atMs: at, durationMs: 2000 });
   return steps;
+}
+
+/** Which gesture each cue asks for: each of the plan's gestures `cues` times, shuffled (one gesture: `cues` of it). */
+export function cueOrder(plan: GuidedPlan, random: () => number = Math.random): string[] {
+  const labels = plan.cues > 0 ? planLabels(plan) : [];
+  const order = labels.flatMap((label) => Array.from({ length: plan.cues }, () => label));
+  if (labels.length > 1) {
+    for (let i = order.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(random() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+  }
+  return order;
 }
 
 export function totalMs(steps: GuidedStep[]): number {
@@ -189,12 +226,15 @@ export function prompt(
   steps: GuidedStep[],
   elapsedMs: number,
   nameOf: (label: string) => string = (label) => label,
-  cueText?: string,
+  cueText?: string | ((label: string) => string | undefined),
 ): { title: string; detail: string; tone: "cue" | "release" | "ready" | "rest" | "activity" | "done" } {
   const now = stepAt(steps, elapsedMs);
   if (!now) return { title: "Done", detail: "The session is over and being saved.", tone: "done" };
   const { step, index, remainingMs } = now;
-  if (step.kind === "cue") return { title: cueText ?? `${nameOf(step.label)} now`, detail: `Hold it… (${step.number} of ${step.of})`, tone: "cue" };
+  if (step.kind === "cue") {
+    const said = typeof cueText === "function" ? cueText(step.label) : cueText;
+    return { title: said ?? `${nameOf(step.label)} now`, detail: `Hold it… (${step.number} of ${step.of})`, tone: "cue" };
+  }
   if (step.kind === "activity") {
     return { title: step.activity, detail: `${Math.ceil(remainingMs / 1000)} s left. Do it naturally; no gesture.`, tone: "activity" };
   }

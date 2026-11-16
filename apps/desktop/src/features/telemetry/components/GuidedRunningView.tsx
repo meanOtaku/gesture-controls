@@ -17,7 +17,7 @@ export function GuidedRunningView({ session, nameOf, onStop, title, description 
   const elapsed = session.elapsedMs;
   const shown = elapsed === null
     ? { title: "Waiting for the watch…", detail: "The session starts with the first sample.", tone: "rest" as const }
-    : prompt(session.steps, elapsed, nameOf, session.plan.cueText);
+    : prompt(session.steps, elapsed, nameOf, (label) => session.plan.cueTexts?.[label] ?? session.plan.cueText);
   const total = totalMs(session.steps);
   return (
     <Card role="region" aria-label={title} className="min-w-0">

@@ -2,7 +2,7 @@ import { OperationFeedback } from "../../components/app/OperationFeedback";
 import { telemetryStore } from "../telemetry/store/telemetryStore";
 import { startCameraMarking } from "./cameraMarker";
 import type { GestureDefinition } from "./definition";
-import { PINCH_HOLD, startPinchEdgeMarking, wantsPinchEdges } from "./pinchEdgeMarker";
+import { PINCH_HOLD, PINCH_LABELS, startPinchEdgeMarking, wantsPinchEdges } from "./pinchEdgeMarker";
 
 const KEY = "cameraMarkingOn";
 const readSaved = (): boolean => {
@@ -81,10 +81,16 @@ class CameraAssist {
     this.stop();
     this.armedLabels = typeof labels === "string" ? [labels] : [...labels];
     const gestures = definitions ?? (sameLabels(this.armedLabels, this.readyLabels) ? this.readyDefinitions : []);
-    // Pinch in and pinch out are the moments the fingers meet and part, from the camera's thumb-to-index distance.
-    this.stopMarking = wantsPinchEdges(this.armedLabels)
-      ? startPinchEdgeMarking(undefined, undefined, this.armedLabels.includes(PINCH_HOLD))
-      : startCameraMarking(this.armedLabels, gestures);
+    // Pinch in and pinch out are the moments the fingers meet and part, from the camera's thumb-to-index distance; any other
+    // gesture in the same recording (a gesture session of several) is marked from its library gesture alongside.
+    if (wantsPinchEdges(this.armedLabels)) {
+      const stops = [startPinchEdgeMarking(undefined, undefined, this.armedLabels.includes(PINCH_HOLD))];
+      const rest = this.armedLabels.filter((label) => !PINCH_LABELS.includes(label));
+      if (rest.length > 0) stops.push(startCameraMarking(rest, gestures));
+      this.stopMarking = () => stops.forEach((stop) => stop());
+    } else {
+      this.stopMarking = startCameraMarking(this.armedLabels, gestures);
+    }
   }
   disarm(): void {
     this.stop();

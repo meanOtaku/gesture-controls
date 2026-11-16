@@ -28,7 +28,7 @@ describe("ModelInspector", () => {
     await open(view(trees));
     expect(invokeMock).toHaveBeenCalledWith("inspect_label_model", { id: "pinch-abc" });
     const summary = screen.getByRole("status", { name: "Model summary" });
-    expect(summary).toHaveTextContent("PPG pinch-start model");
+    expect(summary).toHaveTextContent("PPG gesture-start model");
     expect(summary).toHaveTextContent("1,701 pulse inputs · 300 trees");
     expect(summary).toHaveTextContent(/Held-out ROC AUC 0\.\d\d/);
     expect(screen.getByRole("region", { name: "How well it works" })).toBeInTheDocument();
@@ -44,7 +44,7 @@ describe("ModelInspector", () => {
   it("shows a CNN's pipeline, results and channels, with no list of inputs it does not have", async () => {
     await open(view(cnn, kindIs("ppg_imu_cnn_median")));
     const summary = screen.getByRole("status", { name: "Model summary" });
-    expect(summary).toHaveTextContent("CNN pinch-start model");
+    expect(summary).toHaveTextContent("CNN gesture-start model");
     expect(summary).toHaveTextContent("450 pulse and motion inputs · 3 networks · fires on the peak");
     expect(summary).not.toHaveTextContent("trees");
     expect(screen.getByRole("region", { name: "How well it works" })).toBeInTheDocument();

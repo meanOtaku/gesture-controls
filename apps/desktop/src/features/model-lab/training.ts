@@ -22,7 +22,7 @@ export interface ModelDescription {
 }
 
 export const PULSE_MODEL = {
-  name: "PPG + IMU pinch-start model",
+  name: "PPG + IMU gesture-start model",
   /** One line for the Train card; the summary and figures sit behind its details. */
   tagline: "The trees: they train quickly and from little data, and fire about 0.9 s after a gesture starts.",
   summary:
@@ -50,11 +50,11 @@ export const CNN_V2_METHOD: TrainMethod = "ppg-imu-cnn-v2";
 
 /** The CNN the app can train instead of the trees: what it reads, the steps it takes, and what the research measured. */
 export const CNN_MODEL = {
-  name: "CNN pinch-start model",
+  name: "CNN gesture-start model",
   /** One line for the Train card; the summary and figures sit behind its details. */
-  tagline: "Fires about 0.5 s after a pinch starts, sooner than the trees, and catches more. Leave Settings → Gestures → Still hand off.",
+  tagline: "Fires about 0.5 s after a gesture starts, sooner than the trees, and catches more. Leave Settings → Gestures → Still hand off.",
   summary:
-    "Reads the last second of the watch's accelerometer, gyroscope and pulse sensor, each scaled by the median and spread of its last 11 seconds so that a burst of motion does not hide the next pinch, and fires about 0.5 s after a gesture starts, about 0.4 s sooner than the trees. Three small convolutional networks look at the shape of that second and their votes are averaged.",
+    "Reads the last second of the watch's accelerometer, gyroscope and pulse sensor, each scaled by the median and spread of its last 11 seconds so that a burst of motion does not hide the next gesture, and fires about 0.5 s after a gesture starts, about 0.4 s sooner than the trees. Three small convolutional networks look at the shape of that second and their votes are averaged.",
   /** What to know before training one. */
   trainingNote:
     "Train it on your gesture sessions together with everyday-noise recordings, and leave Settings → Gestures → Still hand off: with that on it never sees the hand moving, so it cannot learn that movement is not the gesture. Training it needs PyTorch, which the trainer installs the first time (a large download).",
@@ -75,11 +75,11 @@ export const CNN_MODEL = {
 
 /** The v2 CNN: per-sensor branches, the jerk envelope, noise-overlay training and a peak gate. */
 export const CNN_V2_MODEL = {
-  name: "CNN v2 pinch-start model",
+  name: "CNN v2 gesture-start model",
   /** One line for the Train card; the summary and figures sit behind its details. */
-  tagline: "The CNN plus the accelerometer's jerk, trained on pinches made while moving, and quiet through everyday activity.",
+  tagline: "The CNN plus the accelerometer's jerk, trained on gestures made while moving, and quiet through everyday activity.",
   summary:
-    "Reads the same second of accelerometer, gyroscope and pulse as the CNN, plus the accelerometer's jerk envelope: the peaks of the sharp spikes a pinch makes, which slow arm movement does not. Each sensor has its own small network, joined partway and at the end, and three such networks are averaged. It is trained on its pinches also made with recorded everyday wrist motion added, so it knows pinches made with the arm moving. It may only fire just after a sharp spike, which keeps it quiet through everyday activity.",
+    "Reads the same second of accelerometer, gyroscope and pulse as the CNN, plus the accelerometer's jerk envelope: the peaks of the sharp spikes a gesture such as a pinch makes, which slow arm movement does not. Each sensor has its own small network, joined partway and at the end, and three such networks are averaged. It is trained on its gestures also made with recorded everyday wrist motion added, so it knows gestures made with the arm moving. It may only fire just after a sharp spike, which keeps it quiet through everyday activity.",
   /** What to know before training one. */
   trainingNote:
     "Train it on your gesture sessions together with everyday-noise recordings: it learns from their motion twice, as what is not a pinch and as motion added to your pinches. It chooses its cut-off on the everyday-noise recordings it trains on, so the more of them, the better it is set. Training needs PyTorch, as the CNN does.",
@@ -100,15 +100,15 @@ export const CNN_V2_MODEL = {
 
 /** The CNN as it was first trained: the same network, scaled by a rolling mean and deviation, which motion upsets. */
 const ROLLING_CNN_MODEL: ModelDescription = {
-  name: "CNN pinch-start model (rolling scaling)",
+  name: "CNN gesture-start model (rolling scaling)",
   summary:
-    "An earlier CNN. It reads the same second of motion and pulse, but each tick is scaled by the 10 seconds before it, so a burst of motion hides pinches until it has left those 10 seconds. Train a new CNN to replace it.",
+    "An earlier CNN. It reads the same second of motion and pulse, but each tick is scaled by the 10 seconds before it, so a burst of motion hides gestures until it has left those 10 seconds. Train a new CNN to replace it.",
   stages: CNN_MODEL.stages.map((stage, index) => (index === 1 ? { ...stage, detail: "Each tick z-scored against the 10 s before it, then squashed to 0-1" } : stage)),
 };
 
 /** The earlier model of the pulse sensor alone. */
 const PULSE_ONLY_MODEL: ModelDescription = {
-  name: "PPG pinch-start model",
+  name: "PPG gesture-start model",
   summary: "An earlier model. It reads the pulse sensor alone, compares it with the 1, 2 and 4 seconds before it, and randomised decision trees decide whether a gesture has just begun, firing as the vote crosses the cut-off.",
   stages: [
     ...PULSE_MODEL.stages.slice(0, 3),

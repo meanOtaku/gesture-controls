@@ -851,3 +851,15 @@ html[data-theme="nerv"] [data-sidebar="content"] .nav-lab-toggle { padding-top: 
 html[data-theme="nerv"] [data-sidebar="footer"] { gap: 4px; padding-top: 4px; padding-bottom: 4px; }
 html[data-theme="nerv"] .miss-marker { padding-top: .25rem; padding-bottom: .3rem; gap: .25rem; }
 html[data-theme="nerv"] .label-row { border-bottom-color: var(--eva-frame); }
+
+/* GestureMultiSelect in NERV: the terminal list, green on black. */
+html[data-theme="nerv"] .multi-select-list {
+  background: #000;
+  border: 1px solid rgba(80, 255, 80, 0.6);
+  font-family: var(--font-mono);
+}
+html[data-theme="nerv"] .multi-select-chip,
+html[data-theme="nerv"] .multi-select-tick { border-color: rgba(80, 255, 80, 0.6); color: var(--eva-green); }
+html[data-theme="nerv"] .multi-select-option { color: var(--eva-green); }
+html[data-theme="nerv"] .multi-select-option:hover,
+html[data-theme="nerv"] .multi-select-option:focus-visible { background: rgba(80, 255, 80, 0.12); }

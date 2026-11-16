@@ -44,7 +44,7 @@ async function ingestOneSample() {
 }
 
 beforeEach(() => {
-  // These are about the "Other gesture" card: the Recorder shows one kind of session at a time.
+  // These are about the "Free recording" card: the Recorder shows one kind of session at a time.
   window.localStorage.setItem("recorderSessionKind", "gesture");
   telemetryStore.reset();
   timedCapture.reset();

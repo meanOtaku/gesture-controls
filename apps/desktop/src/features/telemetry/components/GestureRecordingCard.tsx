@@ -37,7 +37,7 @@ function useRemaining(recording: boolean, chosenSeconds: number, elapsedMs: numb
 
 /**
  * Records any of your gestures (fist, thumbs up, …) for a set time. The camera marks it where it sees the gesture's
- * library gesture; otherwise hold the marker while you make it. Pinch in / out and everyday noise have their own cards.
+ * library gesture; otherwise hold the marker while you make it. The guided gesture session and everyday noise have their own tabs.
  * The recording is saved by itself when it stops; add it to the training data from Model Lab, or review it straight away.
  */
 export function GestureRecordingCard({ desktopAvailable, onStop }: {
@@ -119,7 +119,7 @@ export function GestureRecordingCard({ desktopAvailable, onStop }: {
           description="Any of your gestures, for a set time, marked by the camera or by hand."
           help={{
             label: "About recording a gesture",
-            content: "Choose one of your gestures (make them on the Labels tab) and how long to record, then Start. Make the gesture now and then, with the watch hand in view of the camera and still in between. If the Gesture library has a gesture for it and the camera is on, the camera marks it where it sees it; otherwise hold Hold to mark (or Space) while you make it. Stretches you do not mark are left out of training. The recording stops and is saved by itself at the end, or with Stop and save. For pinch in and pinch out, and for everyday noise, use their own cards above.",
+            content: "Choose one of your gestures (make them on the Labels tab) and how long to record, then Start. Make the gesture now and then, with the watch hand in view of the camera and still in between. If the Gesture library has a gesture for it and the camera is on, the camera marks it where it sees it; otherwise hold Hold to mark (or Space) while you make it. Stretches you do not mark are left out of training. The recording stops and is saved by itself at the end, or with Stop and save. For a guided session that cues each gesture (pinch included), use Gesture session; for everyday noise, its own tab.",
           }}
         />
       </CardHeader>

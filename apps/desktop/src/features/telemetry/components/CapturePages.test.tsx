@@ -35,13 +35,13 @@ describe("Live telemetry", () => {
   it("shows only the recorder on the Recorder page: one kind of session at a time, with the camera beside it", () => {
     render(<RecorderPage />);
     expect(screen.getByRole("heading", { name: "Recorder" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Pinch in / out session" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Gesture session" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Everyday noise session" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Session details" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: "Everyday noise" }));
     expect(screen.getByRole("region", { name: "Everyday noise session" })).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Pinch in / out session" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("radio", { name: "Other gesture" }));
+    expect(screen.queryByRole("region", { name: "Gesture session" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Free recording" }));
     expect(screen.getByRole("region", { name: "Record a gesture" })).toBeInTheDocument();
     // The choice is remembered for the next visit.
     cleanup();

@@ -37,7 +37,13 @@ function setup(over: { plan?: TrainPlan; environment?: TrainerEnvironment; statu
 }
 
 const calls = (command: string) => invokeMock.mock.calls.filter(([name]) => name === command);
-const choose = (id: string) => fireEvent.change(screen.getByLabelText("Label to teach"), { target: { value: id } });
+const NAMES: Record<string, string> = { snap: "Snap", idle: "Idle" };
+/** Ticks a gesture in the Gestures to teach dropdown, and closes it. */
+const choose = (id: string) => {
+  fireEvent.click(screen.getByRole("button", { name: "Gestures to teach" }));
+  fireEvent.click(within(screen.getByRole("listbox", { name: "Gestures to teach" })).getByRole("option", { name: NAMES[id] ?? id }));
+  fireEvent.keyDown(document, { key: "Escape" });
+};
 
 beforeEach(() => { invokeMock.mockReset(); handlers.clear(); resetTrainingRunStore(); resetSessionState(); });
 afterEach(cleanup);
@@ -45,9 +51,10 @@ afterEach(cleanup);
 describe("TrainPanel", () => {
   it("offers only labels that are not archived, and nothing else until one is chosen", async () => {
     setup();
-    const select = screen.getByLabelText("Label to teach");
-    expect(within(select).getByRole("option", { name: "Snap" })).toBeInTheDocument();
-    expect(within(select).queryByRole("option", { name: "Old" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Gestures to teach" }));
+    const list = screen.getByRole("listbox", { name: "Gestures to teach" });
+    expect(within(list).getByRole("option", { name: "Snap" })).toBeInTheDocument();
+    expect(within(list).queryByRole("option", { name: "Old" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Train model" })).not.toBeInTheDocument();
   });
 
@@ -99,7 +106,7 @@ describe("TrainPanel", () => {
     choose("snap");
     await screen.findByText(/It will train on/);
     fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-onset-trees" } });
-    expect(screen.getByRole("region", { name: "The model" })).toHaveTextContent("PPG + IMU pinch-start model");
+    expect(screen.getByRole("region", { name: "The model" })).toHaveTextContent("PPG + IMU gesture-start model");
     fireEvent.change(screen.getByLabelText("Role of walking"), { target: { value: "exclude" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "Use i2.csv" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Train model" })).toBeEnabled());
@@ -151,7 +158,7 @@ describe("TrainPanel", () => {
     choose("snap");
     await screen.findByText(/It will train on/);
     expect(screen.getByLabelText("Model")).toHaveValue("ppg-imu-cnn");
-    expect(screen.getByRole("region", { name: "The model" })).toHaveTextContent("CNN pinch-start model");
+    expect(screen.getByRole("region", { name: "The model" })).toHaveTextContent("CNN gesture-start model");
     expect(screen.getByRole("region", { name: "The model" })).toHaveTextContent(/leave Settings → Gestures → Still hand off/);
     await waitFor(() => expect(calls("plan_label_training").at(-1)?.[1].request.method).toBe("ppg-imu-cnn"));
     await waitFor(() => expect(screen.getByRole("button", { name: "Train model" })).toBeEnabled());
@@ -165,7 +172,7 @@ describe("TrainPanel", () => {
     choose("snap");
     await screen.findByText(/It will train on/);
     const model = within(screen.getByRole("region", { name: "The model" }));
-    expect(model.getByText(/Fires about 0\.5 s after a pinch starts/)).toBeInTheDocument();
+    expect(model.getByText(/Fires about 0\.5 s after a gesture starts/)).toBeInTheDocument();
     const about = model.getByText("About this model").closest("details");
     expect(about).not.toHaveAttribute("open");
     expect(about).toHaveTextContent(/Three small convolutional networks/);
@@ -219,6 +226,7 @@ describe("TrainPanel", () => {
     choose("snap");
     expect(await screen.findByText(/Only 1 recording with snap to train on/)).toBeInTheDocument();
     cleanup();
+    resetSessionState();
     setup({ plan: { ...okPlan, train: ["s1", "s2", "i1"], evaluation: ["i2"] } });
     choose("snap");
     await screen.findByText(/It will train on 3/);
@@ -347,7 +355,7 @@ describe("TrainPanel training plan", () => {
     cleanup(); // the tab is left: the panel is gone
     act(() => handlers.get("label-training-event")!({ payload: { kind: "log", runId: "run-1", message: "Stage 2 of 2" } }));
     render(<TrainPanel desktopAvailable labels={labels} datasets={datasets} />);
-    expect(screen.getByLabelText("Label to teach")).toHaveValue("snap");
+    expect(screen.getByRole("button", { name: "Gestures to teach" })).toHaveTextContent("Snap");
     expect(screen.getByLabelText("Model")).toHaveValue("ppg-imu-cnn");
     expect(screen.getByRole("checkbox", { name: "Use i2.csv" })).not.toBeChecked();
     expect(await screen.findByText(/Stage 1 of 2/)).toBeInTheDocument();
@@ -375,21 +383,28 @@ describe("TrainPanel training plan", () => {
     await waitFor(() => expect(calls("plan_label_training").at(-1)?.[1]).not.toHaveProperty("request.startFrom"));
   });
 
-  it("learns other gestures in the same CNN v2, with no role for them, and never continues one", async () => {
+  it("learns several ticked gestures in one CNN v2, switching to it, with no role for them, and never continues one", async () => {
     setup();
     choose("snap");
-    expect(screen.queryByRole("checkbox", { name: "Also learn idle" })).toBeNull();
-    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn-v2" } });
-    fireEvent.click(await screen.findByRole("checkbox", { name: "Also learn idle" }));
+    expect(screen.getByLabelText("Model")).toHaveValue("ppg-imu-cnn");
+    choose("idle");
+    expect(screen.getByLabelText("Model")).toHaveValue("ppg-imu-cnn-v2");
+    expect(screen.getByRole("button", { name: "Gestures to teach" })).toHaveTextContent("SnapIdle");
     expect(screen.queryByLabelText("Role of idle")).toBeNull();
     expect(screen.queryByLabelText("Start from")).toBeNull();
     expect(screen.getByText(/One network learns snap, idle together/)).toBeInTheDocument();
     await waitFor(() => expect(calls("plan_label_training").at(-1)?.[1]).toEqual({
       request: { label: "snap", datasetIds: ["s1", "s2", "i1", "i2"], negatives: ["walking"], excludes: [], method: "ppg-imu-cnn-v2", gestures: ["idle"] },
     }));
-    // Another model learns one gesture.
+    // Another model learns one gesture, and says so.
     fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn" } });
     await waitFor(() => expect(calls("plan_label_training").at(-1)?.[1]).not.toHaveProperty("request.gestures"));
+    expect(screen.getByText(/Only CNN v2 learns several gestures in one model/)).toBeInTheDocument();
+    // Unticking the first makes the next one the target.
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn-v2" } });
+    choose("snap");
+    await waitFor(() => expect(calls("plan_label_training").at(-1)?.[1]).toMatchObject({ request: { label: "idle" } }));
+    expect(calls("plan_label_training").at(-1)?.[1]).not.toHaveProperty("request.gestures");
   });
 
   it("names each gesture's model and shows the confusion matrices when a multi-gesture model is trained", async () => {
