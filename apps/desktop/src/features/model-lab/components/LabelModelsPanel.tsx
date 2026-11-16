@@ -16,6 +16,7 @@ import {
   formatTime,
   runtimeSummary,
   groupByLabel,
+  multiGestureNetworks,
   modelName,
   modelStats,
   type ImportedLabelModel,
@@ -117,7 +118,10 @@ export function LabelModelsPanel({
     void attempt(`${model.id}:rename`, "Rename model", () => invoke("rename_label_model", { id: model.id, name: name || null }));
   };
 
-  const groups = groupByLabel(models);
+  // A multi-gesture network's models are listed together in its own section; a label's own list keeps only its active one.
+  const networks = multiGestureNetworks(models);
+  const inNetwork = new Set(networks.flatMap((network) => network.models.map((model) => model.id)));
+  const groups = groupByLabel(models).filter((group) => group.models.some((model) => model.active || !inNetwork.has(model.id)));
   const anyImported = models.some((model) => model.imported && model.state !== "archived" && !model.active);
 
   const actionButton = (model: LabelModel, action: ModelAction, emphasis: "outline" | "ghost" = "outline", text = action.label) => (
@@ -164,7 +168,7 @@ export function LabelModelsPanel({
       </span>
       {(model.gestures?.length ?? 0) > 1 && (
         <small className="text-xs text-muted-foreground">
-          One network for {model.gestures!.join(", ")}: this is its {model.label} model; the others are in {model.gestures!.filter((g) => g !== model.label).join(" and ")}&apos;s lists, with the same id ending.
+          Its {model.label} model of one network for {model.gestures!.join(", ")}: see Multi-gesture models below.
         </small>
       )}
       <small className="text-xs text-muted-foreground">
@@ -296,7 +300,7 @@ export function LabelModelsPanel({
               const score = status?.lastScores[group.label];
               const detected = status?.activeDetections.includes(group.label) ?? false;
               const active = group.models.find((model) => model.active);
-              const others = group.models.filter((model) => !model.active && model.state !== "archived");
+              const others = group.models.filter((model) => !model.active && model.state !== "archived" && !inNetwork.has(model.id));
               const archived = group.models.filter((model) => model.state === "archived");
               const showArchived = archivedOpen.has(group.label);
               return (
@@ -386,6 +390,54 @@ export function LabelModelsPanel({
               );
             })}
           </ul>
+        )}
+        {networks.length > 0 && (
+          <section className="flex flex-col gap-3" aria-label="Multi-gesture models">
+            <h3 className="label">Multi-gesture models</h3>
+            <p className="field-hint">One network that learnt several gestures together, so they compete. Each gesture has a model of its own, activated on its own in its label&apos;s slot; Swap in all makes them the active ones together.</p>
+            <ul className="flex flex-col gap-4">
+              {networks.map((network) => {
+                const toActivate = network.models.filter((model) => !model.active && actionsFor(model)[0]?.kind === "activate");
+                return (
+                  <li key={network.key} className="flex flex-col gap-3 rounded-md border p-3" aria-label={`${network.gestures.join(", ")} network`}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <strong>{network.gestures.join(" · ")}</strong>
+                      <Badge variant="outline">Multi-gesture</Badge>
+                      {network.models.every((model) => model.active) && <Badge>Active</Badge>}
+                      <small className="text-xs text-muted-foreground">Added {formatTime(network.createdAt)}</small>
+                      {toActivate.length > 1 && (
+                        <Button type="button" variant="outline" className="ml-auto" aria-label={`Swap in all of ${network.gestures.join(", ")}`}
+                          disabled={toActivate.some((model) => isPending(`${model.id}:activate`))}
+                          onClick={() => { setMoreOpen(null); void (async () => { for (const model of toActivate) await perform(model, actionsFor(model)[0]); })(); }}>
+                          Swap in all
+                        </Button>
+                      )}
+                    </div>
+                    <ul className="model-rows" aria-label={`${network.gestures.join(", ")} models`}>
+                      {network.models.map((model) => {
+                        const [next, ...secondary] = model.active ? [] : actionsFor(model);
+                        const swap = next?.kind === "activate" && models.some((other) => other.label === model.label && other.active);
+                        return (
+                          <li key={model.id} className={`model-row${model.active ? " rounded-md bg-muted/40 p-2" : ""}`} aria-label={`${model.label} model of the network`}>
+                            <span className="text-sm"><strong>{model.label}</strong>{model.active && <> <Badge>Active</Badge></>}</span>
+                            {identity(model)}
+                            {stats(model)}
+                            <div className="recipe-item-actions">
+                              {model.active
+                                ? actionsFor(model).map((action) => actionButton(model, action))
+                                : next && actionButton(model, next, "outline", swap ? "Swap in" : next.label)}
+                              {moreButton(model)}
+                            </div>
+                            {morePanel(model, model.active ? [] : secondary)}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
         )}
         {anyImported && (
           <p className="text-xs text-muted-foreground">Imported models are not evaluated by this app: check them with Inspect or Compare models before approving.</p>

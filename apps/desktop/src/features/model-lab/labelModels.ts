@@ -191,6 +191,27 @@ export function groupByLabel(models: LabelModel[]): { label: string; models: Lab
   return [...groups.entries()].map(([label, list]) => ({ label, models: list }));
 }
 
+/**
+ * The multi-gesture networks among `models`: each gesture's models of one network (the same model file), in the order
+ * the network learnt them, newest network first. Archived models are left out.
+ */
+export function multiGestureNetworks(models: LabelModel[]): { key: string; gestures: string[]; createdAt: string; models: LabelModel[] }[] {
+  const networks = new Map<string, LabelModel[]>();
+  for (const model of models) {
+    if ((model.gestures?.length ?? 0) < 2 || model.state === "archived") continue;
+    const key = model.modelSha256 ?? `${model.gestures!.join(",")}:${model.id.split("-").at(-1)}`;
+    networks.set(key, [...(networks.get(key) ?? []), model]);
+  }
+  return [...networks.entries()]
+    .map(([key, members]) => {
+      const gestures = members[0].gestures!;
+      const ordered = [...members].sort((a, b) => gestures.indexOf(a.label) - gestures.indexOf(b.label));
+      const createdAt = members.map((m) => m.createdAt).sort().at(-1) ?? "";
+      return { key, gestures, createdAt, models: ordered };
+    })
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
 export const LABEL_DETECTIONS_EVENT = "label-detections";
 export const HAND_STEADINESS_EVENT = "hand-steadiness";
 

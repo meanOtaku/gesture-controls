@@ -243,15 +243,25 @@ describe("LabelModelsPanel", () => {
     await waitFor(() => expect(calls("set_label_model_state")).toEqual([["set_label_model_state", { id: "snap-abc", state: "archived" }]]));
   });
 
-  it("marks each model of a multi-gesture network and names the gestures it learnt with", async () => {
+  it("lists a multi-gesture network's models together in their own section, out of their labels' lists", async () => {
     const gestures = ["pinch_in", "pinch_hold", "pinch_out"];
+    const network = (label: string, over: Partial<LabelModel> = {}): LabelModel => ({ ...draft, id: `${label}-8f79`, label, gestures, modelSha256: "net", monitorOnly: false, deployable: true, state: "approved", ...over });
     setup([
-      { ...draft, id: "pinch_in-8f79", label: "pinch_in", gestures },
-      { ...draft, id: "pinch_hold-8f79", label: "pinch_hold", gestures },
-      { ...draft, id: "pinch_in-old", label: "pinch_in" },
+      network("pinch_in"), network("pinch_hold"), network("pinch_out"),
+      { ...draft, id: "pinch_in-old", label: "pinch_in", active: true, state: "active" },
     ]);
-    const slot = await screen.findByRole("listitem", { name: "pinch_in slot" });
-    expect(within(slot).getAllByText("Multi-gesture")).toHaveLength(1);
-    expect(slot).toHaveTextContent("One network for pinch_in, pinch_hold, pinch_out: this is its pinch_in model; the others are in pinch_hold and pinch_out's lists");
+    const section = await screen.findByRole("region", { name: "Multi-gesture models" });
+    const card = within(section).getByRole("listitem", { name: "pinch_in, pinch_hold, pinch_out network" });
+    expect(within(card).getAllByRole("listitem", { name: /model of the network/ }).map((row) => row.getAttribute("aria-label"))).toEqual([
+      "pinch_in model of the network", "pinch_hold model of the network", "pinch_out model of the network",
+    ]);
+    // pinch_in's own list keeps its active model only; pinch_hold, with none outside the network, has no slot.
+    const slot = screen.getByRole("listitem", { name: "pinch_in slot" });
+    expect(within(slot).queryByText("pinch_in-8f79")).toBeNull();
+    expect(screen.queryByRole("listitem", { name: "pinch_hold slot" })).toBeNull();
+    // The one against an active model is swapped in; all of them go in together.
+    expect(within(card).getByRole("button", { name: "Swap in pinch_in-8f79" })).toBeInTheDocument();
+    fireEvent.click(within(card).getByRole("button", { name: "Swap in all of pinch_in, pinch_hold, pinch_out" }));
+    await waitFor(() => expect(calls("activate_label_model").map(([, args]) => args)).toEqual([{ id: "pinch_in-8f79" }, { id: "pinch_hold-8f79" }, { id: "pinch_out-8f79" }]));
   });
 });
