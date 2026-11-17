@@ -497,6 +497,7 @@ html.overlay-document body::before { display:none; }
 .labelling-lanes { display:flex; flex-direction:column; gap:2px; cursor:crosshair; }
 .labelling-lane { position:relative; flex:none; box-sizing:border-box; overflow:hidden; border:1px solid var(--line); background:var(--surface); color:var(--cyan); }
 .labelling-lane canvas { display:block; }
+.labelling-lane canvas.labelling-lane-cursor { position:absolute; left:0; top:0; pointer-events:none; }
 .labelling-lane-name, .labelling-rail .labelling-lane-name { position:absolute; right:6px; top:2px; z-index:1; font-size:11px; color:var(--ink-3); pointer-events:none; background:color-mix(in srgb, var(--surface) 80%, transparent); padding:0 4px; }
 .labelling-swatch { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:6px; }
 .labelling-key { margin-left:6px; font-size:10px; opacity:.7; font-family:var(--font-mono); }

@@ -1,4 +1,5 @@
 import { AnimatedNumber, AnimatedText } from "../../components/app/AnimatedNumber";
+import { createHoverStore, useHover, type HoverStore } from "./hoverStore";
 import { LabelTimingEditor } from "./LabelTimingEditor";
 import { EditableLabelRail } from "./EditableLabelRail";
 import { invoke } from "@tauri-apps/api/core";
@@ -104,7 +105,8 @@ export function LabellingPage() {
   const [fitToView, setFitToView] = useState<boolean>(kept?.fitToView ?? false);
   const [snap, setSnap] = useState(true);
   const [selection, setSelection] = useState<View | null>(null);
-  const [hoverMs, setHoverMs] = useState<number | null>(null);
+  // The pointer's position lives outside this page's state (`hoverStore`): moving it re-renders only what shows it.
+  const hover = useMemo(createHoverStore, []);
   const [chosen, setChosen] = useState<string>(NO_LABEL);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
@@ -316,9 +318,24 @@ export function LabellingPage() {
     dragFrom.current = at;
     setSelection({ startMs: at, endMs: at });
   };
+  // The cursor follows the pointer at most once a frame: every hover re-renders this page, and pointer events can come
+  // faster than the screen draws.
+  const hoverFrame = useRef<{ id: number | null; at: number | null }>({ id: null, at: null });
+  const hoverAt = useCallback((at: number | null) => {
+    const pending = hoverFrame.current;
+    pending.at = at;
+    if (pending.id !== null) return;
+    pending.id = requestAnimationFrame(() => {
+      pending.id = null;
+      hover.set(pending.at);
+    });
+  }, [hover]);
+  useEffect(() => () => {
+    if (hoverFrame.current.id !== null) cancelAnimationFrame(hoverFrame.current.id);
+  }, []);
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     const raw = msAt(event.clientX);
-    setHoverMs(raw);
+    hoverAt(raw);
     if (dragFrom.current === null) return;
     const at = snapped(raw, event.altKey);
     setSelection({ startMs: Math.min(dragFrom.current, at), endMs: Math.max(dragFrom.current, at) });
@@ -836,7 +853,7 @@ export function LabellingPage() {
               Showing <AnimatedText>{formatSeconds(view.startMs)}</AnimatedText> to <AnimatedText>{formatSeconds(view.endMs)}</AnimatedText>.
             </p>
             <p className="hint labelling-cursor" aria-label="Graph cursor">
-              Cursor at {hoverMs === null ? "—" : formatSeconds(hoverMs)}.
+              Cursor at <HoverTime store={hover} />.
             </p>
 
             <div className="labelling-suggestions" role="region" aria-label="Problems">
@@ -893,7 +910,7 @@ export function LabellingPage() {
                 />
                 <p className="hint">The whole recording: recorded labels above, yours below. Click or drag to look elsewhere.</p>
               </div>
-              {camera && "track" in camera && <HandPreview hands={hoverMs === null ? null : handsAt(camera.track, hoverMs)} atLabel={hoverMs === null ? "" : formatSeconds(hoverMs)} />}
+              {camera && "track" in camera && <HoverHands store={hover} track={camera.track} />}
             </div>
 
             <div className="labelling-timeline">
@@ -972,7 +989,7 @@ export function LabellingPage() {
                 onPointerDown={onPointerDown}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
-                onPointerLeave={() => setHoverMs(null)}
+                onPointerLeave={() => hoverAt(null)}
               >
                 {camera && "track" in camera && (
                   <SignalLane
@@ -985,7 +1002,7 @@ export function LabellingPage() {
                     spans={dragPreview ?? spans}
                     colorOf={colorOf}
                     selection={selection}
-                    hoverMs={hoverMs}
+                    hover={hover}
                     fitToView={fitToView}
                     guide={threshold}
                   />
@@ -1002,7 +1019,7 @@ export function LabellingPage() {
                     spans={dragPreview ?? spans}
                     colorOf={colorOf}
                     selection={selection}
-                    hoverMs={hoverMs}
+                    hover={hover}
                     scale={{ low: 0, high: 1 }}
                     guide={replay.threshold}
                   />
@@ -1019,7 +1036,7 @@ export function LabellingPage() {
                     spans={dragPreview ?? spans}
                     colorOf={colorOf}
                     selection={selection}
-                    hoverMs={hoverMs}
+                    hover={hover}
                     fitToView={fitToView}
                   />
                 ))}
@@ -1284,4 +1301,16 @@ function SpanRail({
       })}
     </div>
   );
+}
+
+/** The cursor's time, re-rendered on its own as the pointer moves. */
+function HoverTime({ store }: { store: HoverStore }) {
+  const at = useHover(store);
+  return <>{at === null ? "—" : formatSeconds(at)}</>;
+}
+
+/** The camera's hands at the cursor, re-rendered on its own as the pointer moves. */
+function HoverHands({ store, track }: { store: HoverStore; track: Parameters<typeof handsAt>[0] }) {
+  const at = useHover(store);
+  return <HandPreview hands={at === null ? null : handsAt(track, at)} atLabel={at === null ? "" : formatSeconds(at)} />;
 }
