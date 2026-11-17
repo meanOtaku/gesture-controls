@@ -612,22 +612,6 @@ fn check_gestures(
     Ok(gestures)
 }
 
-/// The mapping of one gesture's run of a multi-gesture model: that gesture positive, the others something else.
-fn mapping_for(mapping: &LabelMapping, gestures: &[LabelId], gesture: &LabelId) -> LabelMapping {
-    let mut entries = mapping.entries.clone();
-    for other in gestures {
-        entries.insert(
-            other.clone(),
-            if other == gesture {
-                ExampleRole::Positive
-            } else {
-                ExampleRole::Negative
-            },
-        );
-    }
-    LabelMapping { entries }
-}
-
 fn recordings_ids(recordings: &[RecordingInfo]) -> Vec<String> {
     recordings.iter().map(|r| r.id.to_string()).collect()
 }
@@ -788,6 +772,8 @@ struct GestureRun {
     run_id: RunId,
     target: LabelId,
     from: String,
+    /// A multi-gesture model's gestures, `target` first: one model is published with an output for each. Empty for one.
+    outputs: Vec<LabelId>,
 }
 
 fn emit(app: &AppHandle, event: &TrainingEvent) {
@@ -1395,7 +1381,8 @@ pub async fn start_label_training(
     };
     let begun =
         host.with_store(|store| begin_run(store, &plan, &known, &now).map_err(|e| e.to_string()))?;
-    let mut runs = vec![GestureRun {
+    // One run, one model: a multi-gesture model is published once, with an output for each of its gestures.
+    let runs = vec![GestureRun {
         run_id: begun.run_id.clone(),
         target: checked.target.clone(),
         from: if checked.gestures.is_empty() {
@@ -1403,42 +1390,8 @@ pub async fn start_label_training(
         } else {
             format!("gestures/{}/", checked.target)
         },
+        outputs: checked.gestures.clone(),
     }];
-    // A multi-gesture model: a run for each other gesture too, split alike, so each gets its own model of the network.
-    for gesture in checked.gestures.iter().skip(1) {
-        let mut theirs = plan.clone();
-        theirs.target = gesture.clone();
-        theirs.mapping = mapping_for(&checked.mapping, &checked.gestures, gesture);
-        theirs.unique = Uuid::new_v4().simple().to_string()[..10].to_string();
-        let begun_theirs = host
-            .with_store(|store| begin_run(store, &theirs, &known, &now).map_err(|e| e.to_string()));
-        match begun_theirs {
-            Ok(theirs_begun) if theirs_begun.split == begun.split => runs.push(GestureRun {
-                run_id: theirs_begun.run_id,
-                target: gesture.clone(),
-                from: format!("gestures/{gesture}/"),
-            }),
-            outcome => {
-                let message = match outcome {
-                    Ok(theirs_begun) => {
-                        record_failure(
-                            &app,
-                            &theirs_begun.run_id,
-                            "its gestures split differently",
-                        );
-                        format!(
-                            "the run for '{gesture}' split the recordings differently, so the model was not trained"
-                        )
-                    }
-                    Err(message) => format!("the run for '{gesture}' could not start: {message}"),
-                };
-                for run in &runs {
-                    record_failure(&app, &run.run_id, &message);
-                }
-                return Err(message);
-            }
-        }
-    }
     LabelRuntimeHost::announce_models_changed(&app);
     let run_id = begun.run_id.to_string();
 
@@ -1621,51 +1574,82 @@ fn finish(
             .to_string();
         return failed("failed", message);
     }
-    let multi = runs.len() > 1;
+    let multi = !first.outputs.is_empty();
     let mut outcomes = Vec::new();
     for run in runs {
-        // A multi-gesture result says how each gesture came out; a one-gesture one is all about its gesture.
-        let own = if multi {
-            &result["gestures"][run.target.as_str()]
+        // One model: for a multi-gesture one, it may go live only if every gesture passed the checks.
+        let failing: Vec<String> = run
+            .outputs
+            .iter()
+            .filter_map(|g| {
+                let own = &result["gestures"][g.as_str()];
+                (own["outcome"].as_str() != Some("deployable")).then(|| {
+                    format!(
+                        "{g}: {}",
+                        own["message"]
+                            .as_str()
+                            .unwrap_or("it did not pass the checks for going live")
+                    )
+                })
+            })
+            .collect();
+        let deployable = if multi {
+            failing.is_empty()
         } else {
-            &result
+            result["outcome"].as_str() == Some("deployable")
         };
-        let message = own["message"].as_str().unwrap_or_default().to_string();
-        let published = match own["outcome"].as_str() {
-            Some("deployable") => publish_run(
+        let message = if multi {
+            failing.join("; ")
+        } else {
+            result["message"].as_str().unwrap_or_default().to_string()
+        };
+        let published = (|| {
+            let outputs = if multi {
+                model_outputs(out, &run.outputs, &result)?
+            } else {
+                Vec::new()
+            };
+            publish_run(
                 app,
                 run,
                 &first.run_id,
                 expected_features,
                 out,
-                true,
+                deployable,
                 &message,
-            ),
-            Some("evaluationOnly") => publish_run(
-                app,
-                run,
-                &first.run_id,
-                expected_features,
-                out,
-                false,
-                &message,
-            ),
-            _ => Err(format!("the trainer gave no model for '{}'", run.target)),
-        };
-        let outcome = match (&published, own["outcome"].as_str()) {
-            (Ok(_), Some("deployable")) => "deployable",
-            (Ok(_), _) => "monitorOnly",
-            (Err(_), _) => "failed",
-        };
+                outputs,
+            )
+        })();
         if let Err(problem) = &published {
             record_failure(app, &run.run_id, problem);
         }
-        outcomes.push(GestureOutcome {
-            label: run.target.to_string(),
-            outcome: outcome.into(),
-            message: published.as_ref().err().cloned().unwrap_or(message),
-            version_id: published.ok(),
-        });
+        let labels = if multi {
+            run.outputs.clone()
+        } else {
+            vec![run.target.clone()]
+        };
+        for label in labels {
+            let own = if multi {
+                &result["gestures"][label.as_str()]
+            } else {
+                &result
+            };
+            outcomes.push(GestureOutcome {
+                label: label.to_string(),
+                outcome: match (&published, own["outcome"].as_str()) {
+                    (Ok(_), Some("deployable")) => "deployable",
+                    (Ok(_), _) => "monitorOnly",
+                    (Err(_), _) => "failed",
+                }
+                .into(),
+                message: published
+                    .as_ref()
+                    .err()
+                    .cloned()
+                    .unwrap_or_else(|| own["message"].as_str().unwrap_or_default().to_string()),
+                version_id: published.as_ref().ok().cloned(),
+            });
+        }
     }
     let first_outcome = outcomes[0].clone();
     TrainingEvent::Finished {
@@ -1682,6 +1666,7 @@ fn finish(
 
 /// Publishes one run's model from the trainer's files (`run.from` in `out`) and records the run finished. A gesture of a
 /// multi-gesture model gets its evaluation, parity and inspection copied to its own run's folder, where Inspect looks.
+#[allow(clippy::too_many_arguments)]
 fn publish_run(
     app: &AppHandle,
     run: &GestureRun,
@@ -1690,6 +1675,7 @@ fn publish_run(
     out: &Path,
     deployable: bool,
     message: &str,
+    outputs: Vec<model_lab_core::ModelOutput>,
 ) -> Result<String, String> {
     let lab = model_lab_dir(app)?;
     let from = out.join(&run.from);
@@ -1738,14 +1724,71 @@ fn publish_run(
     let now = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
     let host = app.state::<LabelRuntimeHost>();
     let outcome = host.with_store(|store| {
-        if deployable {
+        let outcome = if deployable {
             complete_run(store, staged, &lab, &run.run_id, artifacts, &now)
         } else {
             monitor_only_run(store, staged, &lab, &run.run_id, message, artifacts, &now)
         }
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+        if !outputs.is_empty() {
+            store
+                .mutate(|r| r.set_outputs(&outcome.version_id, outputs))
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(outcome)
     })?;
     Ok(outcome.version_id.to_string())
+}
+
+/// A multi-gesture model's outputs, from the trainer's files for each gesture (`gestures/<label>/`): the network output its
+/// bundle reads, the thresholds its manifest sets, and how it did on the held-out recordings at them.
+fn model_outputs(
+    out: &Path,
+    gestures: &[LabelId],
+    result: &serde_json::Value,
+) -> Result<Vec<model_lab_core::ModelOutput>, String> {
+    gestures
+        .iter()
+        .map(|gesture| {
+            let manifest: serde_json::Value = fs::read(
+                out.join("gestures")
+                    .join(gesture.as_str())
+                    .join("bundle/manifest.json"),
+            )
+            .map_err(|e| e.to_string())
+            .and_then(|bytes| serde_json::from_slice(&bytes).map_err(|e| e.to_string()))
+            .map_err(|e| format!("the trainer's model of '{gesture}' could not be read: {e}"))?;
+            let index = manifest["output"]["positiveIndex"]
+                .as_u64()
+                .ok_or_else(|| format!("the trainer's model of '{gesture}' names no output"))?
+                as usize;
+            let t = &manifest["thresholds"];
+            let defaults = model_lab_core::Thresholds::default();
+            let thresholds = model_lab_core::Thresholds {
+                activation: t["activation"].as_f64().unwrap_or(defaults.activation),
+                release: t["release"].as_f64().unwrap_or(defaults.release),
+                cooldown_ms: t["cooldownMs"]
+                    .as_u64()
+                    .map_or(defaults.cooldown_ms, |v| v as u32),
+                trigger: serde_json::from_value(t["trigger"].clone()).unwrap_or(defaults.trigger),
+                ..defaults
+            };
+            let events = &result["gestures"][gesture.as_str()]["metrics"]["events"];
+            let figures = events
+                .is_object()
+                .then(|| model_lab_core::ThresholdFigures {
+                    recall: events["gestureRecall"].as_f64(),
+                    false_activations_per_hour: events["falseActivationsPerHour"].as_f64(),
+                    recordings: events["recordings"].as_u64().unwrap_or(0) as usize,
+                });
+            Ok(model_lab_core::ModelOutput {
+                label: gesture.clone(),
+                index,
+                thresholds,
+                figures,
+            })
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -2471,19 +2514,6 @@ mod tests {
             checked.mapping.entries[&label_id("fist").unwrap()],
             ExampleRole::Negative
         );
-        let theirs = mapping_for(
-            &checked.mapping,
-            &checked.gestures,
-            &label_id("fist").unwrap(),
-        );
-        assert_eq!(
-            theirs.entries[&label_id("fist").unwrap()],
-            ExampleRole::Positive
-        );
-        assert_eq!(
-            theirs.entries[&label_id("pinch").unwrap()],
-            ExampleRole::Negative
-        );
         let spec = build_spec(
             &checked,
             &model_lab_core::Split {
@@ -2511,5 +2541,43 @@ mod tests {
         assert!(refused(|r| r.gestures = vec!["everyday_noise".into()]).contains("standard label"));
         assert!(refused(|r| r.start_from = Some("x".into())).contains("from scratch"));
         assert!(refused(|r| r.excludes = vec!["fist".into()]).contains("left out"));
+    }
+
+    #[test]
+    fn a_multi_gesture_model_takes_each_output_and_its_thresholds_from_the_trainer() {
+        let out = tempfile::tempdir().unwrap();
+        for (gesture, index, activation) in [("pinch_in", 1, 0.9), ("pinch_out", 2, 0.97)] {
+            let dir = out.path().join("gestures").join(gesture).join("bundle");
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(
+                dir.join("manifest.json"),
+                serde_json::json!({"output": {"positiveIndex": index}, "thresholds": {"activation": activation, "release": 0.8, "cooldownMs": 1500, "trigger": "peak"}}).to_string(),
+            )
+            .unwrap();
+        }
+        let result = serde_json::json!({"gestures": {
+            "pinch_in": {"metrics": {"events": {"gestureRecall": 0.8, "falseActivationsPerHour": 2.0, "recordings": 5}}},
+            "pinch_out": {"metrics": {}},
+        }});
+        let outputs = model_outputs(
+            out.path(),
+            &[
+                label_id("pinch_in").unwrap(),
+                label_id("pinch_out").unwrap(),
+            ],
+            &result,
+        )
+        .unwrap();
+        assert_eq!(
+            outputs
+                .iter()
+                .map(|o| (o.label.as_str(), o.index, o.thresholds.activation))
+                .collect::<Vec<_>>(),
+            [("pinch_in", 1, 0.9), ("pinch_out", 2, 0.97)]
+        );
+        assert_eq!(outputs[0].thresholds.trigger, model_lab_core::Trigger::Peak);
+        assert_eq!(outputs[0].figures.as_ref().unwrap().recall, Some(0.8));
+        assert!(outputs[1].figures.is_none());
+        assert!(model_outputs(out.path(), &[label_id("fist").unwrap()], &result).is_err());
     }
 }

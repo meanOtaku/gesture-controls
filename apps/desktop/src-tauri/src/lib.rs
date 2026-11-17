@@ -240,6 +240,7 @@ pub fn run() {
             label_runtime::import_label_model,
             label_runtime::list_label_models,
             label_runtime::set_label_model_threshold,
+            label_runtime::combine_multi_gesture_copies,
             label_runtime::inspect_label_model,
             label_runtime::set_label_model_state,
             label_runtime::activate_label_model,

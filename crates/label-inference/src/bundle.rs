@@ -277,6 +277,25 @@ impl Network {
         }
     }
 
+    /// Every output's probability ([nothing, gesture...]); `input` must have [`Network::features`] values.
+    pub(crate) fn predict_all(&self, input: &[f64]) -> Vec<f64> {
+        match self {
+            Self::Branches(cnn) => cnn.predict_all(input),
+            other => {
+                let p = other.predict(input);
+                vec![1.0 - p, p]
+            }
+        }
+    }
+
+    /// A multi-gesture file's outputs, "nothing" first; `None` for one gesture.
+    pub(crate) fn outputs(&self) -> Option<&[String]> {
+        match self {
+            Self::Branches(cnn) => cnn.outputs(),
+            _ => None,
+        }
+    }
+
     /// The positive class's probability; `input` must have [`Network::features`] values.
     pub(crate) fn predict(&self, input: &[f64]) -> f64 {
         match self {

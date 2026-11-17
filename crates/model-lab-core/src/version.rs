@@ -74,6 +74,9 @@ pub struct ThresholdChange {
     pub to_activation: f64,
     pub to_release: f64,
     pub at: String,
+    /// For a multi-gesture model: the output (its gesture's label) whose thresholds changed. Absent: the model's own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<LabelId>,
     /// How the model did at the new thresholds on its held-out recordings, when it was measured as they were set (the
     /// Threshold card replays them). Absent: not measured then.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -92,6 +95,21 @@ pub struct ThresholdFigures {
     pub recordings: usize,
 }
 
+/// One gesture a multi-gesture model detects: its label, which of the network's outputs it reads, and the thresholds
+/// that output runs at. One model file, one state: the model is activated, approved or archived as a whole, and is the
+/// active model of every one of its gestures at once.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelOutput {
+    pub label: LabelId,
+    /// The network output it reads (0 is "nothing").
+    pub index: usize,
+    pub thresholds: Thresholds,
+    /// How it did on the model's held-out recordings, at `thresholds` (from training, or measured as they were set).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub figures: Option<ThresholdFigures>,
+}
+
 /// The longest name a model may be given, in characters.
 pub const MAX_MODEL_NAME_CHARS: usize = 60;
 
@@ -101,7 +119,8 @@ pub const MAX_MODEL_NAME_CHARS: usize = 60;
 pub struct ModelVersion {
     pub id: ModelVersionId,
     pub project_id: ProjectId,
-    /// The one label this model detects.
+    /// The label this model detects; for a multi-gesture model, its first gesture (its project's target), its others in
+    /// `outputs`.
     pub label: LabelId,
     /// A name the user gave it, shown in place of its id. Only what is shown: the id, the files and the state stay.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -126,9 +145,38 @@ pub struct ModelVersion {
     /// Each change of its thresholds since it was made, oldest first (`Registry::set_thresholds`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub threshold_changes: Vec<ThresholdChange>,
+    /// A multi-gesture model's gestures, `label`'s first (its thresholds are also `thresholds`). Empty for a model of
+    /// one gesture.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<ModelOutput>,
 }
 
 impl ModelVersion {
+    /// Every label it detects: its outputs', or its own.
+    pub fn labels(&self) -> Vec<LabelId> {
+        if self.outputs.is_empty() {
+            vec![self.label.clone()]
+        } else {
+            self.outputs.iter().map(|o| o.label.clone()).collect()
+        }
+    }
+
+    /// Whether it detects `label`.
+    pub fn detects(&self, label: &LabelId) -> bool {
+        self.label == *label || self.outputs.iter().any(|o| o.label == *label)
+    }
+
+    /// The thresholds it runs `label` at, and the output index it reads for it (1 for a model of one gesture).
+    pub fn output_for(&self, label: &LabelId) -> Option<(usize, Thresholds)> {
+        if self.outputs.is_empty() {
+            return (self.label == *label).then_some((1, self.thresholds));
+        }
+        self.outputs
+            .iter()
+            .find(|o| o.label == *label)
+            .map(|o| (o.index, o.thresholds))
+    }
+
     /// A new version, in Draft.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -168,6 +216,7 @@ impl ModelVersion {
                 at: at.to_string(),
             }],
             threshold_changes: Vec::new(),
+            outputs: Vec::new(),
         })
     }
 

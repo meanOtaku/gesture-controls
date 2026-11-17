@@ -65,6 +65,9 @@ pub struct InputCheck {
     pub worst: Vec<OutsideInput>,
 }
 
+/// The last input of a multi-gesture model and every output's probability for it, shared by its gestures' models.
+type SharedOutputs = Arc<std::sync::Mutex<Option<(Vec<f64>, Vec<f64>)>>>;
+
 /// A validated model, tied to the registry version that approved it, ready to score decisions.
 pub struct LoadedModel {
     pub version_id: ModelVersionId,
@@ -90,6 +93,12 @@ pub struct LoadedModel {
     /// How long after a gesture starts the model decides it has, from the manifest (or the trainer's default).
     pub decision_delay_ms: u32,
     network: Arc<Network>,
+    /// The network output this model reads: 1 for a model of one gesture, its gesture's for one output of a
+    /// multi-gesture model.
+    pub output: usize,
+    /// For the outputs of one multi-gesture model: the last input and every output's probability for it, shared, so the
+    /// network runs once per decision for all its gestures. `None` for a model of one gesture.
+    shared: Option<SharedOutputs>,
 }
 
 impl LoadedModel {
@@ -109,7 +118,91 @@ impl LoadedModel {
         if version.model_sha256.as_deref() != Some(bundle.model_sha256.as_str()) {
             return Err(ModelError::NotTheApprovedModel);
         }
-        Ok(Self {
+        let mut all = Self::load_all(bundle, version)?;
+        Ok(all.remove(0))
+    }
+
+    /// A model for each gesture `version` detects, sharing one loaded network: one for a model of one gesture; for a
+    /// multi-gesture model one per output, its own label first, each with its output's thresholds. Refused when an
+    /// output is not the network's output for that gesture.
+    pub fn load_all(
+        bundle: ValidatedBundle,
+        version: &ModelVersion,
+    ) -> Result<Vec<Self>, ModelError> {
+        if version.state != LifecycleState::Active || !version.runnable() {
+            return Err(ModelError::NotRunnable(version.id.clone()));
+        }
+        if version.label != bundle.manifest.target_label {
+            return Err(ModelError::LabelMismatch {
+                version: version.id.clone(),
+                label: version.label.clone(),
+                bundle: bundle.manifest.target_label.clone(),
+            });
+        }
+        if version.model_sha256.as_deref() != Some(bundle.model_sha256.as_str()) {
+            return Err(ModelError::NotTheApprovedModel);
+        }
+        let multi = !version.outputs.is_empty();
+        if multi {
+            let names = bundle.network.outputs().unwrap_or_default();
+            for output in &version.outputs {
+                if names.get(output.index).map(String::as_str) != Some(output.label.as_str()) {
+                    return Err(ModelError::LabelMismatch {
+                        version: version.id.clone(),
+                        label: output.label.clone(),
+                        bundle: bundle.manifest.target_label.clone(),
+                    });
+                }
+            }
+        }
+        let shared = multi.then(|| Arc::new(std::sync::Mutex::new(None)));
+        let base = Self::from_bundle(&bundle, version, shared);
+        Ok(version
+            .labels()
+            .into_iter()
+            .map(|label| {
+                let (output, thresholds) = version
+                    .output_for(&label)
+                    .unwrap_or((1, version.thresholds));
+                Self {
+                    label,
+                    output,
+                    thresholds,
+                    ..base.share()
+                }
+            })
+            .collect())
+    }
+
+    /// Another model reading the same loaded network (and its shared outputs).
+    fn share(&self) -> Self {
+        Self {
+            version_id: self.version_id.clone(),
+            label: self.label.clone(),
+            kind: self.kind,
+            motion_grid: self.motion_grid,
+            cnn_grid: self.cnn_grid,
+            gate: self.gate,
+            input: self.input.clone(),
+            thresholds: self.thresholds,
+            quality: self.quality,
+            model_sha256: self.model_sha256.clone(),
+            monitor_only: self.monitor_only,
+            input_names: self.input_names.clone(),
+            training_range: self.training_range.clone(),
+            decision_delay_ms: self.decision_delay_ms,
+            network: Arc::clone(&self.network),
+            output: self.output,
+            shared: self.shared.clone(),
+        }
+    }
+
+    fn from_bundle(
+        bundle: &ValidatedBundle,
+        version: &ModelVersion,
+        shared: Option<SharedOutputs>,
+    ) -> Self {
+        Self {
             version_id: version.id.clone(),
             label: version.label.clone(),
             kind: bundle.kind,
@@ -129,8 +222,10 @@ impl LoadedModel {
                 .thresholds
                 .decision_delay_ms
                 .unwrap_or(crate::steadiness::DEFAULT_DECISION_DELAY_MS),
-            network: bundle.network,
-        })
+            network: Arc::clone(&bundle.network),
+            output: 1,
+            shared,
+        }
     }
 
     /// How the inputs this model is about to read compare with the decisions it was trained on: `None` when the trainer
@@ -191,7 +286,24 @@ impl LoadedModel {
         if features.iter().any(|v| !v.is_finite()) {
             return Err(ModelError::NonFiniteFeature);
         }
-        let value = self.network.predict(features);
+        let value = match &self.shared {
+            None => self.network.predict(features),
+            // The network runs once per input for all the model's outputs: the first of them to ask computes them all.
+            Some(shared) => {
+                let mut last = shared
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if last
+                    .as_ref()
+                    .is_none_or(|(input, _)| input.as_slice() != features)
+                {
+                    *last = Some((features.to_vec(), self.network.predict_all(features)));
+                }
+                last.as_ref().map_or(f64::NAN, |(_, all)| {
+                    all.get(self.output).copied().unwrap_or(f64::NAN)
+                })
+            }
+        };
         if !value.is_finite() || !(0.0..=1.0).contains(&value) {
             return Err(ModelError::BadOutput(value.to_string()));
         }

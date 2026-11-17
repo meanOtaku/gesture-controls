@@ -443,6 +443,21 @@ pub struct LabelModelView {
     /// `provenance.gestures`), each with a model of its own. Empty for a model of one gesture.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub gestures: Vec<String>,
+    /// For a multi-gesture model (one model, an output per gesture): each output, its own first. Empty for one gesture.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<ModelOutputView>,
+}
+
+/// One output of a multi-gesture model: its gesture, the thresholds it runs at, whether it is that gesture's active
+/// model, and how it did at those thresholds.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelOutputView {
+    pub label: String,
+    pub activation: f64,
+    pub release: f64,
+    pub active: bool,
+    pub evaluation: Option<ModelEvaluationView>,
 }
 
 /// A model's held-out results as its bundle's manifest records them (`provenance.evaluation*`).
@@ -1018,18 +1033,89 @@ impl LabelRuntimeHost {
         &self,
         app: &AppHandle,
         id: &str,
+        output: Option<&str>,
         activation: f64,
         release: Option<f64>,
         figures: Option<model_lab_core::ThresholdFigures>,
     ) -> Result<(), String> {
         let version = self.version_for(id)?;
-        let release = release.unwrap_or_else(|| default_release(&version.thresholds, activation));
+        let output = output
+            .map(|label| LabelId::new(label).map_err(|e| e.to_string()))
+            .transpose()?;
+        let current = output
+            .as_ref()
+            .and_then(|label| version.output_for(label))
+            .map_or(version.thresholds, |(_, thresholds)| thresholds);
+        let release = release.unwrap_or_else(|| default_release(&current, activation));
         let now = Self::now_rfc3339();
         self.change_registry(app, |r| {
-            r.set_thresholds_measured(&version.id, activation, release, figures, &now)
+            r.set_output_thresholds(
+                &version.id,
+                output.as_ref(),
+                activation,
+                release,
+                figures,
+                &now,
+            )
         })?;
         info!(model = %version.id, activation, release, "changed a model's thresholds");
         Ok(())
+    }
+
+    /// Combines the copies of one multi-gesture network that earlier runs registered as a model per gesture (the same
+    /// model file, each reading its gesture's output) into one model with an output for each: the copy of its first
+    /// gesture becomes that model, each output keeping its copy's thresholds, and the others leave the registry, their
+    /// files moved under `set-aside/<time>/` with their registry entries (never deleted). Refused while any is active.
+    pub fn combine_copies(
+        &self,
+        app: &AppHandle,
+        dir: &Path,
+        ids: &[String],
+    ) -> Result<String, String> {
+        let versions = ids
+            .iter()
+            .map(|id| self.version_for(id))
+            .collect::<Result<Vec<_>, _>>()?;
+        let plan = combine_plan(dir, &versions)?;
+        let keep = plan.keep.clone();
+        let removed: Vec<model_lab_core::ModelVersion> =
+            versions.iter().filter(|v| v.id != keep).cloned().collect();
+        self.change_registry(app, |r| {
+            r.set_outputs(&keep, plan.outputs)?;
+            for version in &removed {
+                // Only an archived model leaves the registry; its files are kept, set aside below.
+                let now = Self::now_rfc3339();
+                if version.state == LifecycleState::Draft {
+                    r.transition(&version.id, LifecycleState::Evaluated, &now)?;
+                }
+                if version.state != LifecycleState::Archived {
+                    r.transition(&version.id, LifecycleState::Archived, &now)?;
+                }
+                r.remove_version(&version.id)?;
+            }
+            Ok(())
+        })?;
+        let stamp = Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
+        let record = serde_json::json!({ "why": format!("combined into {keep}, one multi-gesture model"), "versions": removed });
+        let file = dir
+            .join(SET_ASIDE_DIR)
+            .join(&stamp)
+            .join("registry-entries.json");
+        if let Some(parent) = file.parent()
+            && std::fs::create_dir_all(parent).is_ok()
+        {
+            let _ = std::fs::write(
+                &file,
+                serde_json::to_vec_pretty(&record).unwrap_or_default(),
+            );
+        }
+        for version in &removed {
+            if let Some(path) = label_inference::removable_model_dir(dir, version) {
+                set_aside(dir, &path, &stamp);
+            }
+        }
+        info!(model = %keep, combined = removed.len(), "combined a multi-gesture model's copies");
+        Ok(keep.to_string())
     }
 
     pub fn deactivate_label(&self, app: &AppHandle, label: &str) -> Result<(), String> {
@@ -1131,6 +1217,28 @@ impl LabelRuntimeHost {
                     release: v.thresholds.release,
                     threshold_changes: v.threshold_changes.clone(),
                     evaluation: ModelEvaluationView::for_version(v, manifest.as_ref()),
+                    outputs: v
+                        .outputs
+                        .iter()
+                        .map(|o| ModelOutputView {
+                            label: o.label.to_string(),
+                            activation: o.thresholds.activation,
+                            release: o.thresholds.release,
+                            active: registry.active_by_label.get(&o.label) == Some(&v.id),
+                            evaluation: o.figures.as_ref().map(|f| ModelEvaluationView {
+                                recall: f.recall,
+                                false_activations_per_hour: f.false_activations_per_hour,
+                                at_threshold: Some(o.thresholds.activation),
+                                measured: if v.threshold_changes.iter().any(|c| {
+                                    c.output.as_ref() == Some(&o.label) && c.figures.is_some()
+                                }) {
+                                    "thresholdCard"
+                                } else {
+                                    "training"
+                                },
+                            }),
+                        })
+                        .collect(),
                     gestures: manifest
                         .as_ref()
                         .and_then(|m| m["provenance"]["gestures"].as_array().cloned())
@@ -1860,11 +1968,23 @@ pub fn set_label_model_threshold(
     app: AppHandle,
     host: State<'_, LabelRuntimeHost>,
     id: String,
+    output: Option<String>,
     activation: f64,
     release: Option<f64>,
     figures: Option<model_lab_core::ThresholdFigures>,
 ) -> Result<(), String> {
-    host.set_model_threshold(&app, &id, activation, release, figures)
+    host.set_model_threshold(&app, &id, output.as_deref(), activation, release, figures)
+}
+
+/// Combines the per-gesture copies of one multi-gesture network into one model (`LabelRuntimeHost::combine_copies`).
+#[tauri::command]
+pub fn combine_multi_gesture_copies(
+    app: AppHandle,
+    host: State<'_, LabelRuntimeHost>,
+    ids: Vec<String>,
+) -> Result<String, String> {
+    let dir = LabelRuntimeHost::model_lab_dir(&app)?;
+    host.combine_copies(&app, &dir, &ids)
 }
 
 #[tauri::command]
@@ -1892,6 +2012,104 @@ pub fn set_label_runtime_mode(
     mode: model_lab_core::InferenceMode,
 ) -> Result<(), String> {
     host.set_mode(&app, mode)
+}
+
+/// How copies of one multi-gesture network become one model: which copy stays (its first gesture's) and its outputs.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct CombinePlan {
+    pub keep: ModelVersionId,
+    pub outputs: Vec<model_lab_core::ModelOutput>,
+}
+
+/// Checks `versions` are the copies of one multi-gesture network (one model file, manifests naming the same gestures,
+/// one copy per gesture, none active, none combined already) and plans their combination, in the network's order.
+pub(crate) fn combine_plan(
+    dir: &Path,
+    versions: &[model_lab_core::ModelVersion],
+) -> Result<CombinePlan, String> {
+    if versions.len() < 2 {
+        return Err("choose two or more copies to combine".into());
+    }
+    let sha = versions[0].model_sha256.clone();
+    if sha.is_none() || versions.iter().any(|v| v.model_sha256 != sha) {
+        return Err("these are not copies of one model: their files differ".into());
+    }
+    if versions.iter().any(|v| v.state == LifecycleState::Active) {
+        return Err("deactivate them first: a copy is active".into());
+    }
+    if versions.iter().any(|v| !v.outputs.is_empty()) {
+        return Err("one of them is already a multi-gesture model".into());
+    }
+    let manifest = |v: &model_lab_core::ModelVersion| -> Result<serde_json::Value, String> {
+        let path = label_inference::removable_model_dir(dir, v)
+            .ok_or_else(|| format!("{}'s files are not in the model lab", v.id))?
+            .join("manifest.json");
+        std::fs::read(&path)
+            .map_err(|e| e.to_string())
+            .and_then(|bytes| serde_json::from_slice(&bytes).map_err(|e| e.to_string()))
+            .map_err(|e| format!("{}'s manifest could not be read: {e}", v.id))
+    };
+    let manifests = versions
+        .iter()
+        .map(manifest)
+        .collect::<Result<Vec<_>, _>>()?;
+    let gestures: Vec<String> = manifests[0]["provenance"]["gestures"]
+        .as_array()
+        .map(|list| {
+            list.iter()
+                .filter_map(|g| g.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    if gestures.len() < 2
+        || manifests
+            .iter()
+            .any(|m| m["provenance"]["gestures"] != manifests[0]["provenance"]["gestures"])
+    {
+        return Err("these were not trained as one multi-gesture model".into());
+    }
+    let mut pairs: Vec<(&model_lab_core::ModelVersion, &serde_json::Value)> =
+        versions.iter().zip(&manifests).collect();
+    let position =
+        |v: &model_lab_core::ModelVersion| gestures.iter().position(|g| g == v.label.as_str());
+    if pairs.iter().any(|(v, _)| position(v).is_none())
+        || pairs
+            .iter()
+            .map(|(v, _)| v.label.clone())
+            .collect::<std::collections::BTreeSet<_>>()
+            .len()
+            != pairs.len()
+    {
+        return Err("each copy must be of a different gesture of the model".into());
+    }
+    pairs.sort_by_key(|(v, _)| position(v));
+    let outputs = pairs
+        .iter()
+        .map(|(v, m)| {
+            let index = m["output"]["positiveIndex"]
+                .as_u64()
+                .ok_or_else(|| format!("{}'s manifest names no output", v.id))?
+                as usize;
+            Ok(model_lab_core::ModelOutput {
+                label: v.label.clone(),
+                index,
+                thresholds: v.thresholds,
+                figures: ModelEvaluationView::for_version(v, Some(m)).and_then(|e| {
+                    (e.at_threshold
+                        .is_some_and(|at| (at - v.thresholds.activation).abs() < 1e-9))
+                    .then_some(model_lab_core::ThresholdFigures {
+                        recall: e.recall,
+                        false_activations_per_hour: e.false_activations_per_hour,
+                        recordings: 0,
+                    })
+                }),
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    Ok(CombinePlan {
+        keep: pairs[0].0.id.clone(),
+        outputs,
+    })
 }
 
 #[cfg(test)]
@@ -2213,6 +2431,76 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn copies_of_one_multi_gesture_network_combine_into_one_model_in_its_order() {
+        let lab = tempfile::tempdir().unwrap();
+        let gestures = ["pinch_in", "pinch_hold", "pinch_out"];
+        let copy = |label: &str, index: u64, activation: f64| {
+            let dir = format!("label-models/{label}-8f79");
+            std::fs::create_dir_all(lab.path().join(&dir)).unwrap();
+            std::fs::write(
+                lab.path().join(&dir).join("manifest.json"),
+                serde_json::json!({"output": {"positiveIndex": index}, "thresholds": {"activation": 0.95},
+                    "provenance": {"gestures": gestures, "evaluationGestureRecall": 0.7, "evaluationFalseActivationsPerHour": 6.0}}).to_string(),
+            )
+            .unwrap();
+            let mut v = model_lab_core::ModelVersion::new(
+                ModelVersionId::new(format!("{label}-8f79")).unwrap(),
+                model_lab_core::ProjectId::new(format!("p-{label}")).unwrap(),
+                LabelId::new(label).unwrap(),
+                model_lab_core::ModelOrigin::Imported,
+                false,
+                Some("ab".repeat(32)),
+                dir,
+                label_inference::cnn_v2_contract(),
+                model_lab_core::Thresholds::default(),
+                model_lab_core::QualityRules::default(),
+                "2026-11-17T00:00:00Z",
+            )
+            .unwrap();
+            v.thresholds.activation = activation;
+            v
+        };
+        // Given in any order: the plan follows the network's.
+        let copies = [
+            copy("pinch_out", 3, 0.95),
+            copy("pinch_in", 1, 0.9),
+            copy("pinch_hold", 2, 0.95),
+        ];
+        let plan = super::combine_plan(lab.path(), &copies).unwrap();
+        assert_eq!(plan.keep.as_str(), "pinch_in-8f79");
+        assert_eq!(
+            plan.outputs
+                .iter()
+                .map(|o| (o.label.as_str(), o.index, o.thresholds.activation))
+                .collect::<Vec<_>>(),
+            [
+                ("pinch_in", 1, 0.9),
+                ("pinch_hold", 2, 0.95),
+                ("pinch_out", 3, 0.95)
+            ]
+        );
+        // Training's figures are kept only where the threshold is still training's.
+        assert!(plan.outputs[0].figures.is_none());
+        assert_eq!(plan.outputs[1].figures.as_ref().unwrap().recall, Some(0.7));
+
+        let mut other_file = copies.clone();
+        other_file[1].model_sha256 = Some("cd".repeat(32));
+        assert!(
+            super::combine_plan(lab.path(), &other_file)
+                .unwrap_err()
+                .contains("files differ")
+        );
+        let mut active = copies.clone();
+        active[0].state = LifecycleState::Active;
+        assert!(
+            super::combine_plan(lab.path(), &active)
+                .unwrap_err()
+                .contains("deactivate")
+        );
+        assert!(super::combine_plan(lab.path(), &copies[..1]).is_err());
+    }
 
     fn view(label: &str, state: &str, ready_in_ms: Option<u64>) -> ReadinessView {
         ReadinessView {

@@ -315,7 +315,11 @@ fn sweep_points(rows: &SweepRows) -> Vec<ThresholdPoint> {
 /// makes, at each threshold from 0.30 to 0.99, on the recordings it was tested on: the trade-off its threshold picks a point
 /// on.
 #[tauri::command]
-pub async fn threshold_sweep(version_id: String, app: AppHandle) -> Result<ThresholdSweep, String> {
+pub async fn threshold_sweep(
+    version_id: String,
+    output: Option<String>,
+    app: AppHandle,
+) -> Result<ThresholdSweep, String> {
     let dir = app
         .path()
         .app_data_dir()
@@ -334,7 +338,14 @@ pub async fn threshold_sweep(version_id: String, app: AppHandle) -> Result<Thres
             .and_then(|run| registry.snapshots.get(&run.snapshot_id))
             .ok_or("the training run behind this model is no longer in the registry")?;
         let excluded = sealed_test::excluded_labels(&registry, &version);
-        let label = version.label.to_string();
+        // For a multi-gesture model, the output (gesture) asked for; else its own.
+        let label = output.unwrap_or_else(|| version.label.to_string());
+        let output_label = model_lab_core::LabelId::new(label.clone()).map_err(|e| e.to_string())?;
+        let threshold = version
+            .output_for(&output_label)
+            .ok_or_else(|| format!("this model does not detect '{label}'"))?
+            .1
+            .activation;
         let mut rows = SweepRows::new();
         let mut recordings = 0;
         for id in snapshot.split.evaluation.iter().map(ToString::to_string) {
@@ -345,7 +356,10 @@ pub async fn threshold_sweep(version_id: String, app: AppHandle) -> Result<Thres
             let pair = labelling::pair_at(&model_lab::dataset_csv_path(&datasets_dir, &id))?;
             let (starts, duration_ms) = sealed_test::starts_of(&pair, &label)?;
             let (holds, _) = dataset_files::holds(&pair)?;
-            let model = label_inference::load_version(&version, &dir)?;
+            let model = label_inference::load_version_all(&version, &dir)?
+                .into_iter()
+                .find(|m| m.label == output_label)
+                .ok_or("the model gave no output for that gesture")?;
             let replay = labelling::replay(&pair, vec![model])?.into_iter().next().ok_or("the model gave no result")?;
             let span = sealed_test::judged_span(&replay, duration_ms);
             let recording = Recording { target: &label, starts: &starts, holds: &holds, excluded: &excluded, span };
@@ -357,7 +371,7 @@ pub async fn threshold_sweep(version_id: String, app: AppHandle) -> Result<Thres
         Ok(ThresholdSweep {
             version: version_id,
             label,
-            threshold: version.thresholds.activation,
+            threshold,
             points: sweep_points(&rows),
             recordings,
             budget_per_hour: detector_events::FALSE_ACTIVATIONS_BUDGET_PER_HOUR,

@@ -593,9 +593,15 @@ plan is kept in the model's manifest (`trainingStages`).
 a second switches the model to CNN v2) train one network for all of them: the first ticked is the one the run is named
 after (for example Pinch in, then Pinch out). The network has an output for "nothing" and one for each gesture, through a
 softmax, so they compete: one movement is taken for one of them at most, where two separate models could both go off.
-Each gesture still gets its own model under **Models**, reading its own output of the shared network, with its own
-cut-off, to approve, activate and roll back on its own; all of them are tested on the same recordings, which hold
-every gesture on both sides. The training result and each model's **Inspect** view show the **confusion matrices**: each
+It is **one model**: one file, registered once, with an output for each gesture. In **Models** it has its own card
+under **Multi-gesture models**, listing its outputs with each one's threshold and held-out figures. It is approved and
+activated as a whole, and becomes the active model of all its gestures at once (replacing whatever was active for any of
+them); activating a one-gesture model for one of its gestures takes the whole multi-gesture model off. The network runs
+once per decision for all its gestures. Each output has its own threshold: pick the model's output on the **Threshold**
+card. Recipes keep using the gestures' labels. Copies that earlier runs registered as one model per gesture are listed
+there too, with **Combine into one model**: the copy of the first gesture becomes the model, each output keeps its
+copy's threshold, and the other copies' folders are set aside under `model-lab/set-aside/`, never deleted. All of them
+are tested on the same recordings, which hold every gesture on both sides. The training result and each model's **Inspect** view show the **confusion matrices**: each
 gesture's starts played through as the app runs live (caught as itself, caught as another gesture, or missed) with the
 false alarms when no gesture was under way, and every test moment by what it was and what the network said. A
 multi-gesture model trains from scratch (no Start from, no stages), and retraining one of its gestures means training the

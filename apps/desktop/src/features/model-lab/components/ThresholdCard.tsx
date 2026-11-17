@@ -109,10 +109,16 @@ export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: 
   const [confirmOver, setConfirmOver] = useState(false);
   const [applied, setApplied] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const choices = models.filter((model) => model.state !== "archived");
-  const model = choices.find((entry) => entry.id === version) ?? null;
-  const current = model?.activation ?? null;
-  const last = model?.thresholdChanges?.at(-1) ?? null;
+  // Each model, and each output of a multi-gesture model ("<id>#<gesture>"), has its own threshold.
+  const choices = models
+    .filter((model) => model.state !== "archived")
+    .flatMap((model) => (model.outputs?.length ?? 0) > 1
+      ? model.outputs!.map((output) => ({ key: `${model.id}#${output.label}`, model, output: output.label, label: output.label, activation: output.activation, release: output.release, active: output.active }))
+      : [{ key: model.id, model, output: null as string | null, label: model.label, activation: model.activation, release: model.release, active: model.active }]);
+  const choice = choices.find((entry) => entry.key === version) ?? null;
+  const model = choice?.model ?? null;
+  const current = choice?.activation ?? null;
+  const last = model?.thresholdChanges?.filter((change) => (change.output ?? null) === (choice?.output ?? null)).at(-1) ?? null;
 
   const choose = (id: string) => {
     setVersion(id);
@@ -128,7 +134,7 @@ export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: 
     setError(null);
     setApplied(null);
     try {
-      const result = await invoke<ThresholdSweep>("threshold_sweep", { versionId: version });
+      const result = await invoke<ThresholdSweep>("threshold_sweep", { versionId: model!.id, ...(choice?.output ? { output: choice.output } : {}) });
       setSweep(result);
       setShown(pointAt(result, result.threshold).threshold);
     } catch (err) {
@@ -149,8 +155,8 @@ export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: 
       const figures = at && Math.abs(at.threshold - activation) < 1e-6
         ? { recall: at.starts > 0 ? caughtShare(at) : null, falseActivationsPerHour: at.falseActivationsPerHour ?? null, recordings: sweep!.recordings }
         : null;
-      await invoke("set_label_model_threshold", { id: model.id, activation, figures });
-      setApplied(`${modelName(model)} now runs at ${activation.toFixed(2)}${model.active ? ", from now on" : ""}.`);
+      await invoke("set_label_model_threshold", { id: model.id, ...(choice?.output ? { output: choice.output } : {}), activation, figures });
+      setApplied(`${modelName(model)}${choice?.output ? ` (${choice.output})` : ""} now runs at ${activation.toFixed(2)}${model.active ? ", from now on" : ""}.`);
       setSweep((previous) => (previous ? { ...previous, threshold: activation } : previous));
       setConfirmOver(false);
       setTyped("");
@@ -182,8 +188,8 @@ export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: 
           <select aria-label="Model for the threshold" className="recipe-select" value={version} onChange={(event) => choose(event.target.value)}>
             <option value="">Choose a model…</option>
             {choices.map((entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.label}: {modelName(entry)} ({entry.active ? "active" : entry.state}{entry.activation != null ? `, ${entry.activation.toFixed(2)}` : ""})
+              <option key={entry.key} value={entry.key}>
+                {entry.label}: {modelName(entry.model)}{entry.output ? " (multi-gesture)" : ""} ({entry.active ? "active" : entry.model.state}{entry.activation != null ? `, ${entry.activation.toFixed(2)}` : ""})
               </option>
             ))}
           </select>
@@ -196,7 +202,7 @@ export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: 
         {model && current !== null && (
           <p aria-label="Current threshold">
             It runs at <strong className="font-mono">{<AnimatedNumber value={current} digits={2} />}</strong>
-            {model.release != null ? <> and a detection ends below <span className="font-mono">{<AnimatedNumber value={model.release} digits={2} />}</span></> : null}.
+            {choice?.release != null ? <> and a detection ends below <span className="font-mono">{<AnimatedNumber value={choice.release} digits={2} />}</span></> : null}.
             {last ? <>{" Changed from "}<AnimatedNumber value={last.fromActivation} digits={2} />{" to "}<AnimatedNumber value={last.toActivation} digits={2} />{" on "}{formatTime(last.at)}{"."}</> : ""}
           </p>
         )}

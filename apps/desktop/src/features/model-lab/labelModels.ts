@@ -24,8 +24,10 @@ export interface LabelModel {
   thresholdChanges?: ThresholdChange[];
   /** How it did on its held-out recordings, from its manifest; null when the manifest says nothing. */
   evaluation?: ModelEvaluation | null;
-  /** For one gesture's model of a multi-gesture network: every gesture it learnt, each with a model of its own. */
+  /** For a model trained as a multi-gesture network: every gesture it learnt. */
   gestures?: string[];
+  /** A multi-gesture model's outputs (one model, an output per gesture), its own first; absent for one gesture. */
+  outputs?: ModelOutputView[];
 }
 
 /** Mirrors `model_lab_core::ThresholdChange`. */
@@ -35,11 +37,23 @@ export interface ThresholdChange {
   toActivation: number;
   toRelease: number;
   at: string;
+  /** For a multi-gesture model: the output (gesture) whose thresholds changed. */
+  output?: string | null;
   /** How it did at the new threshold, when the Threshold card measured it as it was set. */
   figures?: { recall: number | null; falseActivationsPerHour: number | null; recordings: number } | null;
 }
 
 /** Mirrors `ModelEvaluationView` in `label_runtime.rs`. */
+/** Mirrors `ModelOutputView` in `label_runtime.rs`: one output of a multi-gesture model. */
+export interface ModelOutputView {
+  label: string;
+  activation: number;
+  release: number;
+  /** It is its gesture's active model now. */
+  active: boolean;
+  evaluation: ModelEvaluation | null;
+}
+
 export interface ModelEvaluation {
   /** The share of gesture starts it caught, 0 to 1. */
   recall: number | null;
@@ -187,7 +201,11 @@ export function actionsFor(model: Pick<LabelModel, "state" | "deployable" | "mon
  * from newest to oldest. */
 export function groupByLabel(models: LabelModel[]): { label: string; models: LabelModel[] }[] {
   const groups = new Map<string, LabelModel[]>();
-  for (const model of newestFirst(models)) groups.set(model.label, [...(groups.get(model.label) ?? []), model]);
+  // A multi-gesture model is listed on its own (`multiGestureNetworks`), not under one of its gestures.
+  for (const model of newestFirst(models)) {
+    if ((model.outputs?.length ?? 0) > 1) continue;
+    groups.set(model.label, [...(groups.get(model.label) ?? []), model]);
+  }
   return [...groups.entries()].map(([label, list]) => ({ label, models: list }));
 }
 
@@ -198,7 +216,8 @@ export function groupByLabel(models: LabelModel[]): { label: string; models: Lab
 export function multiGestureNetworks(models: LabelModel[]): { key: string; gestures: string[]; createdAt: string; models: LabelModel[] }[] {
   const networks = new Map<string, LabelModel[]>();
   for (const model of models) {
-    if ((model.gestures?.length ?? 0) < 2 || model.state === "archived") continue;
+    // Copies registered one per gesture, as runs did before a multi-gesture model was one model.
+    if ((model.gestures?.length ?? 0) < 2 || (model.outputs?.length ?? 0) > 1 || model.state === "archived") continue;
     const key = model.modelSha256 ?? `${model.gestures!.join(",")}:${model.id.split("-").at(-1)}`;
     networks.set(key, [...(networks.get(key) ?? []), model]);
   }

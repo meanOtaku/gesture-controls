@@ -45,7 +45,8 @@ pub use inputs::{
     PPG_ONLY_PREPROCESSING,
 };
 pub use loader::{
-    ModelLoadFailure, check_loadable, load_active_models, load_version, removable_model_dir,
+    ModelLoadFailure, check_loadable, load_active_models, load_version, load_version_all,
+    removable_model_dir,
 };
 pub use model::{FAR_EXCESS, InputCheck, LoadedModel, ModelError, OutsideInput, RANGE_MARGIN};
 pub use pipeline::{LabelPipeline, LabelScore, Rejection, WindowRejection};

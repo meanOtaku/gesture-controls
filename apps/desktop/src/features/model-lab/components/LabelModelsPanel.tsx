@@ -17,6 +17,7 @@ import {
   runtimeSummary,
   groupByLabel,
   multiGestureNetworks,
+  newestFirst,
   modelName,
   modelStats,
   type ImportedLabelModel,
@@ -119,8 +120,11 @@ export function LabelModelsPanel({
   };
 
   // A multi-gesture network's models are listed together in its own section; a label's own list keeps only its active one.
+  // Multi-gesture models (one model, an output per gesture), and the per-gesture copies older runs made of one network.
+  const multiModels = newestFirst(models.filter((model) => (model.outputs?.length ?? 0) > 1));
   const networks = multiGestureNetworks(models);
   const inNetwork = new Set(networks.flatMap((network) => network.models.map((model) => model.id)));
+  const coveredBy = (label: string) => multiModels.find((model) => model.outputs!.some((output) => output.label === label && output.active)) ?? null;
   const groups = groupByLabel(models).filter((group) => group.models.some((model) => model.active || !inNetwork.has(model.id)));
   const anyImported = models.some((model) => model.imported && model.state !== "archived" && !model.active);
 
@@ -300,6 +304,7 @@ export function LabelModelsPanel({
               const score = status?.lastScores[group.label];
               const detected = status?.activeDetections.includes(group.label) ?? false;
               const active = group.models.find((model) => model.active);
+              const multiActive = active ? null : coveredBy(group.label);
               const others = group.models.filter((model) => !model.active && model.state !== "archived" && !inNetwork.has(model.id));
               const archived = group.models.filter((model) => model.state === "archived");
               const showArchived = archivedOpen.has(group.label);
@@ -307,7 +312,7 @@ export function LabelModelsPanel({
                 <li key={group.label} className="flex flex-col gap-3 rounded-md border p-3" aria-label={`${group.label} slot`}>
                   <div className="flex flex-wrap items-center gap-2">
                     <strong>{group.label}</strong>
-                    {active ? <Badge>Active</Badge> : <Badge variant="destructive">No active model</Badge>}
+                    {active || multiActive ? <Badge>Active</Badge> : <Badge variant="destructive">No active model</Badge>}
                     {detected && <Badge>Detected</Badge>}
                     {score !== undefined && (
                       <span className="ml-auto flex items-center gap-2">
@@ -319,7 +324,8 @@ export function LabelModelsPanel({
                     )}
                   </div>
                   {(status?.inputWarnings ?? []).filter((w) => w.label === group.label).map((w) => <InputWarningNote key={w.modelId} warning={w} />)}
-                  {!active && (
+                  {multiActive && <p className="text-sm">Detected by {modelName(multiActive)}, a multi-gesture model (below).</p>}
+                  {!active && !multiActive && (
                     <p className="text-sm text-destructive">
                       Nothing detects {group.label}, so no recipe that uses it can start or end. Activate a version below.
                     </p>
@@ -391,72 +397,101 @@ export function LabelModelsPanel({
             })}
           </ul>
         )}
-        {networks.length > 0 && (
+        {(multiModels.length > 0 || networks.length > 0) && (
           <section className="flex flex-col gap-3" aria-label="Multi-gesture models">
             <h3 className="label">Multi-gesture models</h3>
-            <p className="field-hint">One model that tells several gestures apart: one network, an output for each gesture, which compete so one movement is taken for one of them at most. Each output has its own threshold; they go live together.</p>
+            <p className="field-hint">One CNN that tells several gestures apart: an output for each, which compete so one movement is taken for one of them at most. It is activated as one, and becomes the active model of all its gestures; each output has its own threshold.</p>
             <ul className="flex flex-col gap-4">
-              {networks.map((network) => {
-                const name = network.gestures.join(" · ");
-                const toActivate = network.models.filter((model) => !model.active && actionsFor(model)[0]?.kind === "activate");
-                const activeOnes = network.models.filter((model) => model.active);
-                const replaces = toActivate.some((model) => models.some((other) => other.label === model.label && other.active));
-                const monitorOnly = network.models.some((model) => model.monitorOnly);
-                const states = [...new Set(network.models.map((model) => (model.active ? "Active" : STATE_LABEL[model.state])))];
-                const value = (model: LabelModel, term: string) => modelStats(model).find((fact) => fact.term === term)?.value ?? "–";
+              {multiModels.map((model) => {
+                const outputs = model.outputs!;
+                const name = modelName(model);
+                const [next, ...secondary] = model.active ? [] : actionsFor(model);
+                const replaces = outputs.some((output) => models.some((other) => other.id !== model.id && other.active && (other.label === output.label || other.outputs?.some((o) => o.label === output.label && o.active))));
+                const figure = (output: (typeof outputs)[number], term: string) =>
+                  modelStats({ activation: output.activation, evaluation: output.evaluation }).find((fact) => fact.term === term)?.value ?? "–";
                 return (
-                  <li key={network.key} className="flex flex-col gap-3 rounded-md border p-3" aria-label={`${name} model`}>
+                  <li key={model.id} className="flex flex-col gap-3 rounded-md border p-3" aria-label={`${name} model`}>
                     <div className="flex flex-wrap items-start gap-3">
                       <div className="flex min-w-0 flex-1 flex-col gap-1">
                         <strong className="text-sm">{name}</strong>
                         <span className="flex flex-wrap items-center gap-2 text-sm">
-                          <small className="text-muted-foreground">{network.models[0].id.split("-").at(-1)}</small>
-                          <Badge variant="outline">Multi-gesture</Badge>
-                          {states.map((state) => <Badge key={state} variant={state === "Active" ? "default" : "secondary"}>{state === "Active" && activeOnes.length < network.models.length ? "Partly active" : state}</Badge>)}
-                          {monitorOnly && <Badge variant="outline">Monitor only</Badge>}
+                          {model.name && <small className="text-muted-foreground">{model.id}</small>}
+                          <Badge variant="outline">Multi-gesture: {outputs.map((output) => output.label).join(" · ")}</Badge>
+                          {model.active ? <Badge>Active</Badge> : <Badge variant="secondary">{STATE_LABEL[model.state]}</Badge>}
+                          {model.monitorOnly && <Badge variant="outline">Monitor only</Badge>}
                         </span>
                         <small className="text-xs text-muted-foreground">
-                          Added {formatTime(network.createdAt)}
-                          {monitorOnly ? ". It did not pass the checks for going live: when active it scores and shows what it detects, but never starts a recipe, even in Live." : ""}
+                          Added {formatTime(model.createdAt)}
+                          {model.monitorOnly ? ". It did not pass the checks for going live: when active it scores and shows what it detects, but never starts a recipe, even in Live." : ""}
                         </small>
                       </div>
                       <div className="recipe-item-actions">
-                        {toActivate.length > 0 && (
-                          <Button type="button" variant="outline" aria-label={`${replaces ? "Swap in" : "Activate"} ${name}`}
-                            disabled={toActivate.some((model) => isPending(`${model.id}:activate`))}
-                            onClick={() => { setMoreOpen(null); void (async () => { for (const model of toActivate) await perform(model, actionsFor(model)[0]); })(); }}>
-                            {replaces ? "Swap in" : "Activate"}
-                          </Button>
-                        )}
-                        {activeOnes.length > 0 && (
-                          <Button type="button" variant="ghost" aria-label={`Deactivate ${name}`}
-                            onClick={() => void attempt(`${network.key}:deactivate`, "Deactivate", async () => { for (const model of activeOnes) await invoke("deactivate_label_model", { label: model.label }); })}>
+                        {next && actionButton(model, next, "outline", next.kind === "activate" && replaces ? "Swap in" : next.label)}
+                        {model.active && (
+                          <Button type="button" variant="ghost" aria-label={`Deactivate ${model.id}`} disabled={isPending(`${model.label}:deactivate`)}
+                            onClick={() => void attempt(`${model.label}:deactivate`, "Deactivate", () => invoke("deactivate_label_model", { label: model.label }))}>
                             Deactivate
                           </Button>
                         )}
-                        {onInspect && (
-                          <Button type="button" variant="ghost" aria-label={`Inspect ${name}`} onClick={() => onInspect(network.models[0].id)}>Inspect</Button>
-                        )}
+                        {moreButton(model)}
                       </div>
                     </div>
+                    {morePanel(model, secondary)}
                     <table className="coverage-grid network-outputs" aria-label={`${name} outputs`}>
                       <thead>
-                        <tr><th scope="col">Output</th><th scope="col">State</th><th scope="col">Threshold</th><th scope="col">Held-out recall</th><th scope="col">False / hour</th><th scope="col"><span className="sr-only">Actions</span></th></tr>
+                        <tr><th scope="col">Output</th><th scope="col">Threshold</th><th scope="col">Held-out recall</th><th scope="col">False / hour</th></tr>
+                      </thead>
+                      <tbody>
+                        {outputs.map((output) => (
+                          <tr key={output.label}>
+                            <th scope="row">{output.label}{output.active && <> <Badge>Active</Badge></>}</th>
+                            <td className="tabular-nums">{output.activation.toFixed(2)}</td>
+                            <td className="tabular-nums">{figure(output, "Held-out recall")}</td>
+                            <td className="tabular-nums">{figure(output, "False / hour")}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <p className="field-hint">Set each output&apos;s threshold on the Threshold card (pick the model&apos;s output there).</p>
+                  </li>
+                );
+              })}
+              {networks.map((network) => {
+                const name = network.gestures.join(" · ");
+                const anyActive = network.models.some((model) => model.active);
+                return (
+                  <li key={network.key} className="flex flex-col gap-3 rounded-md border p-3" aria-label={`${name} copies`}>
+                    <div className="flex flex-wrap items-start gap-3">
+                      <div className="flex min-w-0 flex-1 flex-col gap-1">
+                        <strong className="text-sm">{name}</strong>
+                        <small className="text-xs text-muted-foreground">
+                          One network, registered as a model per gesture by an earlier version of the app. Combine them into one model: it keeps the file, each gesture&apos;s threshold and the training history; the copies&apos; folders are set aside, never deleted.
+                          {anyActive ? " Deactivate the active one first." : ""}
+                        </small>
+                      </div>
+                      <div className="recipe-item-actions">
+                        <Button type="button" variant="outline" aria-label={`Combine ${name} into one model`} disabled={anyActive || isPending(`${network.key}:combine`)}
+                          onClick={() => void attempt(`${network.key}:combine`, "Combine", () => invoke("combine_multi_gesture_copies", { ids: network.models.map((model) => model.id) }), `${name} is now one model.`)}>
+                          Combine into one model
+                        </Button>
+                      </div>
+                    </div>
+                    <table className="coverage-grid network-outputs" aria-label={`${name} copies list`}>
+                      <thead>
+                        <tr><th scope="col">Copy</th><th scope="col">State</th><th scope="col">Threshold</th><th scope="col">Held-out recall</th><th scope="col">False / hour</th></tr>
                       </thead>
                       <tbody>
                         {network.models.map((model) => (
                           <tr key={model.id}>
                             <th scope="row">{model.label}</th>
                             <td>{model.active ? <Badge>Active</Badge> : STATE_LABEL[model.state]}</td>
-                            <td className="tabular-nums">{value(model, "Threshold")}</td>
-                            <td className="tabular-nums">{value(model, "Held-out recall")}</td>
-                            <td className="tabular-nums">{value(model, "False / hour")}</td>
-                            <td>{moreButton(model)}</td>
+                            <td className="tabular-nums">{model.activation?.toFixed(2) ?? "–"}</td>
+                            <td className="tabular-nums">{modelStats(model).find((fact) => fact.term === "Held-out recall")?.value ?? "–"}</td>
+                            <td className="tabular-nums">{modelStats(model).find((fact) => fact.term === "False / hour")?.value ?? "–"}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                    {network.models.map((model) => <div key={model.id}>{morePanel(model, actionsFor(model))}</div>)}
                   </li>
                 );
               })}

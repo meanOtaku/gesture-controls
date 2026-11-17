@@ -295,6 +295,7 @@ impl Registry {
         if self.versions.contains_key(&version.id) {
             return Err(RegistryError::DuplicateVersion(version.id));
         }
+        check_outputs(&version)?;
         if version.state != LifecycleState::Draft {
             return Err(RegistryError::Corrupt(
                 "a new version must start as a draft".into(),
@@ -351,10 +352,9 @@ impl Registry {
             return Err(VersionError::NotDeployable.into());
         }
         version.move_to(to, at);
-        let label = version.label.clone();
-        // A model that is archived can no longer be the one to roll back to.
-        if to == LifecycleState::Archived && self.previous_by_label.get(&label) == Some(id) {
-            self.previous_by_label.remove(&label);
+        // A model that is archived can no longer be the one to roll back to, for any of its gestures.
+        if to == LifecycleState::Archived {
+            self.previous_by_label.retain(|_, previous| previous != id);
         }
         Ok(())
     }
@@ -370,6 +370,84 @@ impl Registry {
         at: &str,
     ) -> Result<(), RegistryError> {
         self.set_thresholds_measured(id, activation, release, None, at)
+    }
+
+    /// Makes a model a multi-gesture one: `outputs`, its own label's first, each with the network output it reads and its
+    /// thresholds. Not while it is active (its gestures' slots would not follow).
+    pub fn set_outputs(
+        &mut self,
+        id: &ModelVersionId,
+        outputs: Vec<crate::ModelOutput>,
+    ) -> Result<(), RegistryError> {
+        let version = self.version_mut(id)?;
+        if version.state == LifecycleState::Active {
+            return Err(RegistryError::ActiveIsPinned);
+        }
+        let mut next = version.clone();
+        next.outputs = outputs;
+        check_outputs(&next)?;
+        if let Some(first) = next.outputs.first() {
+            next.thresholds = first.thresholds;
+        }
+        *version = next;
+        Ok(())
+    }
+
+    /// [`Registry::set_thresholds_measured`] for one output of a multi-gesture model (`output`, its gesture's label); for
+    /// a model of one gesture, `output` must be its label or absent.
+    pub fn set_output_thresholds(
+        &mut self,
+        id: &ModelVersionId,
+        output: Option<&LabelId>,
+        activation: f64,
+        release: f64,
+        figures: Option<crate::ThresholdFigures>,
+        at: &str,
+    ) -> Result<(), RegistryError> {
+        let version = self.version_mut(id)?;
+        let Some(label) = output.filter(|_| !version.outputs.is_empty()) else {
+            if output.is_some_and(|label| *label != version.label) {
+                return Err(RegistryError::Corrupt(format!(
+                    "model '{id}' does not detect that label"
+                )));
+            }
+            return self.set_thresholds_measured(id, activation, release, figures, at);
+        };
+        let primary = version.label == *label;
+        let out = version
+            .outputs
+            .iter_mut()
+            .find(|o| o.label == *label)
+            .ok_or_else(|| {
+                RegistryError::Corrupt(format!("model '{id}' has no output '{label}'"))
+            })?;
+        let next = Thresholds {
+            activation,
+            release,
+            ..out.thresholds
+        };
+        next.validate()
+            .map_err(|e| RegistryError::BadThresholds(e.to_string()))?;
+        if next == out.thresholds && figures.is_none() {
+            return Ok(());
+        }
+        let change = ThresholdChange {
+            from_activation: out.thresholds.activation,
+            from_release: out.thresholds.release,
+            to_activation: activation,
+            to_release: release,
+            at: at.to_string(),
+            output: Some(label.clone()),
+            figures: figures.clone(),
+        };
+        out.thresholds = next;
+        // Figures measured at the old thresholds no longer say how it does.
+        out.figures = figures;
+        if primary {
+            version.thresholds = next;
+        }
+        version.threshold_changes.push(change);
+        Ok(())
     }
 
     /// [`Registry::set_thresholds`], keeping how the model did at the new thresholds (`figures`) with the change. Given
@@ -400,6 +478,7 @@ impl Registry {
             to_activation: activation,
             to_release: release,
             at: at.to_string(),
+            output: None,
             figures,
         });
         version.thresholds = next;
@@ -518,18 +597,48 @@ impl Registry {
         if !version.runnable() {
             return Err(VersionError::NotDeployable.into());
         }
+        let labels = version.labels();
         let replaced = self.active_by_label.get(&label).cloned();
-        if let Some(old) = &replaced {
-            self.version_mut(old)?.move_to(LifecycleState::Approved, at);
-            self.previous_by_label.insert(label.clone(), old.clone());
-        }
-        self.version_mut(id)?.move_to(LifecycleState::Active, at);
-        self.active_by_label.insert(label.clone(), id.clone());
+        self.make_active(id, &labels, at)?;
         Ok(Activation {
             label,
             activated: id.clone(),
             replaced,
         })
+    }
+
+    /// Makes `id` the active model of each of `labels` (all it detects). A model active for any of them is demoted to
+    /// Approved and remembered for rollback for each label it had, and leaves every slot it held: a multi-gesture model
+    /// is active for all its gestures or none.
+    fn make_active(
+        &mut self,
+        id: &ModelVersionId,
+        labels: &[LabelId],
+        at: &str,
+    ) -> Result<(), RegistryError> {
+        let replaced: std::collections::BTreeSet<ModelVersionId> = labels
+            .iter()
+            .filter_map(|label| self.active_by_label.get(label).cloned())
+            .filter(|old| old != id)
+            .collect();
+        for old in &replaced {
+            let held: Vec<LabelId> = self
+                .active_by_label
+                .iter()
+                .filter(|(_, active)| *active == old)
+                .map(|(label, _)| label.clone())
+                .collect();
+            for label in held {
+                self.active_by_label.remove(&label);
+                self.previous_by_label.insert(label, old.clone());
+            }
+            self.version_mut(old)?.move_to(LifecycleState::Approved, at);
+        }
+        self.version_mut(id)?.move_to(LifecycleState::Active, at);
+        for label in labels {
+            self.active_by_label.insert(label.clone(), id.clone());
+        }
+        Ok(())
     }
 
     /// Turns a label's model off. The caller must clear its detection state; the model stays Approved and is kept
@@ -541,11 +650,22 @@ impl Registry {
     ) -> Result<ModelVersionId, RegistryError> {
         let active = self
             .active_by_label
-            .remove(label)
+            .get(label)
+            .cloned()
             .ok_or_else(|| RegistryError::NothingActive(label.clone()))?;
+        // A multi-gesture model goes off for all its gestures.
+        let held: Vec<LabelId> = self
+            .active_by_label
+            .iter()
+            .filter(|(_, id)| **id == active)
+            .map(|(l, _)| l.clone())
+            .collect();
+        for l in held {
+            self.active_by_label.remove(&l);
+            self.previous_by_label.insert(l, active.clone());
+        }
         self.version_mut(&active)?
             .move_to(LifecycleState::Approved, at);
-        self.previous_by_label.insert(label.clone(), active.clone());
         Ok(active)
     }
 
@@ -569,17 +689,15 @@ impl Registry {
             });
         }
         let current = self.active_by_label.get(label).cloned();
-        if let Some(current) = &current {
-            self.version_mut(current)?
-                .move_to(LifecycleState::Approved, at);
-            self.previous_by_label
-                .insert(label.clone(), current.clone());
-        } else {
+        if current.is_none() {
             self.previous_by_label.remove(label);
         }
-        self.version_mut(&previous)?
-            .move_to(LifecycleState::Active, at);
-        self.active_by_label.insert(label.clone(), previous.clone());
+        let labels = self
+            .versions
+            .get(&previous)
+            .map(ModelVersion::labels)
+            .unwrap_or_default();
+        self.make_active(&previous, &labels, at)?;
         Ok(Rollback {
             label: label.clone(),
             released: current.unwrap_or_else(|| previous.clone()),
@@ -669,13 +787,18 @@ impl Registry {
                     version.state
                 ));
             }
+            if check_outputs(version).is_err() {
+                return bad(format!("model '{id}' has inconsistent outputs"));
+            }
             if version.state == LifecycleState::Active {
-                *active_per_label.entry(&version.label).or_default() += 1;
-                if self.active_by_label.get(&version.label) != Some(id) {
-                    return bad(format!(
-                        "model '{id}' is Active but is not its label's active slot"
-                    ));
+                for label in version.labels() {
+                    if self.active_by_label.get(&label) != Some(id) {
+                        return bad(format!(
+                            "model '{id}' is Active but is not the active slot of '{label}'"
+                        ));
+                    }
                 }
+                *active_per_label.entry(&version.label).or_default() += 1;
             }
         }
         for (label, count) in &active_per_label {
@@ -685,7 +808,7 @@ impl Registry {
         }
         for (label, id) in &self.active_by_label {
             match self.versions.get(id) {
-                Some(v) if v.label == *label && v.state == LifecycleState::Active => {}
+                Some(v) if v.detects(label) && v.state == LifecycleState::Active => {}
                 _ => {
                     return bad(format!(
                         "the active slot for '{label}' points at '{id}', which is not an active model of that label"
@@ -694,7 +817,7 @@ impl Registry {
             }
         }
         for (label, id) in &self.previous_by_label {
-            if !self.versions.get(id).is_some_and(|v| v.label == *label) {
+            if !self.versions.get(id).is_some_and(|v| v.detects(label)) {
                 return bad(format!(
                     "the previous slot for '{label}' points at '{id}', which is not a model of that label"
                 ));
@@ -702,6 +825,30 @@ impl Registry {
         }
         Ok(())
     }
+}
+
+/// A multi-gesture model's outputs, checked: none, or its own label first, each label once, each output index past 0 and
+/// different.
+fn check_outputs(version: &ModelVersion) -> Result<(), RegistryError> {
+    if version.outputs.is_empty() {
+        return Ok(());
+    }
+    let labels: std::collections::BTreeSet<&LabelId> =
+        version.outputs.iter().map(|o| &o.label).collect();
+    let indexes: std::collections::BTreeSet<usize> =
+        version.outputs.iter().map(|o| o.index).collect();
+    if version.outputs[0].label != version.label
+        || version.outputs.len() < 2
+        || labels.len() != version.outputs.len()
+        || indexes.len() != version.outputs.len()
+        || indexes.contains(&0)
+    {
+        return Err(RegistryError::Corrupt(format!(
+            "model '{}' must list its own label first, then other gestures, each once with its own output",
+            version.id
+        )));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1164,6 +1311,7 @@ pub(crate) mod tests {
                 to_activation: 0.95,
                 to_release: 0.8,
                 at: "2026-11-10T10:00:00Z".into(),
+                output: None,
                 figures: None,
             }]
         );
@@ -1283,5 +1431,119 @@ pub(crate) mod tests {
             r.remove_version(&id("a2")),
             Err(RegistryError::NoVersion(id("a2")))
         );
+    }
+
+    /// a1 and b1 as before, and m1: one model detecting pinch_start (its own) and swipe_left.
+    fn with_multi() -> Registry {
+        let mut r = two_label_registry();
+        let mut m = version("m1", "pa", "pinch_start", "ra", true);
+        m.outputs = vec![
+            crate::ModelOutput {
+                label: label("pinch_start"),
+                index: 1,
+                thresholds: m.thresholds,
+                figures: None,
+            },
+            crate::ModelOutput {
+                label: label("swipe_left"),
+                index: 2,
+                thresholds: m.thresholds,
+                figures: None,
+            },
+        ];
+        r.register_version(m).unwrap();
+        approve(&mut r, "m1");
+        r
+    }
+
+    #[test]
+    fn a_multi_gesture_model_is_active_for_all_its_gestures_or_none() {
+        let mut r = with_multi();
+        r.activate(&mid("a1"), T).unwrap();
+        r.activate(&mid("b1"), T).unwrap();
+        // It replaces both gestures' models at once.
+        r.activate(&mid("m1"), T).unwrap();
+        assert_eq!(r.active_by_label[&label("pinch_start")], mid("m1"));
+        assert_eq!(r.active_by_label[&label("swipe_left")], mid("m1"));
+        assert_eq!(r.versions[&mid("a1")].state, LifecycleState::Approved);
+        assert_eq!(r.versions[&mid("b1")].state, LifecycleState::Approved);
+        r.validate().unwrap();
+        // A one-gesture model for one of them takes the whole multi-gesture model off.
+        r.activate(&mid("b1"), T).unwrap();
+        assert_eq!(r.active_by_label[&label("swipe_left")], mid("b1"));
+        assert!(!r.active_by_label.contains_key(&label("pinch_start")));
+        assert_eq!(r.versions[&mid("m1")].state, LifecycleState::Approved);
+        assert_eq!(r.previous_by_label[&label("pinch_start")], mid("m1"));
+        r.validate().unwrap();
+        // Rolling back brings it back for both.
+        r.rollback(&label("swipe_left"), T).unwrap();
+        assert_eq!(r.active_by_label[&label("pinch_start")], mid("m1"));
+        assert_eq!(r.active_by_label[&label("swipe_left")], mid("m1"));
+        r.validate().unwrap();
+        // Deactivating one of its gestures turns it off for both.
+        r.deactivate(&label("pinch_start"), T).unwrap();
+        assert!(r.active_by_label.is_empty());
+        r.validate().unwrap();
+    }
+
+    #[test]
+    fn each_output_of_a_multi_gesture_model_has_its_own_thresholds() {
+        let mut r = with_multi();
+        let figures = crate::ThresholdFigures {
+            recall: Some(0.9),
+            false_activations_per_hour: Some(1.0),
+            recordings: 4,
+        };
+        r.set_output_thresholds(
+            &mid("m1"),
+            Some(&label("swipe_left")),
+            0.97,
+            0.8,
+            Some(figures.clone()),
+            T,
+        )
+        .unwrap();
+        let m = &r.versions[&mid("m1")];
+        assert_eq!(
+            m.output_for(&label("swipe_left")).unwrap().1.activation,
+            0.97
+        );
+        assert_ne!(
+            m.thresholds.activation, 0.97,
+            "its own (first) output is unchanged"
+        );
+        assert_eq!(m.outputs[1].figures, Some(figures));
+        assert_eq!(
+            m.threshold_changes.last().unwrap().output,
+            Some(label("swipe_left"))
+        );
+        r.set_output_thresholds(&mid("m1"), Some(&label("pinch_start")), 0.9, 0.7, None, T)
+            .unwrap();
+        assert_eq!(
+            r.versions[&mid("m1")].thresholds.activation,
+            0.9,
+            "its own output's are the model's"
+        );
+        assert!(
+            r.set_output_thresholds(&mid("a1"), Some(&label("swipe_left")), 0.9, 0.7, None, T)
+                .is_err()
+        );
+        r.validate().unwrap();
+    }
+
+    #[test]
+    fn a_multi_gesture_model_lists_its_own_gesture_first_each_once() {
+        let mut r = two_label_registry();
+        let mut m = version("m2", "pa", "pinch_start", "ra", true);
+        let out = |l: &str, index| crate::ModelOutput {
+            label: label(l),
+            index,
+            thresholds: m.thresholds,
+            figures: None,
+        };
+        m.outputs = vec![out("swipe_left", 2), out("pinch_start", 1)];
+        assert!(r.register_version(m.clone()).is_err());
+        m.outputs = vec![out("pinch_start", 1), out("swipe_left", 1)];
+        assert!(r.register_version(m).is_err());
     }
 }

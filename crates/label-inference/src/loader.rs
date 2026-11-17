@@ -53,6 +53,22 @@ pub fn load_version(version: &ModelVersion, model_lab_dir: &Path) -> Result<Load
     LoadedModel::load(bundle, version).map_err(|e| e.to_string())
 }
 
+/// [`load_version`] for every gesture the version detects: one model for a model of one gesture, one per output (its
+/// own first) for a multi-gesture model, all reading one loaded network.
+pub fn load_version_all(
+    version: &ModelVersion,
+    model_lab_dir: &Path,
+) -> Result<Vec<LoadedModel>, String> {
+    let dir = contained(model_lab_dir, &version.artifact_dir).ok_or_else(|| {
+        format!(
+            "the model directory '{}' is not a safe relative path",
+            version.artifact_dir
+        )
+    })?;
+    let bundle = validate_bundle(&dir, Some(&version.label)).map_err(|e| e.to_string())?;
+    LoadedModel::load_all(bundle, version).map_err(|e| e.to_string())
+}
+
 /// Whether this version's files are intact and its model runs, without keeping the loaded model.
 pub fn check_loadable(version: &ModelVersion, model_lab_dir: &Path) -> Result<(), String> {
     let mut probe = version.clone();
@@ -66,6 +82,8 @@ pub fn load_active_models(
 ) -> (Vec<LoadedModel>, Vec<ModelLoadFailure>) {
     let mut loaded = Vec::new();
     let mut failures = Vec::new();
+    // A multi-gesture model is the active one of several labels: it is loaded once, with a model for each of them.
+    let mut done = std::collections::BTreeSet::new();
     for (label, version_id) in &registry.active_by_label {
         let fail = |detail: String| ModelLoadFailure {
             label: label.clone(),
@@ -78,9 +96,18 @@ pub fn load_active_models(
             ));
             continue;
         };
-        match load_version(version, model_lab_dir) {
-            Ok(model) => loaded.push(model),
-            Err(detail) => failures.push(fail(detail)),
+        if !done.insert(version_id.clone()) {
+            continue;
+        }
+        match load_version_all(version, model_lab_dir) {
+            Ok(models) => loaded.extend(models),
+            Err(detail) => {
+                failures.extend(version.labels().into_iter().map(|label| ModelLoadFailure {
+                    label,
+                    version: version_id.clone(),
+                    detail: detail.clone(),
+                }))
+            }
         }
     }
     (loaded, failures)
@@ -302,5 +329,80 @@ mod tests {
             rose,
             "a registry-approved model detects a pinch start in live mode"
         );
+    }
+
+    #[test]
+    fn a_multi_gesture_model_loads_once_as_a_model_for_each_of_its_gestures() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("models/multi");
+        fs::create_dir_all(&dir).unwrap();
+        let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        let model = fs::read(fixtures.join("cnn_v2_multi_gesture/model.cnn")).unwrap();
+        fs::write(dir.join("model.cnn"), &model).unwrap();
+        let mut manifest: serde_json::Value = serde_json::from_slice(
+            &fs::read(fixtures.join("ppg_imu_cnn_v2_bundle/manifest.json")).unwrap(),
+        )
+        .unwrap();
+        manifest["targetLabel"] = "pinch_in".into();
+        manifest["model"]["sha256"] = model_lab_core_sha(&model).into();
+        manifest["output"]["shape"] = serde_json::json!([null, 3]);
+        fs::write(dir.join("manifest.json"), manifest.to_string()).unwrap();
+        let bundle = validate_bundle(&dir, None).unwrap();
+        let thresholds = bundle.manifest.threshold_config();
+        let mut version = ModelVersion::new(
+            ModelVersionId::new("pinch_in-multi").unwrap(),
+            ProjectId::new("p-pinch_in").unwrap(),
+            label("pinch_in"),
+            ModelOrigin::Imported,
+            true,
+            Some(bundle.model_sha256.clone()),
+            "models/multi".into(),
+            bundle.manifest.input_contract(),
+            thresholds,
+            bundle.manifest.quality,
+            T,
+        )
+        .unwrap();
+        let out = |l: &str, index, activation| model_lab_core::ModelOutput {
+            label: label(l),
+            index,
+            thresholds: Thresholds {
+                activation,
+                ..thresholds
+            },
+            figures: None,
+        };
+        version.outputs = vec![
+            out("pinch_in", 1, thresholds.activation),
+            out("pinch_out", 2, 0.97),
+        ];
+        version.state = LifecycleState::Active;
+        let models = load_version_all(&version, root.path()).unwrap();
+        assert_eq!(
+            models
+                .iter()
+                .map(|m| (m.label.as_str(), m.output))
+                .collect::<Vec<_>>(),
+            [("pinch_in", 1), ("pinch_out", 2)]
+        );
+        assert_eq!(models[1].thresholds.activation, 0.97);
+        let input = vec![0.5; 1000];
+        let (a, b) = (
+            models[0].predict(&input).unwrap(),
+            models[1].predict(&input).unwrap(),
+        );
+        assert!(
+            a > 0.0 && b > 0.0 && a + b < 1.0,
+            "two outputs of one softmax"
+        );
+        // Its first output alone, as the replays load it.
+        assert_eq!(
+            load_version(&version, root.path()).unwrap().label,
+            label("pinch_in")
+        );
+        // An output that is not the network's for its gesture is refused.
+        version.outputs[1].index = 1;
+        version.outputs[0].index = 2;
+        assert!(load_version_all(&version, root.path()).is_err());
     }
 }

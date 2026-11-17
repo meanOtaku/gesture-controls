@@ -243,24 +243,39 @@ describe("LabelModelsPanel", () => {
     await waitFor(() => expect(calls("set_label_model_state")).toEqual([["set_label_model_state", { id: "snap-abc", state: "archived" }]]));
   });
 
-  it("lists a multi-gesture network's models together in their own section, out of their labels' lists", async () => {
+  it("offers to combine the per-gesture copies an earlier run made of one network into one model", async () => {
     const gestures = ["pinch_in", "pinch_hold", "pinch_out"];
-    const network = (label: string, over: Partial<LabelModel> = {}): LabelModel => ({ ...draft, id: `${label}-8f79`, label, gestures, modelSha256: "net", monitorOnly: false, deployable: true, state: "approved", ...over });
-    setup([
-      network("pinch_in"), network("pinch_hold"), network("pinch_out"),
-      { ...draft, id: "pinch_in-old", label: "pinch_in", active: true, state: "active" },
-    ]);
+    const copy = (label: string, over: Partial<LabelModel> = {}): LabelModel => ({ ...draft, id: `${label}-8f79`, label, gestures, modelSha256: "net", ...over });
+    setup([copy("pinch_in"), copy("pinch_hold"), copy("pinch_out"), { ...draft, id: "pinch_in-old", label: "pinch_in", active: true, state: "active" }]);
     const section = await screen.findByRole("region", { name: "Multi-gesture models" });
-    // One model, an output for each gesture.
-    const card = within(section).getByRole("listitem", { name: "pinch_in · pinch_hold · pinch_out model" });
-    const outputs = within(card).getByRole("table", { name: "pinch_in · pinch_hold · pinch_out outputs" });
-    expect(within(outputs).getAllByRole("rowheader").map((cell) => cell.textContent)).toEqual(["pinch_in", "pinch_hold", "pinch_out"]);
-    // pinch_in's own list keeps its active model only; pinch_hold, with none outside the network, has no slot.
-    const slot = screen.getByRole("listitem", { name: "pinch_in slot" });
-    expect(within(slot).queryByText("pinch_in-8f79")).toBeNull();
+    const card = within(section).getByRole("listitem", { name: "pinch_in · pinch_hold · pinch_out copies" });
+    // They are not listed under their labels.
+    expect(within(screen.getByRole("listitem", { name: "pinch_in slot" })).queryByText("pinch_in-8f79")).toBeNull();
     expect(screen.queryByRole("listitem", { name: "pinch_hold slot" })).toBeNull();
-    // It goes in as one, replacing pinch_in's active model.
-    fireEvent.click(within(card).getByRole("button", { name: "Swap in pinch_in · pinch_hold · pinch_out" }));
-    await waitFor(() => expect(calls("activate_label_model").map(([, args]) => args)).toEqual([{ id: "pinch_in-8f79" }, { id: "pinch_hold-8f79" }, { id: "pinch_out-8f79" }]));
+    fireEvent.click(within(card).getByRole("button", { name: "Combine pinch_in · pinch_hold · pinch_out into one model" }));
+    await waitFor(() => expect(calls("combine_multi_gesture_copies")[0]?.[1]).toEqual({ ids: ["pinch_in-8f79", "pinch_hold-8f79", "pinch_out-8f79"] }));
+  });
+
+  it("shows a multi-gesture model as one model with an output per gesture, activated as one", async () => {
+    const output = (label: string, activation: number, active = false) => ({ label, activation, release: activation - 0.1, active, evaluation: { recall: 0.8, falseActivationsPerHour: 2, atThreshold: activation, measured: "training" as const } });
+    const multi: LabelModel = { ...draft, id: "pinch_in-8f79", label: "pinch_in", name: "Pinch, all three", state: "approved", deployable: true, imported: false,
+      outputs: [output("pinch_in", 0.9), output("pinch_hold", 0.95), output("pinch_out", 0.97)] };
+    setup([multi, { ...draft, id: "pinch_out-best", label: "pinch_out", active: true, state: "active" }]);
+    const card = await screen.findByRole("listitem", { name: "Pinch, all three model" });
+    const rows = within(within(card).getByRole("table", { name: "Pinch, all three outputs" })).getAllByRole("row").slice(1);
+    expect(rows.map((row) => row.textContent)).toEqual(["pinch_in0.9080%2.0", "pinch_hold0.9580%2.0", "pinch_out0.9780%2.0"]);
+    // Not under pinch_in's label, which has no model of its own.
+    expect(screen.queryByRole("listitem", { name: "pinch_in slot" })).toBeNull();
+    fireEvent.click(within(card).getByRole("button", { name: "Swap in pinch_in-8f79" }));
+    await waitFor(() => expect(calls("activate_label_model").map(([, args]) => args)).toEqual([{ id: "pinch_in-8f79" }]));
+  });
+
+  it("says which multi-gesture model detects a label when that is its active model", async () => {
+    const multi: LabelModel = { ...draft, id: "pinch_in-8f79", label: "pinch_in", state: "active", active: true,
+      outputs: [{ label: "pinch_in", activation: 0.9, release: 0.8, active: true, evaluation: null }, { label: "pinch_out", activation: 0.95, release: 0.85, active: true, evaluation: null }] };
+    setup([multi, { ...draft, id: "pinch_out-old", label: "pinch_out", state: "approved" }]);
+    const slot = await screen.findByRole("listitem", { name: "pinch_out slot" });
+    expect(slot).toHaveTextContent("Detected by pinch_in-8f79, a multi-gesture model (below)");
+    expect(slot).not.toHaveTextContent("No active model");
   });
 });

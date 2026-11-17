@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { within, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const invoke = vi.fn();
@@ -101,5 +101,19 @@ describe("the threshold card", () => {
     fireEvent.click(screen.getByRole("button", { name: "Lower the threshold one step" }));
     fireEvent.click(screen.getByRole("button", { name: "Lower the threshold one step" }));
     expect(slider).toHaveAttribute("aria-valuetext", "0.60");
+  });
+
+  it("sets each output of a multi-gesture model on its own", async () => {
+    invoke.mockResolvedValue({ ...sweep, version: "m1", label: "pinch_out", threshold: 0.65 });
+    const multi = { id: "m1", label: "pinch_in", state: "approved", deployable: true, imported: false, modelSha256: null, createdAt: "", active: false, activation: 0.9,
+      outputs: [{ label: "pinch_in", activation: 0.9, release: 0.8, active: false, evaluation: null }, { label: "pinch_out", activation: 0.65, release: 0.5, active: false, evaluation: null }] };
+    render(<ThresholdCard desktopAvailable models={[multi as never]} />);
+    const picker = screen.getByLabelText("Model for the threshold");
+    expect(within(picker).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Choose a model…", "pinch_in: m1 (multi-gesture) (approved, 0.90)", "pinch_out: m1 (multi-gesture) (approved, 0.65)",
+    ]);
+    fireEvent.change(picker, { target: { value: "m1#pinch_out" } });
+    fireEvent.click(screen.getByRole("button", { name: "Show the trade-off" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("threshold_sweep", { versionId: "m1", output: "pinch_out" }));
   });
 });

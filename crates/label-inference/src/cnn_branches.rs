@@ -150,21 +150,32 @@ impl BranchCnn {
     /// The probability of its gesture (output [`BranchCnn::reading`] chose) for `input` (channel by channel): the
     /// networks' probabilities averaged.
     pub fn predict(&self, input: &[f64]) -> f64 {
+        self.predict_all(input)[self.read]
+    }
+
+    /// Every output's probability for `input`, the networks' averaged: [nothing, gesture] for a one-gesture file, and
+    /// for a multi-gesture file [nothing, each gesture...], which sum to 1. One pass of the networks gives every
+    /// gesture's score.
+    pub fn predict_all(&self, input: &[f64]) -> Vec<f64> {
         assert_eq!(input.len(), self.features(), "checked by the caller");
-        self.members
-            .iter()
-            .map(|m| {
-                let raw = m.predict(input, self.length);
-                if self.outputs.is_none() {
-                    1.0 / (1.0 + (-raw[0]).exp())
-                } else {
-                    let top = raw.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-                    let sum: f64 = raw.iter().map(|v| (v - top).exp()).sum();
-                    (raw[self.read] - top).exp() / sum
+        let width = self.outputs.as_ref().map_or(2, Vec::len);
+        let mut total = vec![0.0; width];
+        for m in &self.members {
+            let raw = m.predict(input, self.length);
+            if self.outputs.is_none() {
+                let p = 1.0 / (1.0 + (-raw[0]).exp());
+                total[0] += 1.0 - p;
+                total[1] += p;
+            } else {
+                let top = raw.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                let sum: f64 = raw.iter().map(|v| (v - top).exp()).sum();
+                for (slot, v) in total.iter_mut().zip(&raw) {
+                    *slot += (v - top).exp() / sum;
                 }
-            })
-            .sum::<f64>()
-            / self.members.len() as f64
+            }
+        }
+        let n = self.members.len() as f64;
+        total.iter().map(|v| v / n).collect()
     }
 }
 
