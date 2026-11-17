@@ -1,0 +1,14 @@
+{
+  "formatVersion": 1,
+  "ppgRows": 3351,
+  "imuRows": 13395,
+  "labels": [
+    "snap_fingers"
+  ],
+  "context": {
+    "arm": "resting",
+    "pinch": "light",
+    "strap": "normal",
+    "wrist": "left"
+  }
+}
