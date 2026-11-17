@@ -89,6 +89,23 @@ describe("the threshold card", () => {
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_label_model_threshold", { id: "imp", activation: 0.9, figures: null }));
   });
 
+  it("resets a changed threshold to the one training set, and offers nothing to reset when it is unchanged", async () => {
+    invoke.mockResolvedValue(undefined);
+    const changed = { ...trained, id: "imp", imported: true, activation: 0.99, release: 0.85,
+      thresholdChanges: [
+        { fromActivation: 0.95, fromRelease: 0.8, toActivation: 0.97, toRelease: 0.82, at: "2026-11-09T10:00:00Z" },
+        { fromActivation: 0.97, fromRelease: 0.82, toActivation: 0.99, toRelease: 0.85, at: "2026-11-10T10:00:00Z" },
+      ] };
+    const { unmount } = render(<ThresholdCard desktopAvailable models={[changed]} />);
+    fireEvent.change(screen.getByLabelText("Model for the threshold"), { target: { value: "imp" } });
+    fireEvent.click(screen.getByRole("button", { name: "Reset to the trained threshold, 0.95" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_label_model_threshold", { id: "imp", activation: 0.95, release: 0.8, figures: null }));
+    unmount();
+    render(<ThresholdCard desktopAvailable models={[{ ...trained, id: "imp", imported: true, activation: 0.95, release: 0.8 }]} />);
+    fireEvent.change(screen.getByLabelText("Model for the threshold"), { target: { value: "imp" } });
+    expect(screen.queryByRole("button", { name: /Reset to the trained threshold/ })).toBeNull();
+  });
+
   it("steps the threshold one point at a time", async () => {
     invoke.mockResolvedValue(sweep);
     render(<ThresholdCard desktopAvailable models={[trained]} />);

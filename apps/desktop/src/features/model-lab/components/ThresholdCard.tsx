@@ -118,7 +118,11 @@ export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: 
   const choice = choices.find((entry) => entry.key === version) ?? null;
   const model = choice?.model ?? null;
   const current = choice?.activation ?? null;
-  const last = model?.thresholdChanges?.filter((change) => (change.output ?? null) === (choice?.output ?? null)).at(-1) ?? null;
+  const changes = model?.thresholdChanges?.filter((change) => (change.output ?? null) === (choice?.output ?? null)) ?? [];
+  const last = changes.at(-1) ?? null;
+  // What training set, before any change: the first change's starting point. Absent: it still runs at it.
+  const trained = changes.length > 0 ? { activation: changes[0].fromActivation, release: changes[0].fromRelease } : null;
+  const changedSinceTraining = trained !== null && current !== null && (Math.abs(current - trained.activation) > 1e-9 || Math.abs((choice?.release ?? trained.release) - trained.release) > 1e-9);
 
   const choose = (id: string) => {
     setVersion(id);
@@ -145,7 +149,7 @@ export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: 
     }
   };
 
-  const apply = async (activation: number) => {
+  const apply = async (activation: number, release?: number) => {
     if (!model) return;
     setApplying(true);
     setError(null);
@@ -155,7 +159,7 @@ export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: 
       const figures = at && Math.abs(at.threshold - activation) < 1e-6
         ? { recall: at.starts > 0 ? caughtShare(at) : null, falseActivationsPerHour: at.falseActivationsPerHour ?? null, recordings: sweep!.recordings }
         : null;
-      await invoke("set_label_model_threshold", { id: model.id, ...(choice?.output ? { output: choice.output } : {}), activation, figures });
+      await invoke("set_label_model_threshold", { id: model.id, ...(choice?.output ? { output: choice.output } : {}), activation, ...(release !== undefined ? { release } : {}), figures });
       setApplied(`${modelName(model)}${choice?.output ? ` (${choice.output})` : ""} now runs at ${activation.toFixed(2)}${model.active ? ", from now on" : ""}.`);
       setSweep((previous) => (previous ? { ...previous, threshold: activation } : previous));
       setConfirmOver(false);
@@ -204,6 +208,16 @@ export function ThresholdCard({ desktopAvailable, models }: { desktopAvailable: 
             It runs at <strong className="font-mono">{<AnimatedNumber value={current} digits={2} />}</strong>
             {choice?.release != null ? <> and a detection ends below <span className="font-mono">{<AnimatedNumber value={choice.release} digits={2} />}</span></> : null}.
             {last ? <>{" Changed from "}<AnimatedNumber value={last.fromActivation} digits={2} />{" to "}<AnimatedNumber value={last.toActivation} digits={2} />{" on "}{formatTime(last.at)}{"."}</> : ""}
+            {changedSinceTraining && trained && (
+              <>
+                {" "}
+                <Button type="button" variant="outline" size="sm" disabled={!desktopAvailable || applying}
+                  aria-label={`Reset to the trained threshold, ${trained.activation.toFixed(2)}`}
+                  onClick={() => void apply(trained.activation, trained.release)}>
+                  Reset to trained ({trained.activation.toFixed(2)})
+                </Button>
+              </>
+            )}
           </p>
         )}
         {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
