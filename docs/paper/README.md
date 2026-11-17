@@ -9,7 +9,7 @@ project report.
 | Folder | What it holds |
 | --- | --- |
 | [`manuscript/`](manuscript/README.md) | The source: section files, bibliography, figures, and the three build targets |
-| [`notes/`](notes/) | Working notes behind the paper: the [evidence audit](notes/EVIDENCE_AUDIT.md), the [Q2 research plan](notes/Q2_RESEARCH_PLAN.md) and the [journal companion](notes/JOURNAL_COMPANION.md) |
+| [`notes/`](notes/) | Working notes behind the paper: the [paper improvement guide](notes/PAPER_IMPROVEMENT_GUIDE.md), the [evidence audit](notes/EVIDENCE_AUDIT.md), the [Q2 research plan](notes/Q2_RESEARCH_PLAN.md) and the [journal companion](notes/JOURNAL_COMPANION.md) |
 | [`rewrite/`](rewrite/README.md) | Your own-words rewrite: one document per source file, applied back with `rewrite.py` |
 | [`revision-assets/`](revision-assets/README.md) | Reproducible figures, data inventory, provenance and the `verify.py` check |
 | [`archive/`](archive/) | The four earlier format variants, frozen for reference |
