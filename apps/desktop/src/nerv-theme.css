@@ -863,3 +863,10 @@ html[data-theme="nerv"] .multi-select-tick { border-color: rgba(80, 255, 80, 0.6
 html[data-theme="nerv"] .multi-select-option { color: var(--eva-green); }
 html[data-theme="nerv"] .multi-select-option:hover,
 html[data-theme="nerv"] .multi-select-option:focus-visible { background: rgba(80, 255, 80, 0.12); }
+
+/* A model's action bar and its floating More menu, in NERV: a faint green band, the terminal list. */
+html[data-theme="nerv"] .model-actions-bar { background: rgba(80, 255, 80, 0.05); border-color: rgba(80, 255, 80, 0.25); }
+html[data-theme="nerv"] .floating-menu { background: #000; border-color: rgba(80, 255, 80, 0.6); font-family: var(--font-mono); }
+html[data-theme="nerv"] .floating-menu-item { color: var(--eva-green); }
+html[data-theme="nerv"] .floating-menu-item:hover, html[data-theme="nerv"] .floating-menu-item:focus-visible { background: rgba(80, 255, 80, 0.12); }
+html[data-theme="nerv"] .floating-menu-danger { color: var(--destructive); }

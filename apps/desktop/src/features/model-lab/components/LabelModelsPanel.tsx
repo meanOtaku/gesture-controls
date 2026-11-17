@@ -10,6 +10,7 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { Input } from "../../../components/ui/input";
 import { usePendingActions } from "../hooks/usePendingActions";
+import { FloatingMenu } from "../../../components/app/FloatingMenu";
 import {
   MAX_MODEL_NAME,
   actionsFor,
@@ -66,7 +67,6 @@ export function LabelModelsPanel({
   const setError = setActionError;
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
-  const [moreOpen, setMoreOpen] = useState<string | null>(null);
   const [archivedOpen, setArchivedOpen] = useState<Set<string>>(new Set());
   const [justImported, setJustImported] = useState<string | null>(null);
   const { isPending, run } = usePendingActions();
@@ -135,7 +135,7 @@ export function LabelModelsPanel({
       variant={emphasis}
       aria-label={`${text} ${model.id}`}
       disabled={isPending(`${model.id}:${action.kind}`)}
-      onClick={() => { setMoreOpen(null); void perform(model, action); }}
+      onClick={() => void perform(model, action)}
     >
       {text}
     </Button>
@@ -197,43 +197,48 @@ export function LabelModelsPanel({
     );
   };
 
-  /** The More toggle, which sits with the row's actions. */
-  const moreButton = (model: LabelModel) => {
-    const opened = moreOpen === model.id;
+  /**
+   * The bar under each model, always shown: Inspect, Rename and its next lifecycle steps, with the rarer ones (going back a
+   * step, archiving) in a More menu that floats over the page, so opening it moves nothing. `extra` adds controls (delete).
+   */
+  const actionBar = (model: LabelModel, secondary: ModelAction[], extra?: React.ReactNode) => {
+    const rare = secondary.filter((action) => action.kind === "state" && (action.to === "archived" || (action.to === "evaluated" && model.state === "approved")));
+    const common = secondary.filter((action) => !rare.includes(action));
     return (
+      <div className="model-actions-bar" role="group" aria-label={`Actions for ${model.id}`}>
+        {onInspect && (
+          <Button type="button" variant="ghost" size="sm" aria-label={`Inspect ${model.id}`} onClick={() => onInspect(model.id)}>
+            Inspect
+          </Button>
+        )}
         <Button
           type="button"
           variant="ghost"
-          aria-label={`More actions for ${model.id}`}
-          aria-expanded={opened}
-          onClick={() => setMoreOpen(opened ? null : model.id)}
+          size="sm"
+          aria-label={`Rename ${model.id}`}
+          disabled={!desktopAvailable || isPending(`${model.id}:rename`)}
+          onClick={() => setRenaming({ id: model.id, draft: model.name ?? "" })}
         >
-          More
+          Rename
         </Button>
-    );
-  };
-
-  /** Everything but the model's next step (rename, inspect, and the lifecycle moves after the first), on its own line under the row. */
-  const morePanel = (model: LabelModel, secondary: ModelAction[]) => {
-    if (moreOpen !== model.id) return null;
-    return (
-          <div className="model-row-more" role="group" aria-label={`More for ${model.id}`}>
-            {onInspect && (
-              <Button type="button" variant="ghost" aria-label={`Inspect ${model.id}`} onClick={() => { setMoreOpen(null); onInspect(model.id); }}>
-                Inspect
-              </Button>
-            )}
-            <Button
-              type="button"
-              variant="ghost"
-              aria-label={`Rename ${model.id}`}
-              disabled={!desktopAvailable || isPending(`${model.id}:rename`)}
-              onClick={() => { setMoreOpen(null); setRenaming({ id: model.id, draft: model.name ?? "" }); }}
-            >
-              Rename
-            </Button>
-            {secondary.map((action) => actionButton(model, action, "ghost"))}
-          </div>
+        {common.map((action) => (
+          <Button key={action.label} type="button" variant="ghost" size="sm" aria-label={`${action.label} ${model.id}`}
+            disabled={isPending(`${model.id}:${action.kind}`)} onClick={() => void perform(model, action)}>
+            {action.label}
+          </Button>
+        ))}
+        {extra}
+        <FloatingMenu
+          label="More"
+          ariaLabel={`More actions for ${model.id}`}
+          items={rare.map((action) => ({
+            label: action.label,
+            danger: action.kind === "state" && action.to === "archived",
+            disabled: isPending(`${model.id}:${action.kind}`),
+            run: () => void perform(model, action),
+          }))}
+        />
+      </div>
     );
   };
 
@@ -341,9 +346,8 @@ export function LabelModelsPanel({
                             onClick={() => void attempt(`${active.label}:rollback`, "Roll back", () => invoke("rollback_label_model", { label: active.label }))}>
                             Roll back
                           </Button>
-                          {moreButton(active)}
                         </div>
-                        {morePanel(active, [])}
+                        {actionBar(active, [])}
                       </li>
                     )}
                     {others.length > 0 && active && <li className="model-rows-heading text-xs text-muted-foreground" aria-hidden="true">Other versions</li>}
@@ -356,9 +360,8 @@ export function LabelModelsPanel({
                           {stats(model)}
                           <div className="recipe-item-actions">
                             {next && actionButton(model, next, "outline", swap ? "Swap in" : next.label)}
-                            {moreButton(model)}
                           </div>
-                          {morePanel(model, secondary)}
+                          {actionBar(model, secondary)}
                         </li>
                       );
                     })}
@@ -382,10 +385,8 @@ export function LabelModelsPanel({
                               {stats(model)}
                               <div className="recipe-item-actions">
                                 {actionsFor(model).map((action) => actionButton(model, action))}
-                                {deleteControls(model)}
-                                {moreButton(model)}
                               </div>
-                              {morePanel(model, [])}
+                              {actionBar(model, [], deleteControls(model))}
                             </li>
                           ))}
                         </ul>
@@ -433,10 +434,9 @@ export function LabelModelsPanel({
                             Deactivate
                           </Button>
                         )}
-                        {moreButton(model)}
                       </div>
                     </div>
-                    {morePanel(model, secondary)}
+                    {actionBar(model, secondary)}
                     <table className="coverage-grid network-outputs" aria-label={`${name} outputs`}>
                       <thead>
                         <tr><th scope="col">Output</th><th scope="col">Threshold</th><th scope="col">Held-out recall</th><th scope="col">False / hour</th></tr>

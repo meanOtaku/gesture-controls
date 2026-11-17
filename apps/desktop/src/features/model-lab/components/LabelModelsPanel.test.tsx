@@ -42,18 +42,15 @@ describe("LabelModelsPanel", () => {
   it("offers Inspect for every model, and tells the page which one", async () => {
     const onInspect = vi.fn();
     setup([draft, { ...draft, id: "fist-1", label: "fist" }], {}, onInspect);
-    fireEvent.click(await screen.findByRole("button", { name: "More actions for fist-1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Inspect fist-1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Inspect fist-1" }));
     expect(onInspect).toHaveBeenCalledWith("fist-1");
-    fireEvent.click(screen.getByRole("button", { name: "More actions for snap-abc" }));
     fireEvent.click(screen.getByRole("button", { name: "Inspect snap-abc" }));
     expect(onInspect).toHaveBeenLastCalledWith("snap-abc");
   });
 
   it("renames a model, shows its name above its id, and clears it when the name is emptied", async () => {
     const { set } = setup([draft]);
-    fireEvent.click(await screen.findByRole("button", { name: "More actions for snap-abc" }));
-    fireEvent.click(screen.getByRole("button", { name: "Rename snap-abc" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Rename snap-abc" }));
     const box = screen.getByRole("textbox", { name: "Name for snap-abc" });
     fireEvent.change(box, { target: { value: "  Snap, CNN  " } });
     set([{ ...draft, name: "Snap, CNN" }]);
@@ -62,7 +59,6 @@ describe("LabelModelsPanel", () => {
     expect(await screen.findByText("Snap, CNN")).toBeInTheDocument();
     expect(screen.getByText("snap-abc")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "More actions for snap-abc" }));
     fireEvent.click(screen.getByRole("button", { name: "Rename snap-abc" }));
     expect(screen.getByRole("textbox", { name: "Name for snap-abc" })).toHaveValue("Snap, CNN");
     fireEvent.change(screen.getByRole("textbox", { name: "Name for snap-abc" }), { target: { value: " " } });
@@ -72,12 +68,10 @@ describe("LabelModelsPanel", () => {
 
   it("leaves the name alone when renaming is cancelled or nothing changed", async () => {
     setup([{ ...draft, name: "Snap" }]);
-    fireEvent.click(await screen.findByRole("button", { name: "More actions for snap-abc" }));
-    fireEvent.click(screen.getByRole("button", { name: "Rename snap-abc" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Rename snap-abc" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Name for snap-abc" }), { target: { value: "Other" } });
     fireEvent.keyDown(screen.getByRole("textbox", { name: "Name for snap-abc" }), { key: "Escape" });
     expect(screen.queryByRole("textbox")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "More actions for snap-abc" }));
     fireEvent.click(screen.getByRole("button", { name: "Rename snap-abc" }));
     fireEvent.click(screen.getByRole("button", { name: "Save name" }));
     expect(calls("rename_label_model")).toEqual([]);
@@ -90,7 +84,6 @@ describe("LabelModelsPanel", () => {
     expect(screen.getByText(/never starts a recipe, even in Live/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Activate for Monitor snap-abc" })).toBeInTheDocument();
     // The single step is behind More.
-    fireEvent.click(screen.getByRole("button", { name: "More actions for snap-abc" }));
     expect(screen.getByRole("button", { name: "Approve for Monitor snap-abc" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Fine-tune/ })).toBeNull();
   });
@@ -234,12 +227,18 @@ describe("LabelModelsPanel", () => {
     await waitFor(() => expect(calls("activate_label_model")).toEqual([["activate_label_model", { id: "snap-new" }]]));
   });
 
-  it("keeps stepping back and archiving behind More", async () => {
+  it("keeps stepping back and archiving in a More menu that floats, with the rest always in the model's action bar", async () => {
     setup([{ ...draft, state: "approved" }]);
     await screen.findByRole("button", { name: "Activate snap-abc" });
-    expect(screen.queryByRole("button", { name: "Archive snap-abc" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "More actions for snap-abc" }));
-    fireEvent.click(screen.getByRole("button", { name: "Archive snap-abc" }));
+    const bar = screen.getByRole("group", { name: "Actions for snap-abc" });
+    expect(within(bar).getByRole("button", { name: "Rename snap-abc" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Archive" })).toBeNull();
+    fireEvent.click(within(bar).getByRole("button", { name: "More actions for snap-abc" }));
+    // Drawn over the page, outside the list, so nothing moves.
+    const menu = screen.getByRole("menu", { name: "More actions for snap-abc" });
+    expect(bar.contains(menu)).toBe(false);
+    expect(within(menu).getByRole("menuitem", { name: "Back to evaluated" })).toBeInTheDocument();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Archive" }));
     await waitFor(() => expect(calls("set_label_model_state")).toEqual([["set_label_model_state", { id: "snap-abc", state: "archived" }]]));
   });
 

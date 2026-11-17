@@ -96,6 +96,12 @@ export function CutOffControl({ value, onChange, trained, running, onApply, appl
             Runs at <AnimatedText>{cutOffPercent(running)}</AnimatedText>
           </Button>
         )}
+        {onApply && running != null && round3(running) !== round3(trained) && (
+          <Button type="button" variant="outline" size="sm" disabled={applying}
+            onClick={() => { setConfirming(false); go(trained); onApply(round3(trained)); }}>
+            Reset to trained (<AnimatedText>{cutOffPercent(trained)}</AnimatedText>)
+          </Button>
+        )}
         {onApply && round3(value) !== round3(now) && !confirming && (
           <Button type="button" size="sm" disabled={applying} onClick={() => setConfirming(true)}>
             Use <AnimatedText>{cutOffPercent(value)}</AnimatedText> for this model

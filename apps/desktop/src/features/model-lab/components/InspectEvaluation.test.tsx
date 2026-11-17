@@ -85,6 +85,14 @@ describe("InspectEvaluation", () => {
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("set_label_model_threshold", { id: "pinch-1", activation: 0.955 }));
   });
 
+  it("resets a model that runs at another cut-off to the one it was trained at, in one click", async () => {
+    invokeMock.mockResolvedValue(undefined);
+    render(<InspectEvaluation inspection={middling()} model={{ id: "pinch-1", label: "pinch", state: "active" as const, deployable: true, imported: false, modelSha256: null, createdAt: "", active: true, activation: 0.9 }} desktopAvailable />);
+    fireEvent.click(screen.getByRole("button", { name: "Reset to trained (50%)" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("set_label_model_threshold", { id: "pinch-1", activation: 0.5 }));
+    expect(screen.getByLabelText("Cut-off")).toHaveAttribute("aria-valuetext", "50%");
+  });
+
   it("draws every chart with a summary in words, and the held-out recordings one by one", () => {
     render(<InspectEvaluation inspection={middling()} />);
     for (const name of [/^ROC curve\./, /^Precision and recall\./, /^What each cut-off would do\./, /^Where the scores fall\./, /^Can the scores be taken as probabilities\?/]) {
