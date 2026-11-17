@@ -189,6 +189,12 @@ fn init_logging() {
         .with(file)
         .try_init()
         .ok();
+    // A panic is written to the log as well as the terminal, so one that left part of the app silent can be found later.
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        tracing::error!(target: "panic", "{info}\n{}", std::backtrace::Backtrace::force_capture());
+        previous(info);
+    }));
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

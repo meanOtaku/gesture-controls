@@ -811,10 +811,7 @@ impl LabelRuntimeHost {
     }
 
     pub fn status(&self) -> LabelRuntimeStatus {
-        self.state
-            .lock()
-            .map(|s| s.status.clone())
-            .unwrap_or_default()
+        relock(&self.state, "model state").status.clone()
     }
 
     /// Opens the registry (migrating the old one if needed), loads the active models and sets the mode. Anything that
@@ -899,14 +896,13 @@ impl LabelRuntimeHost {
         let mode: RuntimeMode = registry.inference_mode.into();
         let loaded_labels: Vec<String> = models.iter().map(|m| m.label.to_string()).collect();
         let outputs = {
-            let Ok(mut runtime) = self.runtime.lock() else {
-                return;
-            };
+            let mut runtime = relock(&self.runtime, "model runtime");
             let first = runtime.set_models(models);
             let second = runtime.set_mode(mode);
             [first, second]
         };
-        if let Ok(mut state) = self.state.lock() {
+        {
+            let mut state = relock(&self.state, "model state");
             state.status.mode = mode_name(mode).to_string();
             state.status.loaded_labels = loaded_labels;
             state.status.load_failures = failures.iter().map(LoadFailureView::from).collect();
@@ -1264,10 +1260,7 @@ impl LabelRuntimeHost {
     }
 
     fn with_runtime(&self, app: &AppHandle, step: impl FnOnce(&mut LabelRuntime) -> RuntimeOutput) {
-        let output = match self.runtime.lock() {
-            Ok(mut runtime) => step(&mut runtime),
-            Err(_) => return,
-        };
+        let output = step(&mut relock(&self.runtime, "model runtime"));
         self.dispatch(app, output);
     }
 
@@ -1475,19 +1468,17 @@ impl LabelRuntimeHost {
         let changed = !output.events.is_empty()
             || !output.conflicts.is_empty()
             || !output.rejections.is_empty();
-        let (loaded, held) = match self.state.lock() {
-            Ok(mut state) => {
-                record(&mut state, &output);
-                (
-                    state.status.loaded_labels.iter().cloned().collect(),
-                    state
-                        .actionable_active
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect(),
-                )
-            }
-            Err(_) => (BTreeSet::new(), BTreeSet::new()),
+        let (loaded, held): (BTreeSet<String>, BTreeSet<String>) = {
+            let mut state = relock(&self.state, "model state");
+            record(&mut state, &output);
+            (
+                state.status.loaded_labels.iter().cloned().collect(),
+                state
+                    .actionable_active
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
         };
         // Recipes are told when something they can see changes, and by the 100 ms tick when a one-shot's moment is over.
         let (risen, mut dropped) = recipe_edges(&output);
@@ -1522,6 +1513,23 @@ impl LabelRuntimeHost {
                     .collect(),
             };
             let _ = app.emit(LABEL_DETECTIONS_EVENT, report);
+        }
+    }
+}
+
+/// Locks `mutex`, carrying on if a panic left it poisoned: its value is still whole (every change to it is a single
+/// step), and refusing it from then on left the runtime silent, its mode unknown to the page, until a restart. The
+/// panic itself is in the log (`init_logging`'s hook).
+fn relock<'a, T>(mutex: &'a Mutex<T>, what: &str) -> std::sync::MutexGuard<'a, T> {
+    match mutex.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            warn!(
+                what,
+                "a panic had left this lock poisoned; carrying on with its last value"
+            );
+            mutex.clear_poison();
+            poisoned.into_inner()
         }
     }
 }
@@ -2431,6 +2439,20 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn a_lock_a_panic_poisoned_is_used_again_with_its_last_value() {
+        let lock = std::sync::Arc::new(Mutex::new(7));
+        let held = std::sync::Arc::clone(&lock);
+        let _ = std::thread::spawn(move || {
+            let _guard = held.lock().unwrap();
+            panic!("a fault while it was held");
+        })
+        .join();
+        assert!(lock.is_poisoned());
+        assert_eq!(*super::relock(&lock, "test"), 7);
+        assert!(!lock.is_poisoned(), "and it is no longer refused");
+    }
 
     #[test]
     fn copies_of_one_multi_gesture_network_combine_into_one_model_in_its_order() {

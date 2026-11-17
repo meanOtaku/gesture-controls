@@ -30,6 +30,18 @@ describe("RuntimeSwitch", () => {
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
   });
 
+  it("says why when the runtime answers without a mode, or does not answer", async () => {
+    setup({ mode: "" });
+    render(<RuntimeSwitch variant="page" />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("The model runtime has not started its models yet");
+    cleanup();
+    resetRuntimeModeForTests();
+    invokeMock.mockReset();
+    invokeMock.mockRejectedValue("state unavailable");
+    render(<RuntimeSwitch variant="page" />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("The model runtime did not answer: state unavailable");
+  });
+
   it("asks for confirmation before Live, and switches to Monitor or Off without asking", async () => {
     setup({ mode: "monitor" });
     render(<RuntimeSwitch variant="page" />);

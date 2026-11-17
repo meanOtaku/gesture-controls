@@ -26,13 +26,22 @@ function update(next: Partial<RuntimeModeState>) {
   for (const listener of listeners) listener();
 }
 
+const MODES: readonly LabelRuntimeMode[] = ["off", "monitor", "live"];
+
 async function refresh() {
   if (!inDesktop()) return;
   try {
     const status = await invoke<LabelRuntimeStatus>("get_label_runtime_status");
-    if (status) update({ mode: status.mode, blocked: status.registryError != null });
-  } catch {
-    // The next poll tries again; the switch keeps showing the last mode it knew.
+    if (!status) return;
+    if (MODES.includes(status.mode)) {
+      update({ mode: status.mode, blocked: status.registryError != null, error: state.pending ? state.error : null });
+    } else {
+      // It answered without a mode: it has not started its models, or could not open the registry. Say which.
+      update({ mode: null, blocked: true, error: status.registryError ?? "The model runtime has not started its models yet; if this stays, restart the app (Model Lab's log says why)." });
+    }
+  } catch (err) {
+    // The next poll tries again; meanwhile the switch says why it cannot show the mode.
+    update({ error: `The model runtime did not answer: ${String(err)}` });
   }
 }
 
