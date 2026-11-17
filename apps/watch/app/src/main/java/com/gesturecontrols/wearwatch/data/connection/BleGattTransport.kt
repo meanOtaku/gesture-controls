@@ -198,13 +198,13 @@ class BleGattTransport(
         stop()
     }
 
-    override fun send(message: String): Boolean {
-        val ok = sendMessage(message)
+    override fun send(message: String, control: Boolean): Boolean {
+        val ok = sendMessage(message, control)
         LinkLog.noteSend(ok)
         return ok
     }
 
-    private fun sendMessage(message: String): Boolean {
+    private fun sendMessage(message: String, control: Boolean): Boolean {
         if (!isTrusted(central) || !subscribed) return false
         val fragments = BleFraming.fragment(message.toByteArray(Charsets.UTF_8), BleFraming.attPayloadFor(mtu))
         if (fragments == null) return false
@@ -212,7 +212,7 @@ class BleGattTransport(
             // Telemetry is only useful fresh: when the link falls behind, the oldest whole messages that have not
             // started sending give way (see OutboundQueue), instead of a backlog growing for seconds and then going
             // all at once.
-            val dropped = outbound.add(fragments)
+            val dropped = outbound.add(fragments, control)
             unreportedDrops += dropped
             totalDrops += dropped
             val now = SystemClock.elapsedRealtime()

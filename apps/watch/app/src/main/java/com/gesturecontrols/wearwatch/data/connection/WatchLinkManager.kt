@@ -219,7 +219,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         val link = streamingLink() ?: return
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        sendCounted(link, WatchProtocol.ppgStatusMessage(wireDeviceId, seq, timestampNs, state))
+        sendCounted(link, WatchProtocol.ppgStatusMessage(wireDeviceId, seq, timestampNs, state), control = true)
     }
 
     /**
@@ -234,7 +234,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         lastWearState = worn
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        sendCounted(link, WatchProtocol.wearStateMessage(wireDeviceId, seq, timestampNs, worn))
+        sendCounted(link, WatchProtocol.wearStateMessage(wireDeviceId, seq, timestampNs, worn), control = true)
     }
 
     /** Sends a STEM button press/release, grabbing or releasing the desktop's volume overlay. */
@@ -243,7 +243,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
         val buttonState = if (pressed) WatchProtocol.BUTTON_STATE_DOWN else WatchProtocol.BUTTON_STATE_UP
-        sendCounted(link, WatchProtocol.buttonMessage(wireDeviceId, seq, timestampNs, buttonState))
+        sendCounted(link, WatchProtocol.buttonMessage(wireDeviceId, seq, timestampNs, buttonState), control = true)
     }
 
     /** Buffers HEART_RATE_CONTINUOUS samples for the next medical flush tick; dropped if not connected. */
@@ -316,7 +316,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         val link = streamingLink() ?: return
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        sendCounted(link, WatchProtocol.medicalStatusMessage(wireDeviceId, seq, timestampNs, tracker, state))
+        sendCounted(link, WatchProtocol.medicalStatusMessage(wireDeviceId, seq, timestampNs, tracker, state), control = true)
     }
 
     /** Reports an IMU sensor's current enabled state ([SENSOR_ORIENTATION] etc.). */
@@ -324,7 +324,7 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
         val link = streamingLink() ?: return
         val timestampNs = SystemClock.elapsedRealtimeNanos()
         val seq = sequence.incrementAndGet()
-        sendCounted(link, WatchProtocol.sensorStatusMessage(wireDeviceId, seq, timestampNs, sensor, enabled))
+        sendCounted(link, WatchProtocol.sensorStatusMessage(wireDeviceId, seq, timestampNs, sensor, enabled), control = true)
     }
 
     /** The active link, but only while it is actually carrying traffic. */
@@ -457,8 +457,8 @@ class WatchLinkManager(deviceId: String = WatchProtocol.DEVICE_ID) {
     }
 
     /** Hands one message to the link, counting it (and whether the link took it) in [stats]. */
-    private fun sendCounted(link: WatchTransportLink, message: String): Boolean {
-        val accepted = link.send(message)
+    private fun sendCounted(link: WatchTransportLink, message: String, control: Boolean = false): Boolean {
+        val accepted = link.send(message, control)
         stats?.onSend(message.length, accepted)
         return accepted
     }

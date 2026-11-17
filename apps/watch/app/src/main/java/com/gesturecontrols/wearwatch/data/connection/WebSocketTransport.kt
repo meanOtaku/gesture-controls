@@ -86,7 +86,7 @@ class WebSocketTransport internal constructor(
         scope.cancel()
     }
 
-    override fun send(message: String): Boolean {
+    override fun send(message: String, control: Boolean): Boolean {
         val ok = webSocket?.send(message) ?: false
         LinkLog.noteSend(ok)
         return ok

@@ -59,4 +59,24 @@ class OutboundQueueTest {
         org.junit.Assert.assertArrayEquals(byteArrayOf(4), queue.poll())
         org.junit.Assert.assertEquals(0, OutboundQueue(4).dropStarted())
     }
+
+    @Test
+    fun `a control message goes ahead of waiting telemetry and is never dropped`() {
+        val queue = OutboundQueue(4)
+        queue.add(message(1, 2))
+        assertEquals(1 to 0, queue.poll()!!.let { it[0].toInt() to it[1].toInt() })
+        queue.add(message(2, 2))
+        queue.add(message(9, 1), control = true)
+        queue.add(message(8, 1), control = true)
+        // A flood of telemetry: the old batches give way, the control messages and the one being sent stay.
+        repeat(5) { queue.add(message(3 + it, 2)) }
+        assertEquals(listOf(1 to 1, 9 to 0, 8 to 0, 7 to 0, 7 to 1), drain(queue))
+    }
+
+    @Test
+    fun `control messages alone over the limit are all kept`() {
+        val queue = OutboundQueue(1)
+        repeat(3) { assertEquals(0, queue.add(message(it, 1), control = true)) }
+        assertEquals(listOf(0 to 0, 1 to 0, 2 to 0), drain(queue))
+    }
 }

@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use spatial_protocol::{BUTTON_STATE_DOWN, STEM_PRIMARY_BUTTON_ID};
 use tauri::Manager;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use watch_bridge::{WatchBridgeServer, WatchEvent};
 
 mod actuators;
@@ -504,7 +504,7 @@ pub fn run() {
                                 }
                                 WatchEvent::WearStateUpdated(sample) if sample.worn => {
                                     if last_worn.replace(true) != Some(true) {
-                                        debug!("watch wear state: worn");
+                                        info!("watch on the wrist");
                                         miss_recorder::note(&watch_handle, "watch", "worn");
                                     }
                                     watch_handle

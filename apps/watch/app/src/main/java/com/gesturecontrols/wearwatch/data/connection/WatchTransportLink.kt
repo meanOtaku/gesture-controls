@@ -64,8 +64,11 @@ interface WatchTransportLink {
     /** Permanent teardown; the link is unusable afterwards. */
     fun shutdown()
 
-    /** Sends one serialized envelope. `false` means it was dropped. */
-    fun send(message: String): Boolean
+    /**
+     * Sends one serialized envelope. `false` means it was dropped. A `control` message (a state change the desktop must
+     * not miss) goes ahead of waiting telemetry and is never dropped to keep the stream live.
+     */
+    fun send(message: String, control: Boolean = false): Boolean
 
     /** Messages dropped after [send] accepted them (to keep a lagging link live), since this link was made. */
     val droppedMessages: Long get() = 0L
