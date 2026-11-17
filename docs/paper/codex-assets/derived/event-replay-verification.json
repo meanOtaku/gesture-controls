@@ -1,0 +1,191 @@
+{
+  "status": "passed",
+  "method": "original frozen trainer, original saved probabilities, raw labels and exact raw-file hashes; no training",
+  "runs": [
+    {
+      "seed": 17,
+      "classes": {
+        "pinch_in": {
+          "recordings": 16,
+          "gestures": 179,
+          "caught": 125,
+          "gestureRecall": 0.6983240223463687,
+          "repeats": 0,
+          "late": 20,
+          "repeatsPer100Gestures": 0.0,
+          "medianLatencyMs": 743.63179,
+          "falseActivations": 14,
+          "negativeSeconds": 3787.190041768,
+          "falseActivationsPerHour": 13.308019783573213,
+          "falseOn": {
+            "unlabelled": 2,
+            "pinch_out": 3,
+            "everyday_noise": 9
+          }
+        },
+        "pinch_out": {
+          "recordings": 16,
+          "gestures": 181,
+          "caught": 140,
+          "gestureRecall": 0.7734806629834254,
+          "repeats": 0,
+          "late": 3,
+          "repeatsPer100Gestures": 0.0,
+          "medianLatencyMs": 724.886041,
+          "falseActivations": 24,
+          "negativeSeconds": 3972.996345377,
+          "falseActivationsPerHour": 21.74681084228419,
+          "falseOn": {
+            "pinch_out": 6,
+            "unlabelled": 1,
+            "pinch_hold": 1,
+            "pinch_in": 5,
+            "everyday_noise": 11
+          }
+        },
+        "pinch_hold": {
+          "recordings": 16,
+          "gestures": 167,
+          "caught": 122,
+          "gestureRecall": 0.7305389221556886,
+          "repeats": 8,
+          "late": 28,
+          "repeatsPer100Gestures": 4.790419161676646,
+          "medianLatencyMs": 744.4059645,
+          "falseActivations": 50,
+          "negativeSeconds": 3888.091465389,
+          "falseActivationsPerHour": 46.29520719929647,
+          "falseOn": {
+            "unlabelled": 18,
+            "pinch_hold": 1,
+            "pinch_in": 2,
+            "everyday_noise": 27,
+            "still": 2
+          }
+        }
+      }
+    },
+    {
+      "seed": 18,
+      "classes": {
+        "pinch_in": {
+          "recordings": 16,
+          "gestures": 179,
+          "caught": 129,
+          "gestureRecall": 0.7206703910614525,
+          "repeats": 0,
+          "late": 19,
+          "repeatsPer100Gestures": 0.0,
+          "medianLatencyMs": 734.07883,
+          "falseActivations": 8,
+          "negativeSeconds": 3787.190041768,
+          "falseActivationsPerHour": 7.604582733470408,
+          "falseOn": {
+            "pinch_out": 1,
+            "everyday_noise": 7
+          }
+        },
+        "pinch_out": {
+          "recordings": 16,
+          "gestures": 181,
+          "caught": 136,
+          "gestureRecall": 0.7513812154696132,
+          "repeats": 0,
+          "late": 1,
+          "repeatsPer100Gestures": 0.0,
+          "medianLatencyMs": 763.7231975,
+          "falseActivations": 24,
+          "negativeSeconds": 3972.996345377,
+          "falseActivationsPerHour": 21.74681084228419,
+          "falseOn": {
+            "pinch_out": 12,
+            "unlabelled": 3,
+            "pinch_in": 2,
+            "everyday_noise": 7
+          }
+        },
+        "pinch_hold": {
+          "recordings": 16,
+          "gestures": 167,
+          "caught": 125,
+          "gestureRecall": 0.7485029940119761,
+          "repeats": 9,
+          "late": 26,
+          "repeatsPer100Gestures": 5.389221556886228,
+          "medianLatencyMs": 723.367874,
+          "falseActivations": 75,
+          "negativeSeconds": 3888.091465389,
+          "falseActivationsPerHour": 69.4428107989447,
+          "falseOn": {
+            "unlabelled": 25,
+            "pinch_in": 2,
+            "pinch_hold": 2,
+            "everyday_noise": 42,
+            "still": 4
+          }
+        }
+      }
+    },
+    {
+      "seed": 19,
+      "classes": {
+        "pinch_in": {
+          "recordings": 16,
+          "gestures": 179,
+          "caught": 128,
+          "gestureRecall": 0.7150837988826816,
+          "repeats": 0,
+          "late": 24,
+          "repeatsPer100Gestures": 0.0,
+          "medianLatencyMs": 754.5,
+          "falseActivations": 8,
+          "negativeSeconds": 3787.190041768,
+          "falseActivationsPerHour": 7.604582733470408,
+          "falseOn": {
+            "unlabelled": 1,
+            "everyday_noise": 7
+          }
+        },
+        "pinch_out": {
+          "recordings": 16,
+          "gestures": 181,
+          "caught": 145,
+          "gestureRecall": 0.8011049723756906,
+          "repeats": 0,
+          "late": 3,
+          "repeatsPer100Gestures": 0.0,
+          "medianLatencyMs": 735.799233,
+          "falseActivations": 15,
+          "negativeSeconds": 3972.996345377,
+          "falseActivationsPerHour": 13.59175677642762,
+          "falseOn": {
+            "pinch_out": 5,
+            "pinch_in": 1,
+            "pinch_hold": 1,
+            "everyday_noise": 8
+          }
+        },
+        "pinch_hold": {
+          "recordings": 16,
+          "gestures": 167,
+          "caught": 122,
+          "gestureRecall": 0.7305389221556886,
+          "repeats": 7,
+          "late": 31,
+          "repeatsPer100Gestures": 4.191616766467066,
+          "medianLatencyMs": 753.5286255000001,
+          "falseActivations": 72,
+          "negativeSeconds": 3888.091465389,
+          "falseActivationsPerHour": 66.66509836698692,
+          "falseOn": {
+            "unlabelled": 24,
+            "pinch_hold": 1,
+            "pinch_in": 2,
+            "everyday_noise": 43,
+            "still": 2
+          }
+        }
+      }
+    }
+  ]
+}

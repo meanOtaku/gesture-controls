@@ -1,0 +1,7 @@
+{
+  "status": "passed",
+  "staged_original_source_and_data_files": 149,
+  "original_runner_self_test": "passed",
+  "training_executed": false,
+  "cuda_required_for_training": true
+}

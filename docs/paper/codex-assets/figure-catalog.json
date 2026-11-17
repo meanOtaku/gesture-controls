@@ -1,0 +1,301 @@
+[
+  {
+    "id": "01-system-architecture",
+    "title": "System architecture",
+    "caption": "Implemented sensing/computation placement. Camera annotation is an offline path, not an operational input. This schematic is not a hardware-validation result.",
+    "evidence_status": "implemented architecture schematic",
+    "sources": [
+      "docs/architecture/label-inference.md",
+      "docs/paper/manuscript/sections/03-system-design.tex"
+    ],
+    "alt": "Headphones and watch feed targeting and recognition on a laptop, then a separate policy controls output.",
+    "transformations": "No transformation beyond labelled plotting of source values.",
+    "width_inches": 11.0,
+    "height_inches": 5.0,
+    "files": [
+      "figures/01-system-architecture.png",
+      "figures/01-system-architecture.svg",
+      "figures/01-system-architecture.pdf"
+    ]
+  },
+  {
+    "id": "02-interaction-policy",
+    "title": "Interaction policy",
+    "caption": "Conceptual interaction state and cancellation paths. A recognizer event is not continuous control state, and silence is not release. Physical fault and task acceptance remain unmeasured here.",
+    "evidence_status": "implemented policy schematic",
+    "sources": [
+      "docs/paper/manuscript/sections/03-system-design.tex"
+    ],
+    "alt": "Fresh pinch-in starts a grab; release or cancellation ends it, independently of classifier silence.",
+    "transformations": "No transformation beyond labelled plotting of source values.",
+    "width_inches": 11.0,
+    "height_inches": 5.0,
+    "files": [
+      "figures/02-interaction-policy.png",
+      "figures/02-interaction-policy.svg",
+      "figures/02-interaction-policy.pdf"
+    ]
+  },
+  {
+    "id": "03-hardware-positioning",
+    "title": "Hardware positioning",
+    "caption": "Original comparison schematic, not product photographs. μDPad uses custom hardware; this project uses built-in commercial-watch sensors. The interaction concept overlaps. No accuracy superiority or first-commercial-watch claim is made.",
+    "evidence_status": "literature-positioning schematic",
+    "sources": [
+      "https://doi.org/10.1145/3776574.3831197",
+      "docs/paper/notes/PAPER_IMPROVEMENT_GUIDE.md"
+    ],
+    "alt": "Custom spatial-PPG prototype contrasted with an unmodified commercial watch; no performance bars.",
+    "transformations": "No transformation beyond labelled plotting of source values.",
+    "width_inches": 11.0,
+    "height_inches": 5.5,
+    "files": [
+      "figures/03-hardware-positioning.png",
+      "figures/03-hardware-positioning.svg",
+      "figures/03-hardware-positioning.pdf"
+    ]
+  },
+  {
+    "id": "04-annotation-telemetry",
+    "title": "Observed telemetry and annotation",
+    "caption": "Unmodified recorded row subset around the first saved effective-label correction. Gesture bands are shaded and named. Green/red/IR are centred and divided by the unscaled MAD of the displayed excerpt for viewing only. No model scores, filtering or timing shifts are manufactured.",
+    "evidence_status": "observed raw-data excerpt",
+    "sources": [
+      "data/telemetry/ppg.csv",
+      "data/telemetry/imu.csv",
+      "data/telemetry/selection.json"
+    ],
+    "alt": "PPG and gyroscope traces above original and corrected gesture-label bands.",
+    "transformations": "Display-only median/MAD scaling per PPG channel; gyroscope Euclidean norm; original timestamp differences.",
+    "width_inches": 11.0,
+    "height_inches": 7.0,
+    "files": [
+      "figures/04-annotation-telemetry.png",
+      "figures/04-annotation-telemetry.svg",
+      "figures/04-annotation-telemetry.pdf"
+    ]
+  },
+  {
+    "id": "05-historical-score-timeline",
+    "title": "Historical score timeline",
+    "caption": "First 45 seconds of the stored pinch_in-ae0a22bf timeline. Vertical styles distinguish caught/missed reference starts; triangles mark actual stored emissions and background bands show stored gesture intervals. Scores/times were rounded by the original exporter. This is not a fresh inference run or a CNNv2 trace.",
+    "evidence_status": "stored historical model replay",
+    "sources": [
+      "data/historical/report-figure-data.json"
+    ],
+    "alt": "Stored classifier score with threshold, actual emissions and caught or missed reference starts.",
+    "transformations": "Original exporter rounding retained; display cropped at 45 s; no interpolation over unavailable intervals.",
+    "width_inches": 11.0,
+    "height_inches": 4.5,
+    "files": [
+      "figures/05-historical-score-timeline.png",
+      "figures/05-historical-score-timeline.svg",
+      "figures/05-historical-score-timeline.pdf"
+    ]
+  },
+  {
+    "id": "06-sensor-delivery-timing",
+    "title": "Sensor delivery timing",
+    "caption": "Stored positive timestamp-gap histograms over the historical model cohort. Equal timestamps were excluded by the original exporter. Gaps at or above 100 ms were folded into the last 99–100 ms bin; maxima and >250 ms counts remain in the source JSON.",
+    "evidence_status": "stored historical timestamp analysis",
+    "sources": [
+      "data/historical/report-figure-data.json"
+    ],
+    "alt": "PPG and IMU gap histograms distinguish real sampling/delivery from the inference grid.",
+    "transformations": "Counts normalized within stream; original tail clipping explicitly retained.",
+    "width_inches": 11.0,
+    "height_inches": 4.1,
+    "files": [
+      "figures/06-sensor-delivery-timing.png",
+      "figures/06-sensor-delivery-timing.svg",
+      "figures/06-sensor-delivery-timing.pdf"
+    ]
+  },
+  {
+    "id": "07-dataset-identity",
+    "title": "Dataset identity audit",
+    "caption": "Historical 37-export audit and the new read-only collection audit are separate snapshots. Exact hashes ignore label columns; they do not detect partial overlap. No duplicated source was found across the historical audited model split; duplicate presence alone does not prove leakage.",
+    "evidence_status": "historical and current dataset audits",
+    "sources": [
+      "data/historical/evidence-audit.json",
+      "data/current-inventory.json"
+    ],
+    "alt": "Grouped bars compare exported folders with distinct exact PPG/IMU stream pairs at two snapshots.",
+    "transformations": "No transformation beyond labelled plotting of source values.",
+    "width_inches": 8.6,
+    "height_inches": 4.5,
+    "files": [
+      "figures/07-dataset-identity.png",
+      "figures/07-dataset-identity.svg",
+      "figures/07-dataset-identity.pdf"
+    ]
+  },
+  {
+    "id": "08-historical-day-transfer",
+    "title": "Historical day transfer",
+    "caption": "Historical camera-label leave-one-day-out exploration with the all-moments/no-still-hand-gate configuration. Counts sum to 161/372. Days are not independent confidence-interval replicates; these results are not directly comparable with a newer hand-labelled or multiclass cohort.",
+    "evidence_status": "historical exploratory results",
+    "sources": [
+      "data/historical/day-transfer.md"
+    ],
+    "alt": "Four bars show caught counts and recall varying across held-out days.",
+    "transformations": "No transformation beyond labelled plotting of source values.",
+    "width_inches": 9.0,
+    "height_inches": 4.6,
+    "files": [
+      "figures/08-historical-day-transfer.png",
+      "figures/08-historical-day-transfer.svg",
+      "figures/08-historical-day-transfer.pdf"
+    ]
+  },
+  {
+    "id": "09-motion-recovery-documented",
+    "title": "Motion-history recovery",
+    "caption": "Counts transcribed programmatically from the original motion-hangover report for its 50-start pinch-in experiment. This is peak-window detection after a synthetic splice, not standard event recall, not raw replay regeneration, and not a live physical-motion study. No confidence intervals are asserted.",
+    "evidence_status": "documented exploratory summary only",
+    "sources": [
+      "data/documented/motion-hangover.md"
+    ],
+    "alt": "Before/after scaling counts show recovery at five delays after a spliced six-second movement.",
+    "transformations": "Reported counts divided by 50; straight lines connect only the five documented conditions.",
+    "width_inches": 9.0,
+    "height_inches": 4.8,
+    "files": [
+      "figures/09-motion-recovery-documented.png",
+      "figures/09-motion-recovery-documented.svg",
+      "figures/09-motion-recovery-documented.pdf"
+    ]
+  },
+  {
+    "id": "10-v2-operating-points",
+    "title": "CNNv2 operating points",
+    "caption": "Each model is plotted at its stored chosen threshold. The two final V2 operating points were independently reselected from saved training-OOF budget tables; reference/app thresholds are stored values. This is a descriptive comparison, not an isolated component ablation. Repeated historical test exploration limits confirmatory interpretation; zero observed FA is not zero long-run risk.",
+    "evidence_status": "stored benchmark with verified OOF threshold arithmetic",
+    "sources": [
+      "data/v2/*.json",
+      "derived/metrics.json"
+    ],
+    "alt": "Context-specific event recall and false activations for four stored model operating points.",
+    "transformations": "Recall=100*caught/gestures; FAR=fa/negative_hours; no threshold optimized against test groups.",
+    "width_inches": 11.0,
+    "height_inches": 7.0,
+    "files": [
+      "figures/10-v2-operating-points.png",
+      "figures/10-v2-operating-points.svg",
+      "figures/10-v2-operating-points.pdf"
+    ]
+  },
+  {
+    "id": "11-multiclass-confusion",
+    "title": "Multiclass confusion matrix",
+    "caption": "Independently recomputed from all saved seed-17 held-out decision vectors. Rows are delayed annotated states; cells show row percentage and exact decision count. This is not onset-event accuracy or physical hold-duration accuracy.",
+    "evidence_status": "recomputed from original prediction vectors",
+    "sources": [
+      "data/multiclass/predictions/*.npz",
+      "data/multiclass/snapshot.json",
+      "derived/confusion-seed-17.csv"
+    ],
+    "alt": "Four-class confusion matrix exposes weaker hold recall despite high overall accuracy.",
+    "transformations": "Argmax of stored probabilities; exact integer counts; row-normalized percentages.",
+    "width_inches": 8.5,
+    "height_inches": 7.0,
+    "files": [
+      "figures/11-multiclass-confusion.png",
+      "figures/11-multiclass-confusion.svg",
+      "figures/11-multiclass-confusion.pdf"
+    ]
+  },
+  {
+    "id": "12-multiclass-seeds",
+    "title": "Seed variation",
+    "caption": "All three models are shown, not an ensemble or a test-selected best seed. Accuracy, balanced accuracy and macro-F1 were recomputed from saved vectors. Seed variation on one split is not participant uncertainty.",
+    "evidence_status": "recomputed from original prediction vectors",
+    "sources": [
+      "data/multiclass/predictions/*.npz",
+      "derived/multiclass-metrics.csv"
+    ],
+    "alt": "Three models have high overall accuracy but lower class-balanced scores.",
+    "transformations": "No transformation beyond labelled plotting of source values.",
+    "width_inches": 9.0,
+    "height_inches": 4.6,
+    "files": [
+      "figures/12-multiclass-seeds.png",
+      "figures/12-multiclass-seeds.svg",
+      "figures/12-multiclass-seeds.pdf"
+    ]
+  },
+  {
+    "id": "13-multiclass-events",
+    "title": "Multiclass continuous events",
+    "caption": "Stored seed-17 event aggregates, with recall/FAR arithmetic checked in analyze.py and independently reproducible via replay.py using frozen trainer source and matching raw recordings. Hold recall means hold-entry detection, not duration accuracy. Event classes use different negative exposure denominators. No binary-superiority claim is made.",
+    "evidence_status": "stored events; frozen-source replay verified separately",
+    "sources": [
+      "data/multiclass/results.json",
+      "derived/event-replay-verification.json"
+    ],
+    "alt": "Three panels report event recall, false activations and latency for pinch-in, pinch-out and hold entry.",
+    "transformations": "No transformation beyond labelled plotting of source values.",
+    "width_inches": 11.0,
+    "height_inches": 4.6,
+    "files": [
+      "figures/13-multiclass-events.png",
+      "figures/13-multiclass-events.svg",
+      "figures/13-multiclass-events.pdf"
+    ]
+  },
+  {
+    "id": "14-prospective-protocol",
+    "title": "Proposed validation protocol",
+    "caption": "Proposed frozen development, physical perturbation, prospective generalisation and complete-interaction workflow. This figure contains no measured results. Required sample size/exposure must be decided from pilot variability and precision goals.",
+    "evidence_status": "proposed protocol — not performed",
+    "sources": [
+      "docs/paper/notes/PAPER_IMPROVEMENT_GUIDE.md"
+    ],
+    "alt": "Six connected steps separate development, freezing, new data and interaction validation.",
+    "transformations": "No transformation beyond labelled plotting of source values.",
+    "width_inches": 11.0,
+    "height_inches": 5.8,
+    "files": [
+      "figures/14-prospective-protocol.png",
+      "figures/14-prospective-protocol.svg",
+      "figures/14-prospective-protocol.pdf"
+    ]
+  },
+  {
+    "id": "15-paired-model-summary",
+    "title": "Paired detector summary",
+    "caption": "Later paired-model Markdown summary: 95/120 pinch-in and 96/127 pinch-out catches. FAR was rounded in the original summary. Corresponding original full run artifacts were not recovered; similarly named results elsewhere have different denominators and were deliberately not substituted. Do not combine these with the older 47/57 cohort or call this a freshly verified model comparison.",
+    "evidence_status": "documented summary only",
+    "sources": [
+      "data/documented/paired-models.md"
+    ],
+    "alt": "Three panels reproduce documented paired-detector recall, rounded FAR and median latency.",
+    "transformations": "No transformation beyond labelled plotting of source values.",
+    "width_inches": 11.0,
+    "height_inches": 4.2,
+    "files": [
+      "figures/15-paired-model-summary.png",
+      "figures/15-paired-model-summary.svg",
+      "figures/15-paired-model-summary.pdf"
+    ]
+  },
+  {
+    "id": "16-cnnv2-architecture",
+    "title": "CNNv2 architecture",
+    "caption": "Conceptual newer input/branch structure, not a layer-exact network diagram or proof that every sensor samples at 100 Hz. Binary onset and delayed-state experiments must remain distinct.",
+    "evidence_status": "implemented architecture schematic",
+    "sources": [
+      "tools/label-trainer/src/label_trainer/cnn_v2.py",
+      "crates/pinch-inference/src/cnn_input.rs"
+    ],
+    "alt": "Three sensor-specific paths feed shared processing and an output head.",
+    "transformations": "No transformation beyond labelled plotting of source values.",
+    "width_inches": 11.0,
+    "height_inches": 5.2,
+    "files": [
+      "figures/16-cnnv2-architecture.png",
+      "figures/16-cnnv2-architecture.svg",
+      "figures/16-cnnv2-architecture.pdf"
+    ]
+  }
+]

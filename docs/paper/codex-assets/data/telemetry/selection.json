@@ -1,0 +1,8 @@
+{
+  "recording": "gesture-dataset-pinch_hold-2026-11-03T01-05-59.434Z",
+  "origin_timestamp_ns": 763615310799872,
+  "low_ns": 763617810799872,
+  "high_ns": 763630810799872,
+  "selection": "first effective-label correction; 3 seconds before and 10 after",
+  "purpose": "observed annotation example, not model output"
+}

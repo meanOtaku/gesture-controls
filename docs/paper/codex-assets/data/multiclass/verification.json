@@ -1,0 +1,28 @@
+{
+  "status": "passed",
+  "runs": [
+    {
+      "seed": 17,
+      "decisions": 103347,
+      "macro_f1": 0.7784166898728712
+    },
+    {
+      "seed": 18,
+      "decisions": 103347,
+      "macro_f1": 0.7820875593316071
+    },
+    {
+      "seed": 19,
+      "decisions": 103347,
+      "macro_f1": 0.7729533202599668
+    }
+  ],
+  "checks": [
+    "checkpoint hashes",
+    "snapshot hash",
+    "probability shapes/sums",
+    "timestamp order",
+    "recomputed confusion matrices",
+    "recomputed macro-F1/accuracy/balanced accuracy"
+  ]
+}

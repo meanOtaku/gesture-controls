@@ -1,0 +1,3430 @@
+[
+  {
+    "id": "gesture-dataset-everyday_noise-2026-11-04T03-44-21.667Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-everyday_noise-2026-11-04T03-44-21.667Z/ppg.csv",
+        "sha256": "c19fa0b000f64b1e37b255620935e65e3c6dd3daac79096f727d97c319d1c4b3"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-everyday_noise-2026-11-04T03-44-21.667Z/imu.csv",
+        "sha256": "0cb4d4f5ac555c853d9b0ff11fae9a1cb942f78b03e35cf7e125a042dafbe353"
+      }
+    },
+    "ppg": {
+      "rows": 15154,
+      "duration_s": 607.04323072,
+      "first_timestamp_ns": 859517133590016,
+      "last_timestamp_ns": 860124176820736,
+      "effective_label_rows": {
+        "": 172,
+        "everyday_noise": 14982
+      },
+      "sampled_label_runs": {
+        "everyday_noise": 1
+      },
+      "manual_label_rows": {
+        "": 15154
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "9b557a1d7e8534f1d95f8895bb9a1486244da265b175a1fcd7187e742aafc1df"
+    },
+    "imu": {
+      "rows": 60925,
+      "duration_s": 610.202667236,
+      "first_timestamp_ns": 859514038846606,
+      "last_timestamp_ns": 860124241513842,
+      "effective_label_rows": {
+        "": 1001,
+        "everyday_noise": 59924
+      },
+      "sampled_label_runs": {
+        "everyday_noise": 1
+      },
+      "manual_label_rows": {
+        "": 60925
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "93cbad22ca1b50cac7487f46f1417fc31233736a3254ec2688d53e08b9676f12"
+    }
+  },
+  {
+    "id": "gesture-dataset-everyday_noise-2026-11-04T04-27-35.286Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-everyday_noise-2026-11-04T04-27-35.286Z/ppg.csv",
+        "sha256": "ce24c08f029cdab696fcfb96bdb34e1dc878c0db786a62a7b37466b4306a803e"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-everyday_noise-2026-11-04T04-27-35.286Z/imu.csv",
+        "sha256": "b008f85ae2f70f569c6b621882731db09e1ead98a85e3c265701c9a302ffe412"
+      }
+    },
+    "ppg": {
+      "rows": 15236,
+      "duration_s": 609.991251456,
+      "first_timestamp_ns": 862107589057280,
+      "last_timestamp_ns": 862717580308736,
+      "effective_label_rows": {
+        "": 250,
+        "everyday_noise": 14986
+      },
+      "sampled_label_runs": {
+        "everyday_noise": 1
+      },
+      "manual_label_rows": {
+        "": 15236
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "08f35f673c29b4ce54332e10e19c1cd793348d8f63b53bd89d3c83974c1b8a28"
+    },
+    "imu": {
+      "rows": 60944,
+      "duration_s": 610.032382129,
+      "first_timestamp_ns": 862107617026342,
+      "last_timestamp_ns": 862717649408471,
+      "effective_label_rows": {
+        "": 999,
+        "everyday_noise": 59945
+      },
+      "sampled_label_runs": {
+        "everyday_noise": 1
+      },
+      "manual_label_rows": {
+        "": 60944
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "bf990d6b3309fe2e23ec96491ebe1fac3ae5b71a29712e35228c7b4c1f8e8c86"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch-2026-10-14T01-13-08.108Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch-2026-10-14T01-13-08.108Z/ppg.csv",
+        "sha256": "c177c31dc0475d27248f569bf57d0628890679ed6d1c389508d190880da07fc6"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch-2026-10-14T01-13-08.108Z/imu.csv",
+        "sha256": "3e2fee7ebc773eb0057d8d07ea658e564a50fe38310da7705401a3ff740e28d8"
+      }
+    },
+    "ppg": {
+      "rows": 1499,
+      "duration_s": 60.002561536,
+      "first_timestamp_ns": 1726420858143232,
+      "last_timestamp_ns": 1726480860704768,
+      "effective_label_rows": {
+        "": 481,
+        "pinch_in": 314,
+        "pinch_hold": 397,
+        "pinch_out": 307
+      },
+      "sampled_label_runs": {
+        "pinch_in": 27,
+        "pinch_hold": 22,
+        "pinch_out": 27
+      },
+      "manual_label_rows": {
+        "": 489,
+        "pinch_in": 314,
+        "pinch_hold": 389,
+        "pinch_out": 307
+      },
+      "changed_label_rows": 362,
+      "sensor_columns_sha256": "2f0d98a085a4d382d6ea6c4341c58743cbc7f425428b400aec5959b241caade4"
+    },
+    "imu": {
+      "rows": 2998,
+      "duration_s": 60.01949746,
+      "first_timestamp_ns": 1726420901336662,
+      "last_timestamp_ns": 1726480920834122,
+      "effective_label_rows": {
+        "": 965,
+        "pinch_in": 631,
+        "pinch_hold": 792,
+        "pinch_out": 610
+      },
+      "sampled_label_runs": {
+        "pinch_in": 27,
+        "pinch_hold": 22,
+        "pinch_out": 27
+      },
+      "manual_label_rows": {
+        "": 981,
+        "pinch_in": 631,
+        "pinch_hold": 776,
+        "pinch_out": 610
+      },
+      "changed_label_rows": 720,
+      "sensor_columns_sha256": "d59d4460ccd7ad9d11e6ebbcba74719a3a807c9b6136567a132457aa2bf84c53"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-03T01-05-59.434Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-03T01-05-59.434Z/ppg.csv",
+        "sha256": "1f5f4796528a3036e2a7ae17f92f970027d1cdf89043f3a9fb229627cf2317f5"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-03T01-05-59.434Z/imu.csv",
+        "sha256": "6ecaf6ce7d3a1f68abce04e77bea18b03feb8a1354ea1ab3fec1c41dc7fc2664"
+      }
+    },
+    "ppg": {
+      "rows": 3425,
+      "duration_s": 137.121313792,
+      "first_timestamp_ns": 763615310799872,
+      "last_timestamp_ns": 763752432113664,
+      "effective_label_rows": {
+        "": 2597,
+        "pinch_in": 291,
+        "pinch_hold": 262,
+        "pinch_out": 275
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 2599,
+        "pinch_in": 291,
+        "pinch_hold": 262,
+        "pinch_out": 273
+      },
+      "changed_label_rows": 276,
+      "sensor_columns_sha256": "f12a7a83c3e7c6b3d975263a7d466acca21b0572c6f7a0903d48c72cdbdc7482"
+    },
+    "imu": {
+      "rows": 13693,
+      "duration_s": 137.092163086,
+      "first_timestamp_ns": 763615270608964,
+      "last_timestamp_ns": 763752362772050,
+      "effective_label_rows": {
+        "": 10385,
+        "pinch_in": 1168,
+        "pinch_hold": 1049,
+        "pinch_out": 1091
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 10393,
+        "pinch_in": 1168,
+        "pinch_hold": 1049,
+        "pinch_out": 1083
+      },
+      "changed_label_rows": 1108,
+      "sensor_columns_sha256": "dfc06d2604ee66a15e56a39520bc03d101c6184a2256a6551615dc36ebd2cfbe"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-03T01-08-34.844Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-03T01-08-34.844Z/ppg.csv",
+        "sha256": "f4c7fff7954c697acc9dea23f67e160a1d670ffc85a6db5e27bde8abcb63596e"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-03T01-08-34.844Z/imu.csv",
+        "sha256": "fa3a681f742e423d3e061028c528d353fa3e665352906a6fda21983f97ba5041"
+      }
+    },
+    "ppg": {
+      "rows": 3397,
+      "duration_s": 136.0729024,
+      "first_timestamp_ns": 763770779233536,
+      "last_timestamp_ns": 763906852135936,
+      "effective_label_rows": {
+        "": 2569,
+        "pinch_in": 267,
+        "pinch_hold": 310,
+        "pinch_out": 251
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 2569,
+        "pinch_in": 267,
+        "pinch_hold": 310,
+        "pinch_out": 251
+      },
+      "changed_label_rows": 233,
+      "sensor_columns_sha256": "59d2fe81ae527c5df7a5866c59250e671512a436993beb5f5cd9a929be56e88e"
+    },
+    "imu": {
+      "rows": 13592,
+      "duration_s": 136.152679443,
+      "first_timestamp_ns": 763770695718828,
+      "last_timestamp_ns": 763906848398271,
+      "effective_label_rows": {
+        "": 10260,
+        "pinch_in": 1091,
+        "pinch_hold": 1222,
+        "pinch_out": 1019
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 10260,
+        "pinch_in": 1091,
+        "pinch_hold": 1222,
+        "pinch_out": 1019
+      },
+      "changed_label_rows": 933,
+      "sensor_columns_sha256": "cca3755512667b348ace12d777f923d283eee838847045a3fcfb319031ba1a4c"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-03T01-11-04.170Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-03T01-11-04.170Z/ppg.csv",
+        "sha256": "dc2b545fe83a7194d8bb2596474f39d718fc2e335181091b7a89d772671edc11"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-03T01-11-04.170Z/imu.csv",
+        "sha256": "39eaf184f9b1cefe92403480c78847052caa5a3020f3bda3f39be4829292c55b"
+      }
+    },
+    "ppg": {
+      "rows": 3372,
+      "duration_s": 135.071484928,
+      "first_timestamp_ns": 763920052135936,
+      "last_timestamp_ns": 764055123620864,
+      "effective_label_rows": {
+        "": 2528,
+        "pinch_in": 274,
+        "pinch_hold": 290,
+        "pinch_out": 280
+      },
+      "sampled_label_runs": {
+        "pinch_in": 23,
+        "pinch_hold": 20,
+        "pinch_out": 23
+      },
+      "manual_label_rows": {
+        "": 2546,
+        "pinch_in": 269,
+        "pinch_hold": 290,
+        "pinch_out": 267
+      },
+      "changed_label_rows": 236,
+      "sensor_columns_sha256": "04a2d9ccf04dc204f447b883c2601786a7e37ebcbf852ea5a6f2c9164f78f61e"
+    },
+    "imu": {
+      "rows": 13491,
+      "duration_s": 135.118347168,
+      "first_timestamp_ns": 763920080637041,
+      "last_timestamp_ns": 764055198984209,
+      "effective_label_rows": {
+        "": 10106,
+        "pinch_in": 1109,
+        "pinch_hold": 1168,
+        "pinch_out": 1108
+      },
+      "sampled_label_runs": {
+        "pinch_in": 23,
+        "pinch_hold": 20,
+        "pinch_out": 23
+      },
+      "manual_label_rows": {
+        "": 10185,
+        "pinch_in": 1084,
+        "pinch_hold": 1168,
+        "pinch_out": 1054
+      },
+      "changed_label_rows": 927,
+      "sensor_columns_sha256": "41e1839fc4db9075a674da8af626ffa7b39976c519c5814099d025e7bd5a72a2"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-03T01-14-58.817Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-03T01-14-58.817Z/ppg.csv",
+        "sha256": "a3a97546b110f3c53388bb46d59f6e49adf58eb12b0e1ad057236d5f996a0e0b"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-03T01-14-58.817Z/imu.csv",
+        "sha256": "e05d469de6701ff2de422e3c801cc4e92fdb266440388430c6aad87e4924ab03"
+      }
+    },
+    "ppg": {
+      "rows": 3399,
+      "duration_s": 136.16906624,
+      "first_timestamp_ns": 764154717882368,
+      "last_timestamp_ns": 764290886948608,
+      "effective_label_rows": {
+        "": 2576,
+        "pinch_in": 297,
+        "pinch_hold": 249,
+        "pinch_out": 277
+      },
+      "sampled_label_runs": {
+        "pinch_in": 21,
+        "pinch_hold": 21,
+        "pinch_out": 21
+      },
+      "manual_label_rows": {
+        "": 2576,
+        "pinch_in": 297,
+        "pinch_hold": 249,
+        "pinch_out": 277
+      },
+      "changed_label_rows": 668,
+      "sensor_columns_sha256": "d40da8935b7e8465c308f3f6d991224e57bc0a5eef241e88b5b8a94b518c77c3"
+    },
+    "imu": {
+      "rows": 13588,
+      "duration_s": 136.132202149,
+      "first_timestamp_ns": 764154655099931,
+      "last_timestamp_ns": 764290787302080,
+      "effective_label_rows": {
+        "": 10292,
+        "pinch_in": 1180,
+        "pinch_hold": 989,
+        "pinch_out": 1127
+      },
+      "sampled_label_runs": {
+        "pinch_in": 21,
+        "pinch_hold": 21,
+        "pinch_out": 21
+      },
+      "manual_label_rows": {
+        "": 10292,
+        "pinch_in": 1180,
+        "pinch_hold": 989,
+        "pinch_out": 1127
+      },
+      "changed_label_rows": 2673,
+      "sensor_columns_sha256": "e27aad44a885d6170025e89a37848198ceae56024757fee285c723a22910f406"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-03T12-37-53.427Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-03T12-37-53.427Z/ppg.csv",
+        "sha256": "0c8785fe83b6549d0d42e47ec1cc660797b3a70c85c939087da551e90459dcad"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-03T12-37-53.427Z/imu.csv",
+        "sha256": "9b57365825d15310d12c0460a6187dee5cb65467808c28e12fadba19a708b859"
+      }
+    },
+    "ppg": {
+      "rows": 3302,
+      "duration_s": 132.14290048,
+      "first_timestamp_ns": 805126871849984,
+      "last_timestamp_ns": 805259014750464,
+      "effective_label_rows": {
+        "": 2474,
+        "pinch_in": 296,
+        "pinch_out": 293,
+        "pinch_hold": 239
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_out": 20,
+        "pinch_hold": 19
+      },
+      "manual_label_rows": {
+        "": 2478,
+        "pinch_in": 296,
+        "pinch_out": 289,
+        "pinch_hold": 239
+      },
+      "changed_label_rows": 510,
+      "sensor_columns_sha256": "446bc250f49254b913c647ebb0c1376a8e2d7110491e8dd1ea09893ab70558c2"
+    },
+    "imu": {
+      "rows": 13206,
+      "duration_s": 132.167260303,
+      "first_timestamp_ns": 805126790571111,
+      "last_timestamp_ns": 805258957831414,
+      "effective_label_rows": {
+        "": 9893,
+        "pinch_in": 1193,
+        "pinch_out": 1170,
+        "pinch_hold": 950
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_out": 20,
+        "pinch_hold": 19
+      },
+      "manual_label_rows": {
+        "": 9905,
+        "pinch_in": 1193,
+        "pinch_out": 1158,
+        "pinch_hold": 950
+      },
+      "changed_label_rows": 2064,
+      "sensor_columns_sha256": "946bd9fcb7f4fb588ae7b549101ea46307306ea725299f586a083d5f231abd77"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-04T04-47-01.331Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-04T04-47-01.331Z/ppg.csv",
+        "sha256": "f8c51fd72458c535baca85746a5d6c9f1e1a6c4ac7b82e394f9103577fcd05fb"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-04T04-47-01.331Z/imu.csv",
+        "sha256": "9c502134af2408cb9c9d2dccba48efb06a27890a6de6c93d2e90579217a77904"
+      }
+    },
+    "ppg": {
+      "rows": 3501,
+      "duration_s": 140.146535936,
+      "first_timestamp_ns": 863273729496320,
+      "last_timestamp_ns": 863413876032256,
+      "effective_label_rows": {
+        "": 2714,
+        "pinch_in": 259,
+        "pinch_hold": 266,
+        "pinch_out": 262
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 2714,
+        "pinch_in": 259,
+        "pinch_hold": 266,
+        "pinch_out": 262
+      },
+      "changed_label_rows": 412,
+      "sensor_columns_sha256": "3a6661c3a94fdc91bdef47b8478051e36d626272b41840f2f66379b59244003a"
+    },
+    "imu": {
+      "rows": 13992,
+      "duration_s": 140.035019189,
+      "first_timestamp_ns": 863273789351440,
+      "last_timestamp_ns": 863413824370629,
+      "effective_label_rows": {
+        "": 10846,
+        "pinch_in": 1042,
+        "pinch_hold": 1068,
+        "pinch_out": 1036
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 10846,
+        "pinch_in": 1042,
+        "pinch_hold": 1068,
+        "pinch_out": 1036
+      },
+      "changed_label_rows": 1630,
+      "sensor_columns_sha256": "d080c5a4e28375b82bf449fc3c03128805c5a4098bbd44693a8685850786f687"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-04T04-50-33.518Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-04T04-50-33.518Z/ppg.csv",
+        "sha256": "a1d1db503d1286ba182ce88fde7da3896883164673cf6e971061cf87c0580fe1"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-04T04-50-33.518Z/imu.csv",
+        "sha256": "a8045d82ebdd0cc4e9a928b05e30830b72999bb42d26727667a9b052a8baa614"
+      }
+    },
+    "ppg": {
+      "rows": 3726,
+      "duration_s": 149.127028736,
+      "first_timestamp_ns": 863485961531136,
+      "last_timestamp_ns": 863635088559872,
+      "effective_label_rows": {
+        "": 2875,
+        "pinch_in": 277,
+        "pinch_hold": 306,
+        "pinch_out": 268
+      },
+      "sampled_label_runs": {
+        "pinch_in": 22,
+        "pinch_hold": 21,
+        "pinch_out": 22
+      },
+      "manual_label_rows": {
+        "": 2887,
+        "pinch_in": 271,
+        "pinch_hold": 306,
+        "pinch_out": 262
+      },
+      "changed_label_rows": 355,
+      "sensor_columns_sha256": "0b3c8c9c92de70ad25880941673f7862b2f07eb9c4705e3c4f0b9451fbbe79a2"
+    },
+    "imu": {
+      "rows": 14904,
+      "duration_s": 149.153907227,
+      "first_timestamp_ns": 863485885821313,
+      "last_timestamp_ns": 863635039728540,
+      "effective_label_rows": {
+        "": 11503,
+        "pinch_in": 1127,
+        "pinch_hold": 1216,
+        "pinch_out": 1058
+      },
+      "sampled_label_runs": {
+        "pinch_in": 22,
+        "pinch_hold": 21,
+        "pinch_out": 22
+      },
+      "manual_label_rows": {
+        "": 11554,
+        "pinch_in": 1103,
+        "pinch_hold": 1216,
+        "pinch_out": 1031
+      },
+      "changed_label_rows": 1393,
+      "sensor_columns_sha256": "87185c2421dbb688cb86f49db612b673004487ff76795b631af6ba91ea44d9c9"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-06T05-30-51.772Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-06T05-30-51.772Z/ppg.csv",
+        "sha256": "c16bf69f98533ecaf0d01b005788adf8dccd30cf78d0c8c553c17ca9390d7698"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-06T05-30-51.772Z/imu.csv",
+        "sha256": "5b5ce099dc653ffad5f97a45adae8e14551cfdde99ff7a393099f547607a3cef"
+      }
+    },
+    "ppg": {
+      "rows": 3625,
+      "duration_s": 144.982638848,
+      "first_timestamp_ns": 1038698454402304,
+      "last_timestamp_ns": 1038843437041152,
+      "effective_label_rows": {
+        "": 2859,
+        "pinch_in": 239,
+        "pinch_hold": 307,
+        "pinch_out": 220
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 2859,
+        "pinch_in": 239,
+        "pinch_hold": 307,
+        "pinch_out": 220
+      },
+      "changed_label_rows": 219,
+      "sensor_columns_sha256": "188d1329b02d570009f0654f00611a5e00c3f2e0f1e02c9f640ab71bd0ecc935"
+    },
+    "imu": {
+      "rows": 14498,
+      "duration_s": 145.007198876,
+      "first_timestamp_ns": 1038698375862832,
+      "last_timestamp_ns": 1038843383061708,
+      "effective_label_rows": {
+        "": 11429,
+        "pinch_in": 961,
+        "pinch_hold": 1218,
+        "pinch_out": 890
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 11429,
+        "pinch_in": 961,
+        "pinch_hold": 1218,
+        "pinch_out": 890
+      },
+      "changed_label_rows": 857,
+      "sensor_columns_sha256": "0a6eb240ef3e9021cb187aaafc2c41dd800fc172a1ff0488586493e168fb22d6"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-06T05-46-24.047Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-06T05-46-24.047Z/ppg.csv",
+        "sha256": "6a37c67dc72ebc82906fe11c178f44a314956a66e151603e8cfcff25bf759f5c"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-06T05-46-24.047Z/imu.csv",
+        "sha256": "a17b6165a332b915aae6989d2c85365056ec3e50bd43424c6cf28f73471074be"
+      }
+    },
+    "ppg": {
+      "rows": 3523,
+      "duration_s": 140.98333824,
+      "first_timestamp_ns": 1039630703246592,
+      "last_timestamp_ns": 1039771686584832,
+      "effective_label_rows": {
+        "": 2763,
+        "pinch_in": 264,
+        "pinch_hold": 260,
+        "pinch_out": 236
+      },
+      "sampled_label_runs": {
+        "pinch_in": 21,
+        "pinch_hold": 20,
+        "pinch_out": 21
+      },
+      "manual_label_rows": {
+        "": 2775,
+        "pinch_in": 258,
+        "pinch_hold": 260,
+        "pinch_out": 230
+      },
+      "changed_label_rows": 428,
+      "sensor_columns_sha256": "03573c7ec33bb14f5b5c841b72cf524665331fe81ac5d2873c067c1f577e270f"
+    },
+    "imu": {
+      "rows": 14108,
+      "duration_s": 141.202789306,
+      "first_timestamp_ns": 1039630551510830,
+      "last_timestamp_ns": 1039771754300136,
+      "effective_label_rows": {
+        "": 11058,
+        "pinch_in": 1050,
+        "pinch_hold": 1038,
+        "pinch_out": 962
+      },
+      "sampled_label_runs": {
+        "pinch_in": 21,
+        "pinch_hold": 20,
+        "pinch_out": 21
+      },
+      "manual_label_rows": {
+        "": 11108,
+        "pinch_in": 1025,
+        "pinch_hold": 1038,
+        "pinch_out": 937
+      },
+      "changed_label_rows": 1717,
+      "sensor_columns_sha256": "36cf95f5d9a6195682c5790ae91097caacede08a1600d6c49b2dc7ececc50b3a"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-06T07-08-33.250Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-06T07-08-33.250Z/ppg.csv",
+        "sha256": "edafaa29e7afa5f7abe0cced3aa44b34c9266fafc09d3ab769f27d7de17cff23"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-06T07-08-33.250Z/imu.csv",
+        "sha256": "648de2127c8d99b72d17edeec725e2648fcbd05b71eba68cf763903339cea464"
+      }
+    },
+    "ppg": {
+      "rows": 3595,
+      "duration_s": 143.919161344,
+      "first_timestamp_ns": 1044560574103552,
+      "last_timestamp_ns": 1044704493264896,
+      "effective_label_rows": {
+        "": 2815,
+        "pinch_out": 242,
+        "pinch_in": 240,
+        "pinch_hold": 298
+      },
+      "sampled_label_runs": {
+        "pinch_out": 22,
+        "pinch_in": 21,
+        "pinch_hold": 21
+      },
+      "manual_label_rows": {
+        "": 2815,
+        "pinch_out": 242,
+        "pinch_in": 240,
+        "pinch_hold": 298
+      },
+      "changed_label_rows": 203,
+      "sensor_columns_sha256": "1cfb7af4aef8d018e51175c7ced7748b6d833c0836f2976cc7fb0b85905cec25"
+    },
+    "imu": {
+      "rows": 14389,
+      "duration_s": 144.069274902,
+      "first_timestamp_ns": 1044560494440901,
+      "last_timestamp_ns": 1044704563715803,
+      "effective_label_rows": {
+        "": 11259,
+        "pinch_out": 975,
+        "pinch_in": 968,
+        "pinch_hold": 1187
+      },
+      "sampled_label_runs": {
+        "pinch_out": 22,
+        "pinch_in": 21,
+        "pinch_hold": 21
+      },
+      "manual_label_rows": {
+        "": 11259,
+        "pinch_out": 975,
+        "pinch_in": 968,
+        "pinch_hold": 1187
+      },
+      "changed_label_rows": 816,
+      "sensor_columns_sha256": "a30b19f8c01fdc63fdc4eb522f9c5555ad04b2a90e0e11d7ba735d7e96641ea1"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-06T08-10-50.079Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-06T08-10-50.079Z/ppg.csv",
+        "sha256": "7ab3434248e82eb490f37e40354598c1a1add7c7b2498a495cd5f7c5d52da2ba"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-06T08-10-50.079Z/imu.csv",
+        "sha256": "3614f351e54d2a73b89f31b6de147aacce573091cd112088ccf5258d83fe26c1"
+      }
+    },
+    "ppg": {
+      "rows": 3523,
+      "duration_s": 141.064957696,
+      "first_timestamp_ns": 1048297335999232,
+      "last_timestamp_ns": 1048438400956928,
+      "effective_label_rows": {
+        "": 2574,
+        "pinch_in": 297,
+        "pinch_hold": 391,
+        "pinch_out": 261
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 2574,
+        "pinch_in": 297,
+        "pinch_hold": 391,
+        "pinch_out": 261
+      },
+      "changed_label_rows": 264,
+      "sensor_columns_sha256": "eac9c941fc8550239e4e375b6a779c51fe7420da5beaab9ce6b01083ae616b0b"
+    },
+    "imu": {
+      "rows": 14092,
+      "duration_s": 141.070907862,
+      "first_timestamp_ns": 1048297274724836,
+      "last_timestamp_ns": 1048438345632698,
+      "effective_label_rows": {
+        "": 10279,
+        "pinch_in": 1195,
+        "pinch_hold": 1578,
+        "pinch_out": 1040
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 10279,
+        "pinch_in": 1195,
+        "pinch_hold": 1578,
+        "pinch_out": 1040
+      },
+      "changed_label_rows": 1063,
+      "sensor_columns_sha256": "12fcd243debd9681a370988f2baa3582ae111f4de4ef49805fe9bbf9d99691e0"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-06T08-41-12.292Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-06T08-41-12.292Z/ppg.csv",
+        "sha256": "519bc6b4eeae66c2266ed9448c6a39f90e3ab91d234af9e9e35de91650c924cb"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-06T08-41-12.292Z/imu.csv",
+        "sha256": "82abf9a14f397e68f7e38348fda7f98d45237bb9a849ee00c47419ea74ff5cab"
+      }
+    },
+    "ppg": {
+      "rows": 3699,
+      "duration_s": 148.02235776,
+      "first_timestamp_ns": 1050119651166720,
+      "last_timestamp_ns": 1050267673524480,
+      "effective_label_rows": {
+        "": 2831,
+        "pinch_in": 320,
+        "pinch_hold": 255,
+        "pinch_out": 293
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 2831,
+        "pinch_in": 320,
+        "pinch_hold": 255,
+        "pinch_out": 293
+      },
+      "changed_label_rows": 369,
+      "sensor_columns_sha256": "63e3f1204a3beda478267b075cb1bf15019ce85711e3024db8371f59c764e8e7"
+    },
+    "imu": {
+      "rows": 14796,
+      "duration_s": 148.062986914,
+      "first_timestamp_ns": 1050119553859797,
+      "last_timestamp_ns": 1050267616846711,
+      "effective_label_rows": {
+        "": 11293,
+        "pinch_in": 1305,
+        "pinch_hold": 1010,
+        "pinch_out": 1188
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 11293,
+        "pinch_in": 1305,
+        "pinch_hold": 1010,
+        "pinch_out": 1188
+      },
+      "changed_label_rows": 1557,
+      "sensor_columns_sha256": "2c972720e6c74a568b8fe1dd77d483e8d310c86a161e8ba08633935c1b381180"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-06T08-44-16.477Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-06T08-44-16.477Z/ppg.csv",
+        "sha256": "a85026690c98dac0c7db57f08c52bfa87d41a2e74d7cc1cdb88b9ac90036c7d9"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-06T08-44-16.477Z/imu.csv",
+        "sha256": "930006ffddad3afe176b92e8c58ea94719eb986f25060891f02c893feac218d7"
+      }
+    },
+    "ppg": {
+      "rows": 3524,
+      "duration_s": 141.02583936,
+      "first_timestamp_ns": 1050303817557248,
+      "last_timestamp_ns": 1050444843396608,
+      "effective_label_rows": {
+        "": 2462,
+        "pinch_in": 334,
+        "pinch_hold": 376,
+        "pinch_out": 352
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 2462,
+        "pinch_in": 334,
+        "pinch_hold": 376,
+        "pinch_out": 352
+      },
+      "changed_label_rows": 396,
+      "sensor_columns_sha256": "2d7e7b8134474bd79459957a631f91d423ea30caf73bf370e2a783f9000b75aa"
+    },
+    "imu": {
+      "rows": 14108,
+      "duration_s": 141.198332373,
+      "first_timestamp_ns": 1050303730194172,
+      "last_timestamp_ns": 1050444928526545,
+      "effective_label_rows": {
+        "": 9863,
+        "pinch_in": 1344,
+        "pinch_hold": 1500,
+        "pinch_out": 1401
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 9863,
+        "pinch_in": 1344,
+        "pinch_hold": 1500,
+        "pinch_out": 1401
+      },
+      "changed_label_rows": 1572,
+      "sensor_columns_sha256": "40294b33468a6f2756efd99f953e677ef4f01842e878057f7c182326a5c5d818"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-09T10-59-34.843Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-09T10-59-34.843Z/ppg.csv",
+        "sha256": "d61d82c6783e7b4cd6d7b2c1dfdab4d996d270cbe6a0f2d0d1fa5563c2dd8c48"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-09T10-59-34.843Z/imu.csv",
+        "sha256": "49b937eb1408deaefe429a17e8662274a71b50467020a3bb138cc02a8ed08751"
+      }
+    },
+    "ppg": {
+      "rows": 3549,
+      "duration_s": 142.022203648,
+      "first_timestamp_ns": 247221222889984,
+      "last_timestamp_ns": 247363245093632,
+      "effective_label_rows": {
+        "": 2711,
+        "pinch_in": 283,
+        "pinch_hold": 301,
+        "pinch_out": 254
+      },
+      "sampled_label_runs": {
+        "pinch_in": 21,
+        "pinch_hold": 21,
+        "pinch_out": 21
+      },
+      "manual_label_rows": {
+        "": 2712,
+        "pinch_in": 283,
+        "pinch_hold": 300,
+        "pinch_out": 254
+      },
+      "changed_label_rows": 363,
+      "sensor_columns_sha256": "1198ede4f055d43d0376a011edde947142892c0ff9a620696d868c9c2850b059"
+    },
+    "imu": {
+      "rows": 14199,
+      "duration_s": 142.066038672,
+      "first_timestamp_ns": 247221124148573,
+      "last_timestamp_ns": 247363190187245,
+      "effective_label_rows": {
+        "": 10837,
+        "pinch_in": 1119,
+        "pinch_hold": 1238,
+        "pinch_out": 1005
+      },
+      "sampled_label_runs": {
+        "pinch_in": 21,
+        "pinch_hold": 21,
+        "pinch_out": 21
+      },
+      "manual_label_rows": {
+        "": 10841,
+        "pinch_in": 1119,
+        "pinch_hold": 1235,
+        "pinch_out": 1004
+      },
+      "changed_label_rows": 1451,
+      "sensor_columns_sha256": "3819d980202345675c319d72965f011a2e4e68888e32af98b3b61e85b1b79885"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-09T12-00-11.890Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-09T12-00-11.890Z/ppg.csv",
+        "sha256": "bf58a5ff8c7fd47011a47209450f8f5ad84613a4e61c23b64db82518d9d2af18"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-09T12-00-11.890Z/imu.csv",
+        "sha256": "fcade8f8af3e87bd45272a5284859f5338b551659c22ce67162a8f35026e9321"
+      }
+    },
+    "ppg": {
+      "rows": 3425,
+      "duration_s": 137.114696192,
+      "first_timestamp_ns": 250857793973248,
+      "last_timestamp_ns": 250994908669440,
+      "effective_label_rows": {
+        "": 2414,
+        "pinch_in": 245,
+        "pinch_hold": 557,
+        "pinch_out": 209
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 2419,
+        "pinch_in": 245,
+        "pinch_hold": 554,
+        "pinch_out": 207
+      },
+      "changed_label_rows": 663,
+      "sensor_columns_sha256": "f9392c7ba6fd7329f357efdbe14d0a9dea6416a80d302a0f1e22b1ffee23c4b0"
+    },
+    "imu": {
+      "rows": 13696,
+      "duration_s": 137.097583496,
+      "first_timestamp_ns": 250857818116990,
+      "last_timestamp_ns": 250994915700486,
+      "effective_label_rows": {
+        "": 9636,
+        "pinch_in": 979,
+        "pinch_hold": 2230,
+        "pinch_out": 851
+      },
+      "sampled_label_runs": {
+        "pinch_in": 22,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 9642,
+        "pinch_in": 976,
+        "pinch_hold": 2229,
+        "pinch_out": 849
+      },
+      "changed_label_rows": 2679,
+      "sensor_columns_sha256": "3f2d2fc645a46abc1c3416b9d7d20395d24d08befee1a51ec800819cc06512ac"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-09T13-48-35.709Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-09T13-48-35.709Z/ppg.csv",
+        "sha256": "76d18df98e18d5cc8e075e525c4951dd9d6dc747f98cd92256fb07f9e34ccf20"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-09T13-48-35.709Z/imu.csv",
+        "sha256": "4440db53d11ffb1693e99ccbda540283212efa1acb7981b6238136a6fb43193e"
+      }
+    },
+    "ppg": {
+      "rows": 3473,
+      "duration_s": 139.083717376,
+      "first_timestamp_ns": 257361389493248,
+      "last_timestamp_ns": 257500473210624,
+      "effective_label_rows": {
+        "": 2292,
+        "pinch_in": 304,
+        "pinch_hold": 593,
+        "pinch_out": 284
+      },
+      "sampled_label_runs": {
+        "pinch_in": 23,
+        "pinch_hold": 22,
+        "pinch_out": 23
+      },
+      "manual_label_rows": {
+        "": 2392,
+        "pinch_in": 277,
+        "pinch_hold": 541,
+        "pinch_out": 263
+      },
+      "changed_label_rows": 820,
+      "sensor_columns_sha256": "a8a07c75509295fcf3755d27f28a80a07d6149a8425b67de02bfa20d4557f304"
+    },
+    "imu": {
+      "rows": 13892,
+      "duration_s": 139.106730322,
+      "first_timestamp_ns": 257361435644148,
+      "last_timestamp_ns": 257500542374470,
+      "effective_label_rows": {
+        "": 9172,
+        "pinch_in": 1213,
+        "pinch_hold": 2367,
+        "pinch_out": 1140
+      },
+      "sampled_label_runs": {
+        "pinch_in": 23,
+        "pinch_hold": 22,
+        "pinch_out": 23
+      },
+      "manual_label_rows": {
+        "": 9553,
+        "pinch_in": 1117,
+        "pinch_hold": 2164,
+        "pinch_out": 1058
+      },
+      "changed_label_rows": 3295,
+      "sensor_columns_sha256": "6daa5d44fa19ed065dd8384df1b19d060a3226653bb8644a0211d0c9cdb9eb63"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-09T13-51-14.408Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-09T13-51-14.408Z/ppg.csv",
+        "sha256": "66abd61a6b29b9d1eea2b630cd7859002243dc87528e5f898434382319acafce"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-09T13-51-14.408Z/imu.csv",
+        "sha256": "8279a760087e1569b969c22f8e54631e52b210001701e62ca5d185c830849ece"
+      }
+    },
+    "ppg": {
+      "rows": 3526,
+      "duration_s": 141.183225344,
+      "first_timestamp_ns": 257520083135232,
+      "last_timestamp_ns": 257661266360576,
+      "effective_label_rows": {
+        "": 2265,
+        "pinch_in": 341,
+        "pinch_hold": 621,
+        "pinch_out": 299
+      },
+      "sampled_label_runs": {
+        "pinch_in": 24,
+        "pinch_hold": 22,
+        "pinch_out": 24
+      },
+      "manual_label_rows": {
+        "": 2323,
+        "pinch_in": 321,
+        "pinch_hold": 613,
+        "pinch_out": 269
+      },
+      "changed_label_rows": 519,
+      "sensor_columns_sha256": "3b73ac40493579d9e74363816a6f61a7eb496befbd0fe1779ecb01b5ce595c28"
+    },
+    "imu": {
+      "rows": 14100,
+      "duration_s": 141.154770166,
+      "first_timestamp_ns": 257520075355524,
+      "last_timestamp_ns": 257661230125690,
+      "effective_label_rows": {
+        "": 9049,
+        "pinch_in": 1374,
+        "pinch_hold": 2480,
+        "pinch_out": 1197
+      },
+      "sampled_label_runs": {
+        "pinch_in": 24,
+        "pinch_hold": 22,
+        "pinch_out": 24
+      },
+      "manual_label_rows": {
+        "": 9275,
+        "pinch_in": 1298,
+        "pinch_hold": 2454,
+        "pinch_out": 1073
+      },
+      "changed_label_rows": 2079,
+      "sensor_columns_sha256": "4a3fc3ecd60c0d0ab7dcdad3e54cc21c73add6639fbcd777f6409b5be1bd1814"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-09T13-54-14.793Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-09T13-54-14.793Z/ppg.csv",
+        "sha256": "0404ce9482dc347f0f87565f2d68e2a6e6beb07656b9fb2fdf3eaa980feae180"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-09T13-54-14.793Z/imu.csv",
+        "sha256": "8a90c6a71e292c0e1bda8d5a6d33d95669a506c23709a2b82d658da299428503"
+      }
+    },
+    "ppg": {
+      "rows": 3501,
+      "duration_s": 140.1835904,
+      "first_timestamp_ns": 257700517306880,
+      "last_timestamp_ns": 257840700897280,
+      "effective_label_rows": {
+        "": 2303,
+        "pinch_in": 285,
+        "pinch_out": 262,
+        "pinch_hold": 651
+      },
+      "sampled_label_runs": {
+        "pinch_in": 25,
+        "pinch_out": 25,
+        "pinch_hold": 20
+      },
+      "manual_label_rows": {
+        "": 2476,
+        "pinch_in": 239,
+        "pinch_hold": 582,
+        "pinch_out": 204
+      },
+      "changed_label_rows": 498,
+      "sensor_columns_sha256": "ea625edde75129b87dc9a19ffd9de7696fe8c4f69a0f80c7b922f114d4d41550"
+    },
+    "imu": {
+      "rows": 13990,
+      "duration_s": 140.080642969,
+      "first_timestamp_ns": 257700557623444,
+      "last_timestamp_ns": 257840638266413,
+      "effective_label_rows": {
+        "": 9204,
+        "pinch_in": 1119,
+        "pinch_out": 1057,
+        "pinch_hold": 2610
+      },
+      "sampled_label_runs": {
+        "pinch_in": 25,
+        "pinch_out": 25,
+        "pinch_hold": 20
+      },
+      "manual_label_rows": {
+        "": 9896,
+        "pinch_in": 941,
+        "pinch_hold": 2334,
+        "pinch_out": 819
+      },
+      "changed_label_rows": 1973,
+      "sensor_columns_sha256": "4c60f46c9ca922143365e8842d518ea0f1ad1102c741fb0bd138cfc268794704"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-13T07-29-29.795Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-29-29.795Z/ppg.csv",
+        "sha256": "8abbb479b12b403ce7d926f086be4fd0ca9a9cb6705ed0ae6c2fd85d5cb33936"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-29-29.795Z/imu.csv",
+        "sha256": "36eb9f0611c7bade5d3c9e2e74a953339706f2d113405e4f549df85dbe7a3f2e"
+      }
+    },
+    "ppg": {
+      "rows": 1125,
+      "duration_s": 44.99082466,
+      "first_timestamp_ns": 580164610382096,
+      "last_timestamp_ns": 580209601206756,
+      "effective_label_rows": {
+        "": 459,
+        "pinch_in": 139,
+        "pinch_hold": 394,
+        "pinch_out": 133
+      },
+      "sampled_label_runs": {
+        "pinch_in": 12,
+        "pinch_hold": 11,
+        "pinch_out": 11
+      },
+      "manual_label_rows": {
+        "": 459,
+        "pinch_in": 139,
+        "pinch_hold": 394,
+        "pinch_out": 133
+      },
+      "changed_label_rows": 666,
+      "sensor_columns_sha256": "c8578d5945aad74767c641a5c73599a4d2e3c7e964b82db5e25e042b472b1c2b"
+    },
+    "imu": {
+      "rows": 4496,
+      "duration_s": 44.990697315,
+      "first_timestamp_ns": 580164679915640,
+      "last_timestamp_ns": 580209670612955,
+      "effective_label_rows": {
+        "": 1826,
+        "pinch_in": 569,
+        "pinch_hold": 1568,
+        "pinch_out": 533
+      },
+      "sampled_label_runs": {
+        "pinch_in": 12,
+        "pinch_hold": 11,
+        "pinch_out": 11
+      },
+      "manual_label_rows": {
+        "": 1826,
+        "pinch_in": 569,
+        "pinch_hold": 1568,
+        "pinch_out": 533
+      },
+      "changed_label_rows": 2670,
+      "sensor_columns_sha256": "93f8976b7ff0154d8e549354a45b1fd436a308e24b4db4305063f665f30b03f5"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-13T07-29-39.070Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-29-39.070Z/ppg.csv",
+        "sha256": "9001338e12ba017b90c2250febddf2c011e8cac3f883c1d8b0f155d98a89be95"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-29-39.070Z/imu.csv",
+        "sha256": "17089ab4cb0061df4b3764cb9878a53156c37d6eff4c197ec35c147faec0e5ff"
+      }
+    },
+    "ppg": {
+      "rows": 1125,
+      "duration_s": 44.99482466,
+      "first_timestamp_ns": 580173975382096,
+      "last_timestamp_ns": 580218970206756,
+      "effective_label_rows": {
+        "": 358,
+        "pinch_out": 147,
+        "pinch_in": 147,
+        "pinch_hold": 473
+      },
+      "sampled_label_runs": {
+        "pinch_out": 12,
+        "pinch_in": 12,
+        "pinch_hold": 11
+      },
+      "manual_label_rows": {
+        "": 358,
+        "pinch_out": 147,
+        "pinch_in": 147,
+        "pinch_hold": 473
+      },
+      "changed_label_rows": 767,
+      "sensor_columns_sha256": "50aaa329d53c96367ce13d5fa527b85915ca5c1af0b007893abbb69dbf571caf"
+    },
+    "imu": {
+      "rows": 4496,
+      "duration_s": 44.990139551,
+      "first_timestamp_ns": 580173917311880,
+      "last_timestamp_ns": 580218907451431,
+      "effective_label_rows": {
+        "": 1431,
+        "pinch_out": 582,
+        "pinch_in": 588,
+        "pinch_hold": 1895
+      },
+      "sampled_label_runs": {
+        "pinch_out": 12,
+        "pinch_in": 12,
+        "pinch_hold": 11
+      },
+      "manual_label_rows": {
+        "": 1431,
+        "pinch_out": 582,
+        "pinch_in": 588,
+        "pinch_hold": 1895
+      },
+      "changed_label_rows": 3065,
+      "sensor_columns_sha256": "bf96270f14f185ee12ea0a9cba6855b293aea44552ef3cca72c0dbb11916f63c"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-13T07-29-43.334Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-29-43.334Z/ppg.csv",
+        "sha256": "8efe646dafe45240c14ddae341e49ab73af4c8a4a0e094d99a3a972faeea7f6d"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-29-43.334Z/imu.csv",
+        "sha256": "a54d11da28ab6d438d5d37de47cce275665c973079d877eaf78f87eabae73dac"
+      }
+    },
+    "ppg": {
+      "rows": 1124,
+      "duration_s": 44.97482466,
+      "first_timestamp_ns": 580178203382096,
+      "last_timestamp_ns": 580223178206756,
+      "effective_label_rows": {
+        "": 373,
+        "pinch_out": 127,
+        "pinch_in": 121,
+        "pinch_hold": 503
+      },
+      "sampled_label_runs": {
+        "pinch_out": 12,
+        "pinch_in": 12,
+        "pinch_hold": 11
+      },
+      "manual_label_rows": {
+        "": 373,
+        "pinch_out": 127,
+        "pinch_in": 121,
+        "pinch_hold": 503
+      },
+      "changed_label_rows": 751,
+      "sensor_columns_sha256": "7f3628835da68478eedfe42180aa4bc73ac8611802364d3265348d804ab6c119"
+    },
+    "imu": {
+      "rows": 4496,
+      "duration_s": 44.990361621,
+      "first_timestamp_ns": 580178131384244,
+      "last_timestamp_ns": 580223121745865,
+      "effective_label_rows": {
+        "": 1490,
+        "pinch_out": 511,
+        "pinch_in": 480,
+        "pinch_hold": 2015
+      },
+      "sampled_label_runs": {
+        "pinch_out": 12,
+        "pinch_in": 12,
+        "pinch_hold": 11
+      },
+      "manual_label_rows": {
+        "": 1490,
+        "pinch_out": 511,
+        "pinch_in": 480,
+        "pinch_hold": 2015
+      },
+      "changed_label_rows": 3006,
+      "sensor_columns_sha256": "a88fbfd50ea6cc4a2bd81cd450e2c4429822b3d2af6a53a4aec2a3fa1fcb2bc4"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-13T07-29-55.671Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-29-55.671Z/ppg.csv",
+        "sha256": "b2182a2e87db7f93362dd752973e515913d98a3573910f50ed50dce1a60d9537"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-29-55.671Z/imu.csv",
+        "sha256": "3c8daa5c0f072c553b69ef58b3ecd445f5606af1540b81c9d0c9f51cf835293d"
+      }
+    },
+    "ppg": {
+      "rows": 1125,
+      "duration_s": 44.983479415,
+      "first_timestamp_ns": 580190564382096,
+      "last_timestamp_ns": 580235547861511,
+      "effective_label_rows": {
+        "": 338,
+        "pinch_out": 122,
+        "pinch_in": 118,
+        "pinch_hold": 547
+      },
+      "sampled_label_runs": {
+        "pinch_out": 11,
+        "pinch_in": 11,
+        "pinch_hold": 10
+      },
+      "manual_label_rows": {
+        "": 338,
+        "pinch_out": 122,
+        "pinch_in": 118,
+        "pinch_hold": 547
+      },
+      "changed_label_rows": 787,
+      "sensor_columns_sha256": "d409897d3fc2dd3fb8b50eee38c0db4a7864fea49c31fa810e9e8504ddceb0e3"
+    },
+    "imu": {
+      "rows": 4496,
+      "duration_s": 44.990239551,
+      "first_timestamp_ns": 580190483762271,
+      "last_timestamp_ns": 580235474001822,
+      "effective_label_rows": {
+        "": 1344,
+        "pinch_out": 490,
+        "pinch_in": 465,
+        "pinch_hold": 2197
+      },
+      "sampled_label_runs": {
+        "pinch_out": 11,
+        "pinch_in": 11,
+        "pinch_hold": 10
+      },
+      "manual_label_rows": {
+        "": 1344,
+        "pinch_out": 490,
+        "pinch_in": 465,
+        "pinch_hold": 2197
+      },
+      "changed_label_rows": 3152,
+      "sensor_columns_sha256": "5fbd3eb84258050bb1cea2ce177f63a5340054046faeae55d6e9d5a42a744969"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-13T07-30-01.021Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-30-01.021Z/ppg.csv",
+        "sha256": "9e455e239109a4fc185e56993f717b153177166f354e4318e46e23869800d4c6"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-30-01.021Z/imu.csv",
+        "sha256": "cbaf92f4a02d8dc1673a216e85a57f7a30e05f3608095a52171da9c070e7ff71"
+      }
+    },
+    "ppg": {
+      "rows": 1124,
+      "duration_s": 44.974064901,
+      "first_timestamp_ns": 580195789796610,
+      "last_timestamp_ns": 580240763861511,
+      "effective_label_rows": {
+        "": 305,
+        "pinch_in": 130,
+        "pinch_hold": 584,
+        "pinch_out": 105
+      },
+      "sampled_label_runs": {
+        "pinch_in": 12,
+        "pinch_hold": 10,
+        "pinch_out": 10
+      },
+      "manual_label_rows": {
+        "": 305,
+        "pinch_in": 130,
+        "pinch_hold": 584,
+        "pinch_out": 105
+      },
+      "changed_label_rows": 819,
+      "sensor_columns_sha256": "53f23140365a05d7f13fda089f11bc053653a1ab9899089e0aefc1ce07190311"
+    },
+    "imu": {
+      "rows": 4496,
+      "duration_s": 44.990392138,
+      "first_timestamp_ns": 580195839047916,
+      "last_timestamp_ns": 580240829440054,
+      "effective_label_rows": {
+        "": 1217,
+        "pinch_in": 507,
+        "pinch_hold": 2337,
+        "pinch_out": 435
+      },
+      "sampled_label_runs": {
+        "pinch_in": 12,
+        "pinch_hold": 10,
+        "pinch_out": 10
+      },
+      "manual_label_rows": {
+        "": 1217,
+        "pinch_in": 507,
+        "pinch_hold": 2337,
+        "pinch_out": 435
+      },
+      "changed_label_rows": 3279,
+      "sensor_columns_sha256": "569906e59704e9fa4ecf7f6e6664d257f4e144299097a9e87f0c79cd355a4ddb"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-13T07-30-03.764Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-30-03.764Z/ppg.csv",
+        "sha256": "78dadae5183ffacdb3b4f36334e56cf1e4ea435edd9e2cbd3566c044e51e3959"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-30-03.764Z/imu.csv",
+        "sha256": "b446f6192199ddfe95408e6f043b7d768524b8ac69da86b56282f5b262b1d4b2"
+      }
+    },
+    "ppg": {
+      "rows": 1125,
+      "duration_s": 44.980064901,
+      "first_timestamp_ns": 580198683796610,
+      "last_timestamp_ns": 580243663861511,
+      "effective_label_rows": {
+        "": 443,
+        "pinch_out": 102,
+        "pinch_in": 96,
+        "pinch_hold": 484
+      },
+      "sampled_label_runs": {
+        "pinch_out": 9,
+        "pinch_in": 9,
+        "pinch_hold": 8
+      },
+      "manual_label_rows": {
+        "": 443,
+        "pinch_out": 102,
+        "pinch_in": 96,
+        "pinch_hold": 484
+      },
+      "changed_label_rows": 682,
+      "sensor_columns_sha256": "b588c7032da745f92b6e54f99bd697c4d1fa487b53331114d618eb0417addc3c"
+    },
+    "imu": {
+      "rows": 4496,
+      "duration_s": 44.991490771,
+      "first_timestamp_ns": 580198631345279,
+      "last_timestamp_ns": 580243622836050,
+      "effective_label_rows": {
+        "": 1771,
+        "pinch_out": 397,
+        "pinch_in": 393,
+        "pinch_hold": 1935
+      },
+      "sampled_label_runs": {
+        "pinch_out": 9,
+        "pinch_in": 9,
+        "pinch_hold": 8
+      },
+      "manual_label_rows": {
+        "": 1771,
+        "pinch_out": 397,
+        "pinch_in": 393,
+        "pinch_hold": 1935
+      },
+      "changed_label_rows": 2725,
+      "sensor_columns_sha256": "c519cfd8b9ac2fc6b938db3e52c2b82e7dac5307b3b792f459879183be03fe79"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-13T07-30-09.372Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-30-09.372Z/ppg.csv",
+        "sha256": "e48acf2c799d8578c3eb313d0c9bce02fc9fa1963c042ae9d4c1626922c8e1ff"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T07-30-09.372Z/imu.csv",
+        "sha256": "88a59bbed5e5e3456de7ee3797f325578b2127d6e44cbc7f00f794d244feb973"
+      }
+    },
+    "ppg": {
+      "rows": 1124,
+      "duration_s": 44.945064901,
+      "first_timestamp_ns": 580204301796610,
+      "last_timestamp_ns": 580249246861511,
+      "effective_label_rows": {
+        "": 482,
+        "pinch_out": 94,
+        "pinch_in": 132,
+        "pinch_hold": 416
+      },
+      "sampled_label_runs": {
+        "pinch_out": 8,
+        "pinch_in": 12,
+        "pinch_hold": 7
+      },
+      "manual_label_rows": {
+        "": 482,
+        "pinch_out": 94,
+        "pinch_in": 132,
+        "pinch_hold": 416
+      },
+      "changed_label_rows": 642,
+      "sensor_columns_sha256": "27bfa79bd1a4f7493faa1f95407a7e31510740fd3f67fc78f114194f1e4acf5a"
+    },
+    "imu": {
+      "rows": 4496,
+      "duration_s": 44.992977685,
+      "first_timestamp_ns": 580204195462711,
+      "last_timestamp_ns": 580249188440396,
+      "effective_label_rows": {
+        "": 1918,
+        "pinch_out": 375,
+        "pinch_in": 534,
+        "pinch_hold": 1669
+      },
+      "sampled_label_runs": {
+        "pinch_out": 8,
+        "pinch_in": 12,
+        "pinch_hold": 7
+      },
+      "manual_label_rows": {
+        "": 1918,
+        "pinch_out": 375,
+        "pinch_in": 534,
+        "pinch_hold": 1669
+      },
+      "changed_label_rows": 2578,
+      "sensor_columns_sha256": "c064ea3f7eb1e306f32399c8aa59d245e2c29c465e025307119487a9eed0349c"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-13T08-11-45.283Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T08-11-45.283Z/ppg.csv",
+        "sha256": "55dc3f405519eacc2697073fb785f280921270a8ab417fce1e50a80900173006"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T08-11-45.283Z/imu.csv",
+        "sha256": "f2d5d4514bd890d9c11bf8d4b49873731facd25102e006b796e3c9ecd46409ac"
+      }
+    },
+    "ppg": {
+      "rows": 932,
+      "duration_s": 37.279074025,
+      "first_timestamp_ns": 582707920920812,
+      "last_timestamp_ns": 582745199994837,
+      "effective_label_rows": {
+        "": 562,
+        "pinch_in": 79,
+        "pinch_hold": 210,
+        "pinch_out": 81
+      },
+      "sampled_label_runs": {
+        "pinch_in": 8,
+        "pinch_hold": 8,
+        "pinch_out": 8
+      },
+      "manual_label_rows": {
+        "": 562,
+        "pinch_in": 79,
+        "pinch_hold": 210,
+        "pinch_out": 81
+      },
+      "changed_label_rows": 370,
+      "sensor_columns_sha256": "d8890821d6b06e91bc61ff99ab3845b8a53d08176c66a990bd99fffdecb607e8"
+    },
+    "imu": {
+      "rows": 4495,
+      "duration_s": 44.994262695,
+      "first_timestamp_ns": 582700147289615,
+      "last_timestamp_ns": 582745141552310,
+      "effective_label_rows": {
+        "": 3008,
+        "pinch_in": 325,
+        "pinch_hold": 839,
+        "pinch_out": 323
+      },
+      "sampled_label_runs": {
+        "pinch_in": 8,
+        "pinch_hold": 8,
+        "pinch_out": 8
+      },
+      "manual_label_rows": {
+        "": 3008,
+        "pinch_in": 325,
+        "pinch_hold": 839,
+        "pinch_out": 323
+      },
+      "changed_label_rows": 1487,
+      "sensor_columns_sha256": "cdf130c914e633daa1717229ac77ef6cd5d51d385b842e941aab171969827572"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-13T08-12-02.014Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T08-12-02.014Z/ppg.csv",
+        "sha256": "f9178d409daf1230ab61327dec5884db36e286ad8e18313764538dcdf6ff89f1"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-13T08-12-02.014Z/imu.csv",
+        "sha256": "f1c35ac8666c35fd375d891bcc793c5216c28746b639dcf48d5f71e99a2c3794"
+      }
+    },
+    "ppg": {
+      "rows": 1124,
+      "duration_s": 44.975575855,
+      "first_timestamp_ns": 582716957307115,
+      "last_timestamp_ns": 582761932882970,
+      "effective_label_rows": {
+        "": 431,
+        "pinch_in": 142,
+        "pinch_hold": 419,
+        "pinch_out": 132
+      },
+      "sampled_label_runs": {
+        "pinch_in": 12,
+        "pinch_hold": 12,
+        "pinch_out": 12
+      },
+      "manual_label_rows": {
+        "": 431,
+        "pinch_in": 142,
+        "pinch_hold": 419,
+        "pinch_out": 132
+      },
+      "changed_label_rows": 693,
+      "sensor_columns_sha256": "6da99a31f9fe2678d55aa3f61652a35f168cff739b15ff63f02b0ad7a97028b6"
+    },
+    "imu": {
+      "rows": 4495,
+      "duration_s": 44.996765137,
+      "first_timestamp_ns": 582716884777408,
+      "last_timestamp_ns": 582761881542545,
+      "effective_label_rows": {
+        "": 1719,
+        "pinch_in": 575,
+        "pinch_hold": 1682,
+        "pinch_out": 519
+      },
+      "sampled_label_runs": {
+        "pinch_in": 12,
+        "pinch_hold": 12,
+        "pinch_out": 12
+      },
+      "manual_label_rows": {
+        "": 1719,
+        "pinch_in": 575,
+        "pinch_hold": 1682,
+        "pinch_out": 519
+      },
+      "changed_label_rows": 2776,
+      "sensor_columns_sha256": "98b54170a221edb043c181fc416eae05658d4a2800cc96b997ef7db8baeada90"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_in-2026-11-06T05-33-16.844Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-06T05-33-16.844Z/ppg.csv",
+        "sha256": "c73c0def3721df603968d69f7995bb3fd80efd5a9fe5a29ec9b35ee8a87e75e7"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-06T05-33-16.844Z/imu.csv",
+        "sha256": "c8c6b9b88930c95c470c5dca16f3b82c316d18fa976e4f5b0c66ad994f767a47"
+      }
+    },
+    "ppg": {
+      "rows": 3625,
+      "duration_s": 144.982638848,
+      "first_timestamp_ns": 1038698454402304,
+      "last_timestamp_ns": 1038843437041152,
+      "effective_label_rows": {
+        "": 3040,
+        "pinch_in": 144,
+        "pinch_hold": 298,
+        "pinch_out": 143
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 3625
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "188d1329b02d570009f0654f00611a5e00c3f2e0f1e02c9f640ab71bd0ecc935"
+    },
+    "imu": {
+      "rows": 14498,
+      "duration_s": 145.007198876,
+      "first_timestamp_ns": 1038698375862832,
+      "last_timestamp_ns": 1038843383061708,
+      "effective_label_rows": {
+        "": 12127,
+        "pinch_in": 594,
+        "pinch_hold": 1200,
+        "pinch_out": 577
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 14498
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "0a6eb240ef3e9021cb187aaafc2c41dd800fc172a1ff0488586493e168fb22d6"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_in-2026-11-06T05-48-45.160Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-06T05-48-45.160Z/ppg.csv",
+        "sha256": "00df077df25a3cdb271fee08de2a83f9c2288ba3d5dfd63e9f1cf68ca0c5a13b"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-06T05-48-45.160Z/imu.csv",
+        "sha256": "21018bd0af6cc361efa335ee0ed0b155c150373eb74bd45328af8d1d5263a4ee"
+      }
+    },
+    "ppg": {
+      "rows": 3523,
+      "duration_s": 140.98333824,
+      "first_timestamp_ns": 1039630703246592,
+      "last_timestamp_ns": 1039771686584832,
+      "effective_label_rows": {
+        "": 3147,
+        "pinch_in": 102,
+        "pinch_hold": 176,
+        "pinch_out": 98
+      },
+      "sampled_label_runs": {
+        "pinch_in": 14,
+        "pinch_hold": 13,
+        "pinch_out": 14
+      },
+      "manual_label_rows": {
+        "": 3523
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "03573c7ec33bb14f5b5c841b72cf524665331fe81ac5d2873c067c1f577e270f"
+    },
+    "imu": {
+      "rows": 14108,
+      "duration_s": 141.202789306,
+      "first_timestamp_ns": 1039630551510830,
+      "last_timestamp_ns": 1039771754300136,
+      "effective_label_rows": {
+        "": 12603,
+        "pinch_in": 411,
+        "pinch_hold": 695,
+        "pinch_out": 399
+      },
+      "sampled_label_runs": {
+        "pinch_in": 14,
+        "pinch_hold": 13,
+        "pinch_out": 14
+      },
+      "manual_label_rows": {
+        "": 14108
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "36cf95f5d9a6195682c5790ae91097caacede08a1600d6c49b2dc7ececc50b3a"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_in-2026-11-06T07-10-57.295Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-06T07-10-57.295Z/ppg.csv",
+        "sha256": "a67cdfafc8a344dd55f34557c0770be0e6d4ca41eae072f91e0dc85068878bc2"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-06T07-10-57.295Z/imu.csv",
+        "sha256": "49e11aae15aedb332c144e777f1f3d1a1b8a04bf5ff5f17dd4526db5c3ce4a74"
+      }
+    },
+    "ppg": {
+      "rows": 3595,
+      "duration_s": 143.919161344,
+      "first_timestamp_ns": 1044560574103552,
+      "last_timestamp_ns": 1044704493264896,
+      "effective_label_rows": {
+        "": 2986,
+        "pinch_in": 150,
+        "pinch_hold": 306,
+        "pinch_out": 153
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 3595
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "1cfb7af4aef8d018e51175c7ced7748b6d833c0836f2976cc7fb0b85905cec25"
+    },
+    "imu": {
+      "rows": 14389,
+      "duration_s": 144.069274902,
+      "first_timestamp_ns": 1044560494440901,
+      "last_timestamp_ns": 1044704563715803,
+      "effective_label_rows": {
+        "": 11940,
+        "pinch_in": 605,
+        "pinch_hold": 1225,
+        "pinch_out": 619
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 14389
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "a30b19f8c01fdc63fdc4eb522f9c5555ad04b2a90e0e11d7ba735d7e96641ea1"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_in-2026-11-06T08-13-11.188Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-06T08-13-11.188Z/ppg.csv",
+        "sha256": "6b25872aaf04ddfe4985087e9b836ae127943e111b8773902c15d26574623d07"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-06T08-13-11.188Z/imu.csv",
+        "sha256": "da5923a85463fb1dad3a8f09761f67207ac71f3dd7f375525911b553c238862b"
+      }
+    },
+    "ppg": {
+      "rows": 3523,
+      "duration_s": 141.064957696,
+      "first_timestamp_ns": 1048297335999232,
+      "last_timestamp_ns": 1048438400956928,
+      "effective_label_rows": {
+        "": 2742,
+        "pinch_in": 151,
+        "pinch_hold": 488,
+        "pinch_out": 142
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 3523
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "eac9c941fc8550239e4e375b6a779c51fe7420da5beaab9ce6b01083ae616b0b"
+    },
+    "imu": {
+      "rows": 14092,
+      "duration_s": 141.070907862,
+      "first_timestamp_ns": 1048297274724836,
+      "last_timestamp_ns": 1048438345632698,
+      "effective_label_rows": {
+        "": 10964,
+        "pinch_in": 603,
+        "pinch_hold": 1944,
+        "pinch_out": 581
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 14092
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "12fcd243debd9681a370988f2baa3582ae111f4de4ef49805fe9bbf9d99691e0"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_in-2026-11-06T08-43-40.409Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-06T08-43-40.409Z/ppg.csv",
+        "sha256": "517ecb7078d59f390ef7252ce3aa188bc9ca2e30ef109c3513e8b0e86cbfe985"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-06T08-43-40.409Z/imu.csv",
+        "sha256": "d72559cef08e1edfac4cd84dca03cabd55f4e1077dba8ee07f662932e3b72915"
+      }
+    },
+    "ppg": {
+      "rows": 3699,
+      "duration_s": 148.02235776,
+      "first_timestamp_ns": 1050119651166720,
+      "last_timestamp_ns": 1050267673524480,
+      "effective_label_rows": {
+        "": 3124,
+        "pinch_in": 138,
+        "pinch_hold": 307,
+        "pinch_out": 130
+      },
+      "sampled_label_runs": {
+        "pinch_in": 18,
+        "pinch_hold": 18,
+        "pinch_out": 18
+      },
+      "manual_label_rows": {
+        "": 3699
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "63e3f1204a3beda478267b075cb1bf15019ce85711e3024db8371f59c764e8e7"
+    },
+    "imu": {
+      "rows": 14796,
+      "duration_s": 148.062986914,
+      "first_timestamp_ns": 1050119553859797,
+      "last_timestamp_ns": 1050267616846711,
+      "effective_label_rows": {
+        "": 12512,
+        "pinch_in": 545,
+        "pinch_hold": 1237,
+        "pinch_out": 502
+      },
+      "sampled_label_runs": {
+        "pinch_in": 18,
+        "pinch_hold": 18,
+        "pinch_out": 18
+      },
+      "manual_label_rows": {
+        "": 14796
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "2c972720e6c74a568b8fe1dd77d483e8d310c86a161e8ba08633935c1b381180"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_in-2026-11-06T08-46-37.604Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-06T08-46-37.604Z/ppg.csv",
+        "sha256": "45005ee19b852f89519c6a68f2d2ff80a54209b6ee895bf36d2553c20f0ff80d"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-06T08-46-37.604Z/imu.csv",
+        "sha256": "55417a4db853f93193b60e7eec3f957ef7ac5ba9b93b3389567d7297cfb5ac96"
+      }
+    },
+    "ppg": {
+      "rows": 3524,
+      "duration_s": 141.02583936,
+      "first_timestamp_ns": 1050303817557248,
+      "last_timestamp_ns": 1050444843396608,
+      "effective_label_rows": {
+        "": 2738,
+        "pinch_in": 145,
+        "pinch_hold": 500,
+        "pinch_out": 141
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 3524
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "2d7e7b8134474bd79459957a631f91d423ea30caf73bf370e2a783f9000b75aa"
+    },
+    "imu": {
+      "rows": 14108,
+      "duration_s": 141.198332373,
+      "first_timestamp_ns": 1050303730194172,
+      "last_timestamp_ns": 1050444928526545,
+      "effective_label_rows": {
+        "": 10965,
+        "pinch_in": 578,
+        "pinch_hold": 1983,
+        "pinch_out": 582
+      },
+      "sampled_label_runs": {
+        "pinch_in": 20,
+        "pinch_hold": 20,
+        "pinch_out": 20
+      },
+      "manual_label_rows": {
+        "": 14108
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "40294b33468a6f2756efd99f953e677ef4f01842e878057f7c182326a5c5d818"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_in-2026-11-09T11-01-56.898Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-09T11-01-56.898Z/ppg.csv",
+        "sha256": "1194fba3adf1b5e85fa48472e87b062464612f802ee375de03169ca636b2cec4"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-09T11-01-56.898Z/imu.csv",
+        "sha256": "71265b9721ab8feadcbd78fc3c6b168e9f49117bd2d20aebe3c31eb200c001a6"
+      }
+    },
+    "ppg": {
+      "rows": 3549,
+      "duration_s": 142.022203648,
+      "first_timestamp_ns": 247221222889984,
+      "last_timestamp_ns": 247363245093632,
+      "effective_label_rows": {
+        "": 3022,
+        "pinch_in": 128,
+        "pinch_out": 137,
+        "pinch_hold": 262
+      },
+      "sampled_label_runs": {
+        "pinch_in": 18,
+        "pinch_out": 18,
+        "pinch_hold": 17
+      },
+      "manual_label_rows": {
+        "": 3549
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "1198ede4f055d43d0376a011edde947142892c0ff9a620696d868c9c2850b059"
+    },
+    "imu": {
+      "rows": 14199,
+      "duration_s": 142.066038672,
+      "first_timestamp_ns": 247221124148573,
+      "last_timestamp_ns": 247363190187245,
+      "effective_label_rows": {
+        "": 12069,
+        "pinch_in": 528,
+        "pinch_out": 532,
+        "pinch_hold": 1070
+      },
+      "sampled_label_runs": {
+        "pinch_in": 18,
+        "pinch_out": 18,
+        "pinch_hold": 17
+      },
+      "manual_label_rows": {
+        "": 14199
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "3819d980202345675c319d72965f011a2e4e68888e32af98b3b61e85b1b79885"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_in-2026-11-09T12-02-29.000Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-09T12-02-29.000Z/ppg.csv",
+        "sha256": "97d48b894b52e468917566cf8713f8468c6234a76df563a9370c002bbcd823f5"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-09T12-02-29.000Z/imu.csv",
+        "sha256": "b338c0c695602f73c40b23a2b40879be006f9b7869c838c3da9781a6992ee428"
+      }
+    },
+    "ppg": {
+      "rows": 3425,
+      "duration_s": 137.114696192,
+      "first_timestamp_ns": 250857793973248,
+      "last_timestamp_ns": 250994908669440,
+      "effective_label_rows": {
+        "": 2927,
+        "pinch_in": 132,
+        "pinch_hold": 229,
+        "pinch_out": 137
+      },
+      "sampled_label_runs": {
+        "pinch_in": 18,
+        "pinch_hold": 16,
+        "pinch_out": 18
+      },
+      "manual_label_rows": {
+        "": 3425
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "f9392c7ba6fd7329f357efdbe14d0a9dea6416a80d302a0f1e22b1ffee23c4b0"
+    },
+    "imu": {
+      "rows": 13696,
+      "duration_s": 137.097583496,
+      "first_timestamp_ns": 250857818116990,
+      "last_timestamp_ns": 250994915700486,
+      "effective_label_rows": {
+        "": 11721,
+        "pinch_in": 517,
+        "pinch_hold": 910,
+        "pinch_out": 548
+      },
+      "sampled_label_runs": {
+        "pinch_in": 18,
+        "pinch_hold": 16,
+        "pinch_out": 18
+      },
+      "manual_label_rows": {
+        "": 13696
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "3f2d2fc645a46abc1c3416b9d7d20395d24d08befee1a51ec800819cc06512ac"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_in-2026-11-09T13-50-54.827Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-09T13-50-54.827Z/ppg.csv",
+        "sha256": "215fa84005012892379cb2bf72e548331104952672def9359c4e8083de57fb33"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-09T13-50-54.827Z/imu.csv",
+        "sha256": "7c1a2d6fc78da9f4d276e84eaf04cbdd6e6724bc32dde343c3100739456eb893"
+      }
+    },
+    "ppg": {
+      "rows": 3473,
+      "duration_s": 139.083717376,
+      "first_timestamp_ns": 257361389493248,
+      "last_timestamp_ns": 257500473210624,
+      "effective_label_rows": {
+        "": 3047,
+        "pinch_in": 84,
+        "pinch_hold": 245,
+        "pinch_out": 97
+      },
+      "sampled_label_runs": {
+        "pinch_in": 13,
+        "pinch_hold": 9,
+        "pinch_out": 13
+      },
+      "manual_label_rows": {
+        "": 3473
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "a8a07c75509295fcf3755d27f28a80a07d6149a8425b67de02bfa20d4557f304"
+    },
+    "imu": {
+      "rows": 13892,
+      "duration_s": 139.106730322,
+      "first_timestamp_ns": 257361435644148,
+      "last_timestamp_ns": 257500542374470,
+      "effective_label_rows": {
+        "": 12208,
+        "pinch_in": 335,
+        "pinch_hold": 973,
+        "pinch_out": 376
+      },
+      "sampled_label_runs": {
+        "pinch_in": 13,
+        "pinch_hold": 9,
+        "pinch_out": 13
+      },
+      "manual_label_rows": {
+        "": 13892
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "6daa5d44fa19ed065dd8384df1b19d060a3226653bb8644a0211d0c9cdb9eb63"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_in-2026-11-09T13-53-35.585Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-09T13-53-35.585Z/ppg.csv",
+        "sha256": "a8dc416f4ca6fd867b149d1a0d5abad00bb30453c94059baa59a79bfab1fc49f"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-09T13-53-35.585Z/imu.csv",
+        "sha256": "7a88182dccc6510477c08d77cc94e2a45b75edc5dd76a85759434cb621893969"
+      }
+    },
+    "ppg": {
+      "rows": 3526,
+      "duration_s": 141.183225344,
+      "first_timestamp_ns": 257520083135232,
+      "last_timestamp_ns": 257661266360576,
+      "effective_label_rows": {
+        "": 2664,
+        "pinch_in": 166,
+        "pinch_hold": 521,
+        "pinch_out": 175
+      },
+      "sampled_label_runs": {
+        "pinch_in": 24,
+        "pinch_hold": 20,
+        "pinch_out": 24
+      },
+      "manual_label_rows": {
+        "": 3526
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "3b73ac40493579d9e74363816a6f61a7eb496befbd0fe1779ecb01b5ce595c28"
+    },
+    "imu": {
+      "rows": 14100,
+      "duration_s": 141.154770166,
+      "first_timestamp_ns": 257520075355524,
+      "last_timestamp_ns": 257661230125690,
+      "effective_label_rows": {
+        "": 10648,
+        "pinch_in": 674,
+        "pinch_hold": 2069,
+        "pinch_out": 709
+      },
+      "sampled_label_runs": {
+        "pinch_in": 24,
+        "pinch_hold": 20,
+        "pinch_out": 24
+      },
+      "manual_label_rows": {
+        "": 14100
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "4a3fc3ecd60c0d0ab7dcdad3e54cc21c73add6639fbcd777f6409b5be1bd1814"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_in-2026-11-09T13-56-34.873Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-09T13-56-34.873Z/ppg.csv",
+        "sha256": "434e9855247024f98fd8dc7980b04fe20a00d3876b017baf30d3fb74f0bc6e22"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-09T13-56-34.873Z/imu.csv",
+        "sha256": "654d341bb76a33c3235d13fa1915b0f5bfaaa6a36c07653f111cbf4b3fd8af00"
+      }
+    },
+    "ppg": {
+      "rows": 3501,
+      "duration_s": 140.1835904,
+      "first_timestamp_ns": 257700517306880,
+      "last_timestamp_ns": 257840700897280,
+      "effective_label_rows": {
+        "": 2691,
+        "pinch_in": 168,
+        "pinch_out": 174,
+        "pinch_hold": 468
+      },
+      "sampled_label_runs": {
+        "pinch_in": 25,
+        "pinch_out": 25,
+        "pinch_hold": 20
+      },
+      "manual_label_rows": {
+        "": 3501
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "ea625edde75129b87dc9a19ffd9de7696fe8c4f69a0f80c7b922f114d4d41550"
+    },
+    "imu": {
+      "rows": 13990,
+      "duration_s": 140.080642969,
+      "first_timestamp_ns": 257700557623444,
+      "last_timestamp_ns": 257840638266413,
+      "effective_label_rows": {
+        "": 10752,
+        "pinch_in": 665,
+        "pinch_out": 708,
+        "pinch_hold": 1865
+      },
+      "sampled_label_runs": {
+        "pinch_in": 25,
+        "pinch_out": 25,
+        "pinch_hold": 20
+      },
+      "manual_label_rows": {
+        "": 13990
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "4c60f46c9ca922143365e8842d518ea0f1ad1102c741fb0bd138cfc268794704"
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_in-2026-11-13T07-30-09.372Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-13T07-30-09.372Z/ppg.csv",
+        "sha256": "9750216a465d94b37be21df8786e2388c91af6727b4566fc8e5fe9e65fd936d0"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-pinch_in-2026-11-13T07-30-09.372Z/imu.csv",
+        "sha256": "61a95eefcbfaa9edb2d881ca7bf9141d0e5175991bcd6349273894e8b84c7d8b"
+      }
+    },
+    "ppg": {
+      "rows": 1124,
+      "duration_s": 44.945064901,
+      "first_timestamp_ns": 580204301796610,
+      "last_timestamp_ns": 580249246861511,
+      "effective_label_rows": {
+        "": 1055,
+        "pinch_out": 13,
+        "pinch_in": 56
+      },
+      "sampled_label_runs": {
+        "pinch_out": 1,
+        "pinch_in": 5
+      },
+      "manual_label_rows": {
+        "": 1055,
+        "pinch_out": 13,
+        "pinch_in": 56
+      },
+      "changed_label_rows": 69,
+      "sensor_columns_sha256": "27bfa79bd1a4f7493faa1f95407a7e31510740fd3f67fc78f114194f1e4acf5a"
+    },
+    "imu": {
+      "rows": 4496,
+      "duration_s": 44.992977685,
+      "first_timestamp_ns": 580204195462711,
+      "last_timestamp_ns": 580249188440396,
+      "effective_label_rows": {
+        "": 4207,
+        "pinch_out": 50,
+        "pinch_in": 239
+      },
+      "sampled_label_runs": {
+        "pinch_out": 1,
+        "pinch_in": 5
+      },
+      "manual_label_rows": {
+        "": 4207,
+        "pinch_out": 50,
+        "pinch_in": 239
+      },
+      "changed_label_rows": 289,
+      "sensor_columns_sha256": "c064ea3f7eb1e306f32399c8aa59d245e2c29c465e025307119487a9eed0349c"
+    }
+  },
+  {
+    "id": "gesture-dataset-still-2026-11-04T04-00-31.075Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-still-2026-11-04T04-00-31.075Z/ppg.csv",
+        "sha256": "532f1a26691db4c36ccb23f2c87a278725238934798ecc94581fc50031a07ca6"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-still-2026-11-04T04-00-31.075Z/imu.csv",
+        "sha256": "70c518b844ed1a89ef2018f903c65f8e673718580a5ed92e44ed7aa00f30d88b"
+      }
+    },
+    "ppg": {
+      "rows": 4746,
+      "duration_s": 190.010514688,
+      "first_timestamp_ns": 860483620367104,
+      "last_timestamp_ns": 860673630881792,
+      "effective_label_rows": {
+        "": 252,
+        "still": 4494
+      },
+      "sampled_label_runs": {
+        "still": 1
+      },
+      "manual_label_rows": {
+        "": 4746
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "031a5ebecf749fe98e7daff2389e8af91b968d73e34e73419bca0e42926a8fb0"
+    },
+    "imu": {
+      "rows": 18985,
+      "duration_s": 190.074142725,
+      "first_timestamp_ns": 860483507471264,
+      "last_timestamp_ns": 860673581613989,
+      "effective_label_rows": {
+        "": 1005,
+        "still": 17980
+      },
+      "sampled_label_runs": {
+        "still": 1
+      },
+      "manual_label_rows": {
+        "": 18985
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "b5838be5b969a2a4a36f2aab198de6090ee3415d3725b754658d3ae847498b38"
+    }
+  },
+  {
+    "id": "gesture-dataset-still-2026-11-06T07-11-20.266Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-still-2026-11-06T07-11-20.266Z/ppg.csv",
+        "sha256": "89056495803ba29f7a4352086121f51909d86da730a783108140e0cec9614e10"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-still-2026-11-06T07-11-20.266Z/imu.csv",
+        "sha256": "5b4278dd651a6c2f83f27e91fac68ffed18a93ed9d43db314f370d47b873cc3f"
+      }
+    },
+    "ppg": {
+      "rows": 2716,
+      "duration_s": 108.69426432,
+      "first_timestamp_ns": 1044727561619712,
+      "last_timestamp_ns": 1044836255884032,
+      "effective_label_rows": {
+        "": 201,
+        "still": 2515
+      },
+      "sampled_label_runs": {
+        "still": 1
+      },
+      "manual_label_rows": {
+        "": 2716
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "036b8cb46a2223b9f4de3d47f31ea5179b528a3b665a6e1369fac161cb01364d"
+    },
+    "imu": {
+      "rows": 10865,
+      "duration_s": 108.724945069,
+      "first_timestamp_ns": 1044727476679670,
+      "last_timestamp_ns": 1044836201624739,
+      "effective_label_rows": {
+        "": 810,
+        "still": 10055
+      },
+      "sampled_label_runs": {
+        "still": 1
+      },
+      "manual_label_rows": {
+        "": 10865
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "57e54de39dedb61938e3cb605f66ff20ab3546e2d70c26a0eecd029f4c0ff22f"
+    }
+  },
+  {
+    "id": "gesture-dataset-still-2026-11-06T07-13-21.030Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-still-2026-11-06T07-13-21.030Z/ppg.csv",
+        "sha256": "fc2e0547bcc7d0c523d87a897bb42fd3fd4687eeeb6b6afa0d721aebed3ba7bb"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-still-2026-11-06T07-13-21.030Z/imu.csv",
+        "sha256": "8771205dac24e25d3fc2eb91d989998e1c3ad986d61b75ab003a970f8704abbd"
+      }
+    },
+    "ppg": {
+      "rows": 1891,
+      "duration_s": 75.656805632,
+      "first_timestamp_ns": 1044848255884032,
+      "last_timestamp_ns": 1044923912689664,
+      "effective_label_rows": {
+        "": 203,
+        "still": 1688
+      },
+      "sampled_label_runs": {
+        "still": 1
+      },
+      "manual_label_rows": {
+        "": 1891
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "3e03528da13a93f4ff3840ac4a5769406b1302be930a52ab9d9078d57bd4345d"
+    },
+    "imu": {
+      "rows": 7562,
+      "duration_s": 75.646511621,
+      "first_timestamp_ns": 1044848324366438,
+      "last_timestamp_ns": 1044923970878059,
+      "effective_label_rows": {
+        "": 803,
+        "still": 6759
+      },
+      "sampled_label_runs": {
+        "still": 1
+      },
+      "manual_label_rows": {
+        "": 7562
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "3a433cb31370eeccaab74691882e761afa9506dbe4cd364b1ec783109f663151"
+    }
+  },
+  {
+    "id": "gesture-dataset-still-2026-11-06T07-14-43.573Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-still-2026-11-06T07-14-43.573Z/ppg.csv",
+        "sha256": "e0c3978075d93e6341563c84d58935f4f676e78fabb044963e23132dbd6af74f"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-still-2026-11-06T07-14-43.573Z/imu.csv",
+        "sha256": "287026734b0fe7b6e3f963cdd0edb53c7ed767dbb26ed64f72cef6c2ed18ef92"
+      }
+    },
+    "ppg": {
+      "rows": 1815,
+      "duration_s": 72.58971648,
+      "first_timestamp_ns": 1044930860400384,
+      "last_timestamp_ns": 1045003450116864,
+      "effective_label_rows": {
+        "": 202,
+        "still": 1613
+      },
+      "sampled_label_runs": {
+        "still": 1
+      },
+      "manual_label_rows": {
+        "": 1815
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "42e6ab5df28e475398e674abde9995359fd4ca2d2d0f8f11b359a9babc00321a"
+    },
+    "imu": {
+      "rows": 7260,
+      "duration_s": 72.624957763,
+      "first_timestamp_ns": 1044930787162239,
+      "last_timestamp_ns": 1045003412120002,
+      "effective_label_rows": {
+        "": 814,
+        "still": 6446
+      },
+      "sampled_label_runs": {
+        "still": 1
+      },
+      "manual_label_rows": {
+        "": 7260
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "ec1cd18edad340f733079aa6267c9580cab0fb471915de44298445f61fdaf087"
+    }
+  },
+  {
+    "id": "gesture-dataset-supported-2026-11-04T04-03-55.246Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-supported-2026-11-04T04-03-55.246Z/ppg.csv",
+        "sha256": "e705d65579b6420ca10654a2daf94c0818ea9c8e066c74d3d0e445c9c498dc84"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-supported-2026-11-04T04-03-55.246Z/imu.csv",
+        "sha256": "4c07dabb1282b4e96e94b8f1ae6f6931e144212fca45f33d9519549240a2cb86"
+      }
+    },
+    "ppg": {
+      "rows": 7743,
+      "duration_s": 310.070985216,
+      "first_timestamp_ns": 860687774045952,
+      "last_timestamp_ns": 860997845031168,
+      "effective_label_rows": {
+        "": 251,
+        "supported": 7492
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 7743
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "27dcaed2451c5a597a6255a8f6a164c20481fc49eaad2a98a479c4f506cb0c8f"
+    },
+    "imu": {
+      "rows": 30974,
+      "duration_s": 310.105323926,
+      "first_timestamp_ns": 860687687723608,
+      "last_timestamp_ns": 860997793047534,
+      "effective_label_rows": {
+        "": 1006,
+        "supported": 29968
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 30974
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "d8992b53668621127bdb374674b69b4fcb6de1ecd6284c0649f30759322f7ec8"
+    }
+  },
+  {
+    "id": "gesture-dataset-supported-2026-11-04T04-10-07.238Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-supported-2026-11-04T04-10-07.238Z/ppg.csv",
+        "sha256": "be7c4abe1e3a4028271b92df3d5dc30cb9baa9f327c237a99ce08e23087baf5e"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-supported-2026-11-04T04-10-07.238Z/imu.csv",
+        "sha256": "44b951034f4f11dd34c35fd9a87b471e060056c073b3b9451d95e847d7c3cb91"
+      }
+    },
+    "ppg": {
+      "rows": 7745,
+      "duration_s": 310.103106304,
+      "first_timestamp_ns": 861059564167936,
+      "last_timestamp_ns": 861369667274240,
+      "effective_label_rows": {
+        "": 255,
+        "supported": 7490
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 7745
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "8b0309e6c86bb852a243778d00b98024a34bf1dbf4ec3a123e52c6f9615f5daa"
+    },
+    "imu": {
+      "rows": 30973,
+      "duration_s": 310.084376465,
+      "first_timestamp_ns": 861059599937475,
+      "last_timestamp_ns": 861369684313940,
+      "effective_label_rows": {
+        "": 1009,
+        "supported": 29964
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 30973
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "5eddcb368b3763a5e6e0aa20ef3bef7904ec2b874e7175e3e5cd62baa142be44"
+    }
+  },
+  {
+    "id": "gesture-dataset-supported-2026-11-04T04-15-37.172Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-supported-2026-11-04T04-15-37.172Z/ppg.csv",
+        "sha256": "7baad13b9ca180ac88cf8da44b77fc9d076ad7293c47c4cb353b123852b8df3f"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-supported-2026-11-04T04-15-37.172Z/imu.csv",
+        "sha256": "2f62e8da5f8711810ee220ac4afe3604916e9c2b6d590db20a2f776429c2eb6e"
+      }
+    },
+    "ppg": {
+      "rows": 7748,
+      "duration_s": 310.139752448,
+      "first_timestamp_ns": 861389497274368,
+      "last_timestamp_ns": 861699637026816,
+      "effective_label_rows": {
+        "": 253,
+        "supported": 7495
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 7748
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "0886831b144f74ed50e65bed789d29b168fd9b1d2b816671308ab000ef25e3f5"
+    },
+    "imu": {
+      "rows": 30986,
+      "duration_s": 310.12030083,
+      "first_timestamp_ns": 861389483225170,
+      "last_timestamp_ns": 861699603526000,
+      "effective_label_rows": {
+        "": 1007,
+        "supported": 29979
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 30986
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "2d058ce1627c61fb4dbed88ed98dd3d001d5fa6538661d7a1fabbbaa6e3325c4"
+    }
+  },
+  {
+    "id": "gesture-dataset-supported-2026-11-04T04-21-36.838Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-supported-2026-11-04T04-21-36.838Z/ppg.csv",
+        "sha256": "9ff4703e140e5fe18648d4fc5ff0752dc89da7d2035c6da4d8778cab89d0df8c"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-supported-2026-11-04T04-21-36.838Z/imu.csv",
+        "sha256": "60b662e3eee16dd50a380ff79bbdf3500a0cb71b4a85fb45826b5cae25d049b1"
+      }
+    },
+    "ppg": {
+      "rows": 7747,
+      "duration_s": 310.173623552,
+      "first_timestamp_ns": 861749142013184,
+      "last_timestamp_ns": 862059315636736,
+      "effective_label_rows": {
+        "": 253,
+        "supported": 7494
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 7747
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "fd48b29ae753a821f32099c7d92bab1465de5b3636488c2fbc32a4762258d9c5"
+    },
+    "imu": {
+      "rows": 30990,
+      "duration_s": 310.199350488,
+      "first_timestamp_ns": 861749064438159,
+      "last_timestamp_ns": 862059263788647,
+      "effective_label_rows": {
+        "": 1015,
+        "supported": 29975
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 30990
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "db3d99cd374edae3a350761d58cba9185b66c5f4d883d3626822b1bd90c5f3fe"
+    }
+  },
+  {
+    "id": "gesture-dataset-supported-2026-11-06T06-16-23.565Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-supported-2026-11-06T06-16-23.565Z/ppg.csv",
+        "sha256": "e079badd6d24a41958b8c2084eddeef886283305656a799e6a74fdbaea742782"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-supported-2026-11-06T06-16-23.565Z/imu.csv",
+        "sha256": "deb96811e600f257e918e6f32da3919541ca1bba4c117fa7d83513a0d5fc55a7"
+      }
+    },
+    "ppg": {
+      "rows": 7754,
+      "duration_s": 310.154109952,
+      "first_timestamp_ns": 1041430826507776,
+      "last_timestamp_ns": 1041740980617728,
+      "effective_label_rows": {
+        "": 255,
+        "supported": 7499
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 7754
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "fc534ebacba274413c04caa8339c89fec443c602b041ae9ea805f8c7449ac1ae"
+    },
+    "imu": {
+      "rows": 31002,
+      "duration_s": 310.034551611,
+      "first_timestamp_ns": 1041430892058820,
+      "last_timestamp_ns": 1041740926610431,
+      "effective_label_rows": {
+        "": 1010,
+        "supported": 29992
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 31002
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "f94b42db370ad1cab158fb5747a0eff0bcd555847d417db449b926d8dd4ecd04"
+    }
+  },
+  {
+    "id": "gesture-dataset-supported-2026-11-06T06-23-39.358Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-supported-2026-11-06T06-23-39.358Z/ppg.csv",
+        "sha256": "fac3268d6ebabd970311b91137fc10c51c243044c34c60cec4e1b0aea8ebb88a"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-supported-2026-11-06T06-23-39.358Z/imu.csv",
+        "sha256": "e1701cf4ed93d93188046640f39806d44257b4ea497d76fd0fa776f191870576"
+      }
+    },
+    "ppg": {
+      "rows": 4107,
+      "duration_s": 164.232224,
+      "first_timestamp_ns": 1041866613645056,
+      "last_timestamp_ns": 1042030845869056,
+      "effective_label_rows": {
+        "": 203,
+        "supported": 3904
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 4107
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "51528cbed5edd26abb32c707fe63b86415de19b6f999d214d2d386c5b60305c6"
+    },
+    "imu": {
+      "rows": 16411,
+      "duration_s": 164.080587109,
+      "first_timestamp_ns": 1041866684865705,
+      "last_timestamp_ns": 1042030765452814,
+      "effective_label_rows": {
+        "": 801,
+        "supported": 15610
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 16411
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "8f2a4e6799ce465d1f11506223a43e2b5a4c6827c2c1364d371abb2240892d9e"
+    }
+  },
+  {
+    "id": "gesture-dataset-supported-2026-11-06T06-27-29.681Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-supported-2026-11-06T06-27-29.681Z/ppg.csv",
+        "sha256": "26fe3e8a155af415719df9a4b1c85a66db4af1b8d28cab4aa6d52d32e00f1138"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-supported-2026-11-06T06-27-29.681Z/imu.csv",
+        "sha256": "2e47bfe6f8705ad90f95f5bf7b7dfb88959ed303b5bdba03176c589d65b8c61b"
+      }
+    },
+    "ppg": {
+      "rows": 7752,
+      "duration_s": 309.989393664,
+      "first_timestamp_ns": 1042097035613440,
+      "last_timestamp_ns": 1042407025007104,
+      "effective_label_rows": {
+        "": 251,
+        "supported": 7501
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 7752
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "63499d13db9c0b4805d730b294f607c22ea389245f015eb261231035b76f5346"
+    },
+    "imu": {
+      "rows": 31019,
+      "duration_s": 310.139091895,
+      "first_timestamp_ns": 1042096947273273,
+      "last_timestamp_ns": 1042407086365168,
+      "effective_label_rows": {
+        "": 1014,
+        "supported": 30005
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 31019
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "dc786b0ab6acc2aa0450d3e0ad992a02767d023c22644f595aba886aee634124"
+    }
+  },
+  {
+    "id": "gesture-dataset-supported-2026-11-06T06-33-21.079Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-supported-2026-11-06T06-33-21.079Z/ppg.csv",
+        "sha256": "a8145b304c6b6e74794e7074c69bf6f6644e6a06f5cfb0ed8e8435a66a5d7e1f"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-supported-2026-11-06T06-33-21.079Z/imu.csv",
+        "sha256": "2466e30254790c8040826921ff805460633c8dd4a43ba3797e0b5c68d7967338"
+      }
+    },
+    "ppg": {
+      "rows": 7753,
+      "duration_s": 310.11972224,
+      "first_timestamp_ns": 1042448398132480,
+      "last_timestamp_ns": 1042758517854720,
+      "effective_label_rows": {
+        "": 254,
+        "supported": 7499
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 7753
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "30d8fa0cbb327cf711f50f2415a4b894fcc632515df41d7d90fc724b58a8ce71"
+    },
+    "imu": {
+      "rows": 31013,
+      "duration_s": 310.165943408,
+      "first_timestamp_ns": 1042448311284895,
+      "last_timestamp_ns": 1042758477228303,
+      "effective_label_rows": {
+        "": 1012,
+        "supported": 30001
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 31013
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "7d5c076e8c1c08912afb57add8a89b2490636e88ac36172fe43300c737ead5cb"
+    }
+  },
+  {
+    "id": "gesture-dataset-unlabeled-2026-11-06T06-21-33.663Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-unlabeled-2026-11-06T06-21-33.663Z/ppg.csv",
+        "sha256": "af63cac06418b452c64faa521aa6e56879810ca4681a4e2be4a12de5645c9655"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-unlabeled-2026-11-06T06-21-33.663Z/imu.csv",
+        "sha256": "c4a8780d0b58783f9abc649a556b42ae44b3b55b61c27386f8141e3a6fbe2197"
+      }
+    },
+    "ppg": {
+      "rows": 7754,
+      "duration_s": 310.154109952,
+      "first_timestamp_ns": 1041430826507776,
+      "last_timestamp_ns": 1041740980617728,
+      "effective_label_rows": {
+        "": 254,
+        "supported": 7500
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 7754
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "fc534ebacba274413c04caa8339c89fec443c602b041ae9ea805f8c7449ac1ae"
+    },
+    "imu": {
+      "rows": 31002,
+      "duration_s": 310.034551611,
+      "first_timestamp_ns": 1041430892058820,
+      "last_timestamp_ns": 1041740926610431,
+      "effective_label_rows": {
+        "": 1009,
+        "supported": 29993
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 31002
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "f94b42db370ad1cab158fb5747a0eff0bcd555847d417db449b926d8dd4ecd04"
+    }
+  },
+  {
+    "id": "gesture-dataset-unlabeled-2026-11-06T06-32-39.791Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-unlabeled-2026-11-06T06-32-39.791Z/ppg.csv",
+        "sha256": "928dc5d69439156ea224da199a5a001330b5f3a24263aaa8c9eb3c80bcfb1ac9"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-unlabeled-2026-11-06T06-32-39.791Z/imu.csv",
+        "sha256": "ccb159e613abbe67bbb020feeff153343942be623da0ef49a3a099a2788d7983"
+      }
+    },
+    "ppg": {
+      "rows": 7752,
+      "duration_s": 309.989393664,
+      "first_timestamp_ns": 1042097035613440,
+      "last_timestamp_ns": 1042407025007104,
+      "effective_label_rows": {
+        "": 251,
+        "supported": 7501
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 7752
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "63499d13db9c0b4805d730b294f607c22ea389245f015eb261231035b76f5346"
+    },
+    "imu": {
+      "rows": 31019,
+      "duration_s": 310.139091895,
+      "first_timestamp_ns": 1042096947273273,
+      "last_timestamp_ns": 1042407086365168,
+      "effective_label_rows": {
+        "": 1009,
+        "supported": 30010
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 31019
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "dc786b0ab6acc2aa0450d3e0ad992a02767d023c22644f595aba886aee634124"
+    }
+  },
+  {
+    "id": "gesture-dataset-unlabeled-2026-11-06T06-38-31.211Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-unlabeled-2026-11-06T06-38-31.211Z/ppg.csv",
+        "sha256": "a41f9cb1ac95a0a6a87858deb5bb70b0dc379a44e213b440a8f105b71701ee74"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-unlabeled-2026-11-06T06-38-31.211Z/imu.csv",
+        "sha256": "f39b0e2129ef5c23fdff272c970ae8c6231c3d668ecd667d1743bce88cbb9728"
+      }
+    },
+    "ppg": {
+      "rows": 7753,
+      "duration_s": 310.11972224,
+      "first_timestamp_ns": 1042448398132480,
+      "last_timestamp_ns": 1042758517854720,
+      "effective_label_rows": {
+        "": 254,
+        "supported": 7499
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 7753
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "30d8fa0cbb327cf711f50f2415a4b894fcc632515df41d7d90fc724b58a8ce71"
+    },
+    "imu": {
+      "rows": 31013,
+      "duration_s": 310.165943408,
+      "first_timestamp_ns": 1042448311284895,
+      "last_timestamp_ns": 1042758477228303,
+      "effective_label_rows": {
+        "": 1007,
+        "supported": 30006
+      },
+      "sampled_label_runs": {
+        "supported": 1
+      },
+      "manual_label_rows": {
+        "": 31013
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "7d5c076e8c1c08912afb57add8a89b2490636e88ac36172fe43300c737ead5cb"
+    }
+  },
+  {
+    "id": "gesture-dataset-unlabeled-2026-11-14T09-58-34.967Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-unlabeled-2026-11-14T09-58-34.967Z/ppg.csv",
+        "sha256": "dda535c8d2b777118e8e2012f0b02b4dedc272916bc77c4dc804db426daa2b22"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-unlabeled-2026-11-14T09-58-34.967Z/imu.csv",
+        "sha256": "e9e759b912cb288f12eedc202c605aec5d2a9364237b24e021594ed6875913f0"
+      }
+    },
+    "ppg": {
+      "rows": 30209,
+      "duration_s": 1209.936260096,
+      "first_timestamp_ns": 674337686526464,
+      "last_timestamp_ns": 675547622786560,
+      "effective_label_rows": {
+        "": 251,
+        "everyday_noise": 29958
+      },
+      "sampled_label_runs": {
+        "everyday_noise": 1
+      },
+      "manual_label_rows": {
+        "": 30209
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "5c4377056b31b2ca938db6a83274bb8ef20a1d78cbb90d7d5c4f7d98c2c1ede7"
+    },
+    "imu": {
+      "rows": 120794,
+      "duration_s": 1209.882756348,
+      "first_timestamp_ns": 674337580334994,
+      "last_timestamp_ns": 675547463091342,
+      "effective_label_rows": {
+        "": 975,
+        "everyday_noise": 119819
+      },
+      "sampled_label_runs": {
+        "everyday_noise": 1
+      },
+      "manual_label_rows": {
+        "": 120794
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "f7540e8adf5f8ee33cfc7266863ccd6dbca3ff5be89b16fb1513474579926048"
+    }
+  },
+  {
+    "id": "gesture-dataset-unlabeled-2026-11-14T10-29-35.618Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-unlabeled-2026-11-14T10-29-35.618Z/ppg.csv",
+        "sha256": "cd97ddf028cd7a89f6e0b921814eb9e48193a1d165eed4c12fd50605cba96ff8"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-unlabeled-2026-11-14T10-29-35.618Z/imu.csv",
+        "sha256": "fc5c07d98a0ce946ba7efad7b25278799da131f1ec2dffd48873c13c0e808938"
+      }
+    },
+    "ppg": {
+      "rows": 40003,
+      "duration_s": 1601.449644032,
+      "first_timestamp_ns": 675806821084160,
+      "last_timestamp_ns": 677408270728192,
+      "effective_label_rows": {
+        "everyday_noise": 39954,
+        "": 49
+      },
+      "sampled_label_runs": {
+        "everyday_noise": 1
+      },
+      "manual_label_rows": {
+        "": 40003
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "96695f27c593f92ffc6190a3b3956739e36b483d0e96eb122bb3f82b5b8ff140"
+    },
+    "imu": {
+      "rows": 159997,
+      "duration_s": 1601.33237207,
+      "first_timestamp_ns": 675806788378744,
+      "last_timestamp_ns": 677408120750814,
+      "effective_label_rows": {
+        "everyday_noise": 159819,
+        "": 178
+      },
+      "sampled_label_runs": {
+        "everyday_noise": 1
+      },
+      "manual_label_rows": {
+        "": 159997
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "cba719cb5d1f8cab57766be149f311c43785a2fa4814392ce2a93e0083ac893a"
+    }
+  },
+  {
+    "id": "gesture-dataset-unlabeled-2026-11-15T15-52-54.601Z",
+    "files": {
+      "ppg": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-unlabeled-2026-11-15T15-52-54.601Z/ppg.csv",
+        "sha256": "1370d6fc2e4ebc31624eb4c3d7dee5e3e84939caadd9ea4b14c63415663b120d"
+      },
+      "imu": {
+        "path": "data/recordings/Hand labeled/gesture-dataset-unlabeled-2026-11-15T15-52-54.601Z/imu.csv",
+        "sha256": "1754b6ca20aba0c6bdfe1ea50b849b3602d952e7beeb33e950bbf8f1bf898f5e"
+      }
+    },
+    "ppg": {
+      "rows": 40007,
+      "duration_s": 1602.701288448,
+      "first_timestamp_ns": 781601600964864,
+      "last_timestamp_ns": 783204302253312,
+      "effective_label_rows": {
+        "everyday_noise": 39957,
+        "": 50
+      },
+      "sampled_label_runs": {
+        "everyday_noise": 1
+      },
+      "manual_label_rows": {
+        "": 40007
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "1d82310c703a61f57bee53ab61b093d750deb5bc4e8d792f87e878cca67c40ee"
+    },
+    "imu": {
+      "rows": 159993,
+      "duration_s": 1602.661806884,
+      "first_timestamp_ns": 781601608284485,
+      "last_timestamp_ns": 783204270091369,
+      "effective_label_rows": {
+        "everyday_noise": 159799,
+        "": 194
+      },
+      "sampled_label_runs": {
+        "everyday_noise": 1
+      },
+      "manual_label_rows": {
+        "": 159993
+      },
+      "changed_label_rows": 0,
+      "sensor_columns_sha256": "3e2ff2e093e0de6aa3a8fdad3085a375075c118db7abf9647a6b5f932d96fd37"
+    }
+  }
+]

@@ -1,0 +1,692 @@
+[
+  {
+    "id": "gesture-dataset-pinch-2026-10-14T01-13-08.108Z",
+    "role": "train",
+    "rows": 1224,
+    "counts": [
+      408,
+      255,
+      243,
+      318
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 1446,
+      "pinch_hold": 1189,
+      "pinch_in": 945,
+      "pinch_out": 917
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-03T01-05-59.434Z",
+    "role": "train",
+    "rows": 3151,
+    "counts": [
+      2367,
+      275,
+      259,
+      250
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 12982,
+      "pinch_hold": 1311,
+      "pinch_in": 1459,
+      "pinch_out": 1366
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-03T01-14-58.817Z",
+    "role": "train",
+    "rows": 3124,
+    "counts": [
+      2366,
+      275,
+      256,
+      227
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 12868,
+      "pinch_hold": 1238,
+      "pinch_in": 1477,
+      "pinch_out": 1404
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-03T12-37-53.427Z",
+    "role": "train",
+    "rows": 3027,
+    "counts": [
+      2215,
+      289,
+      284,
+      239
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 12367,
+      "pinch_hold": 1189,
+      "pinch_in": 1489,
+      "pinch_out": 1463
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-04T04-47-01.331Z",
+    "role": "train",
+    "rows": 3225,
+    "counts": [
+      2476,
+      249,
+      247,
+      253
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 13560,
+      "pinch_hold": 1334,
+      "pinch_in": 1301,
+      "pinch_out": 1298
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-06T05-30-51.772Z",
+    "role": "train",
+    "rows": 3350,
+    "counts": [
+      2623,
+      228,
+      211,
+      288
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 14288,
+      "pinch_hold": 1525,
+      "pinch_in": 1200,
+      "pinch_out": 1110
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-06T07-08-33.250Z",
+    "role": "train",
+    "rows": 3320,
+    "counts": [
+      2590,
+      232,
+      225,
+      273
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 14074,
+      "pinch_hold": 1485,
+      "pinch_in": 1208,
+      "pinch_out": 1217
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-06T08-41-12.292Z",
+    "role": "train",
+    "rows": 3424,
+    "counts": [
+      2592,
+      304,
+      288,
+      240
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 14124,
+      "pinch_hold": 1265,
+      "pinch_in": 1625,
+      "pinch_out": 1481
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-06T08-44-16.477Z",
+    "role": "train",
+    "rows": 3249,
+    "counts": [
+      2226,
+      328,
+      333,
+      362
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 12325,
+      "pinch_hold": 1876,
+      "pinch_in": 1678,
+      "pinch_out": 1753
+    }
+  },
+  {
+    "id": "gesture-dataset-still-2026-11-06T07-11-20.266Z",
+    "role": "train",
+    "rows": 2441,
+    "counts": [
+      2441,
+      0,
+      0,
+      0
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 1011,
+      "still": 12570
+    }
+  },
+  {
+    "id": "gesture-dataset-still-2026-11-06T07-14-43.573Z",
+    "role": "train",
+    "rows": 1541,
+    "counts": [
+      1541,
+      0,
+      0,
+      0
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 1016,
+      "still": 8059
+    }
+  },
+  {
+    "id": "gesture-dataset-supported-2026-11-04T04-03-55.246Z",
+    "role": "train",
+    "rows": 7468,
+    "counts": [
+      7468,
+      0,
+      0,
+      0
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 1257,
+      "supported": 37460
+    }
+  },
+  {
+    "id": "gesture-dataset-supported-2026-11-04T04-15-37.172Z",
+    "role": "train",
+    "rows": 7473,
+    "counts": [
+      7473,
+      0,
+      0,
+      0
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 1260,
+      "supported": 37474
+    }
+  },
+  {
+    "id": "gesture-dataset-supported-2026-11-04T04-21-36.838Z",
+    "role": "train",
+    "rows": 7472,
+    "counts": [
+      7472,
+      0,
+      0,
+      0
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 1268,
+      "supported": 37469
+    }
+  },
+  {
+    "id": "gesture-dataset-supported-2026-11-06T06-16-23.565Z",
+    "role": "train",
+    "rows": 7477,
+    "counts": [
+      7477,
+      0,
+      0,
+      0
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 1265,
+      "supported": 37491
+    }
+  },
+  {
+    "id": "gesture-dataset-supported-2026-11-06T06-23-39.358Z",
+    "role": "train",
+    "rows": 3831,
+    "counts": [
+      3831,
+      0,
+      0,
+      0
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 1004,
+      "supported": 19514
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-13T08-12-02.014Z",
+    "role": "train",
+    "rows": 849,
+    "counts": [
+      249,
+      115,
+      106,
+      379
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 2150,
+      "pinch_hold": 2101,
+      "pinch_in": 717,
+      "pinch_out": 651
+    }
+  },
+  {
+    "id": "gesture-dataset-unlabeled-2026-11-14T09-58-34.967Z",
+    "role": "train",
+    "rows": 29646,
+    "counts": [
+      29646,
+      0,
+      0,
+      0
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 1,
+    "raw_label_counts": {
+      "": 1226,
+      "everyday_noise": 149777
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-03T01-11-04.170Z",
+    "role": "validation",
+    "rows": 3097,
+    "counts": [
+      2306,
+      256,
+      253,
+      282
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 12634,
+      "pinch_hold": 1458,
+      "pinch_in": 1383,
+      "pinch_out": 1388
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-06T05-46-24.047Z",
+    "role": "validation",
+    "rows": 3248,
+    "counts": [
+      2526,
+      249,
+      226,
+      247
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 13821,
+      "pinch_hold": 1298,
+      "pinch_in": 1314,
+      "pinch_out": 1198
+    }
+  },
+  {
+    "id": "gesture-dataset-everyday_noise-2026-11-04T03-44-21.667Z",
+    "role": "validation",
+    "rows": 14879,
+    "counts": [
+      14879,
+      0,
+      0,
+      0
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 1173,
+      "everyday_noise": 74906
+    }
+  },
+  {
+    "id": "gesture-dataset-supported-2026-11-04T04-10-07.238Z",
+    "role": "validation",
+    "rows": 7470,
+    "counts": [
+      7470,
+      0,
+      0,
+      0
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 1264,
+      "supported": 37454
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-13T07-29-29.795Z",
+    "role": "test",
+    "rows": 849,
+    "counts": [
+      267,
+      120,
+      117,
+      345
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 2285,
+      "pinch_hold": 1962,
+      "pinch_in": 708,
+      "pinch_out": 666
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-13T07-30-09.372Z",
+    "role": "test",
+    "rows": 849,
+    "counts": [
+      351,
+      112,
+      73,
+      313
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 2400,
+      "pinch_hold": 2085,
+      "pinch_in": 666,
+      "pinch_out": 469
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-09T10-59-34.843Z",
+    "role": "test",
+    "rows": 3274,
+    "counts": [
+      2496,
+      260,
+      230,
+      288
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 13548,
+      "pinch_hold": 1539,
+      "pinch_in": 1402,
+      "pinch_out": 1259
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-09T12-00-11.890Z",
+    "role": "test",
+    "rows": 3150,
+    "counts": [
+      2191,
+      236,
+      200,
+      523
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 12050,
+      "pinch_hold": 2787,
+      "pinch_in": 1224,
+      "pinch_out": 1060
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-09T13-48-35.709Z",
+    "role": "test",
+    "rows": 3197,
+    "counts": [
+      2142,
+      283,
+      265,
+      507
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 11464,
+      "pinch_hold": 2960,
+      "pinch_in": 1517,
+      "pinch_out": 1424
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-09T13-51-14.408Z",
+    "role": "test",
+    "rows": 3251,
+    "counts": [
+      2050,
+      334,
+      289,
+      578
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 11314,
+      "pinch_hold": 3101,
+      "pinch_in": 1715,
+      "pinch_out": 1496
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-09T13-54-14.793Z",
+    "role": "test",
+    "rows": 3225,
+    "counts": [
+      2044,
+      277,
+      252,
+      652
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 11507,
+      "pinch_hold": 3261,
+      "pinch_in": 1404,
+      "pinch_out": 1319
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-03T01-08-34.844Z",
+    "role": "test",
+    "rows": 3122,
+    "counts": [
+      2353,
+      245,
+      232,
+      292
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 12829,
+      "pinch_hold": 1532,
+      "pinch_in": 1358,
+      "pinch_out": 1270
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-04T04-50-33.518Z",
+    "role": "test",
+    "rows": 3452,
+    "counts": [
+      2644,
+      275,
+      247,
+      286
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 14378,
+      "pinch_hold": 1522,
+      "pinch_in": 1404,
+      "pinch_out": 1326
+    }
+  },
+  {
+    "id": "gesture-dataset-pinch_hold-2026-11-06T08-10-50.079Z",
+    "role": "test",
+    "rows": 3248,
+    "counts": [
+      2342,
+      283,
+      243,
+      380
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 12853,
+      "pinch_hold": 1969,
+      "pinch_in": 1492,
+      "pinch_out": 1301
+    }
+  },
+  {
+    "id": "gesture-dataset-unlabeled-2026-11-14T10-29-35.618Z",
+    "role": "test",
+    "rows": 39728,
+    "counts": [
+      39728,
+      0,
+      0,
+      0
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 227,
+      "everyday_noise": 199773
+    }
+  },
+  {
+    "id": "gesture-dataset-everyday_noise-2026-11-04T04-27-35.286Z",
+    "role": "test",
+    "rows": 14961,
+    "counts": [
+      14961,
+      0,
+      0,
+      0
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 1249,
+      "everyday_noise": 74931
+    }
+  },
+  {
+    "id": "gesture-dataset-still-2026-11-04T04-00-31.075Z",
+    "role": "test",
+    "rows": 4472,
+    "counts": [
+      4472,
+      0,
+      0,
+      0
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 1257,
+      "still": 22474
+    }
+  },
+  {
+    "id": "gesture-dataset-still-2026-11-06T07-13-21.030Z",
+    "role": "test",
+    "rows": 1614,
+    "counts": [
+      1614,
+      0,
+      0,
+      0
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 1006,
+      "still": 8447
+    }
+  },
+  {
+    "id": "gesture-dataset-supported-2026-11-06T06-27-29.681Z",
+    "role": "test",
+    "rows": 7477,
+    "counts": [
+      7477,
+      0,
+      0,
+      0
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 1265,
+      "supported": 37506
+    }
+  },
+  {
+    "id": "gesture-dataset-supported-2026-11-06T06-33-21.079Z",
+    "role": "test",
+    "rows": 7478,
+    "counts": [
+      7478,
+      0,
+      0,
+      0
+    ],
+    "ppg_nonmonotonic": 0,
+    "ppg_gaps_over_250ms": 0,
+    "raw_label_counts": {
+      "": 1266,
+      "supported": 37500
+    }
+  }
+]

@@ -1,0 +1,5 @@
+actual/predicted,no_gesture,pinch_in,pinch_out,pinch_hold
+no_gesture,93212,369,507,522
+pinch_in,508,1821,55,41
+pinch_out,258,31,1822,37
+pinch_hold,1715,187,183,2079

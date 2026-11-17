@@ -1,0 +1,114 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Codex paper assets</title><style>body{font:16px system-ui;max-width:1100px;margin:2rem auto;padding:1rem;background:#f5f6f8}article{background:white;padding:1.5rem;margin:1rem 0;border-radius:8px}img{max-width:100%;height:auto}small{color:#46505c}a{color:#0066a6}</style><h1>Paper assets — existing evidence, not new studies</h1><p>Original SVG text remains editable. Click a PNG to inspect it at full size. Read each caption and evidence status before using a figure.</p>
+<article><h2>01-system-architecture — System architecture</h2><strong>implemented architecture schematic</strong>
+<a href="figures/01-system-architecture.png"><img src="figures/01-system-architecture.png" alt="Headphones and watch feed targeting and recognition on a laptop, then a separate policy controls output."></a>
+<p>Implemented sensing/computation placement. Camera annotation is an offline path, not an operational input. This schematic is not a hardware-validation result.</p><small>No transformation beyond labelled plotting of source values.</small><p>
+<a href="figures/01-system-architecture.png">PNG</a>
+<a href="figures/01-system-architecture.svg">SVG</a>
+<a href="figures/01-system-architecture.pdf">PDF</a>
+</p></article>
+<article><h2>02-interaction-policy — Interaction policy</h2><strong>implemented policy schematic</strong>
+<a href="figures/02-interaction-policy.png"><img src="figures/02-interaction-policy.png" alt="Fresh pinch-in starts a grab; release or cancellation ends it, independently of classifier silence."></a>
+<p>Conceptual interaction state and cancellation paths. A recognizer event is not continuous control state, and silence is not release. Physical fault and task acceptance remain unmeasured here.</p><small>No transformation beyond labelled plotting of source values.</small><p>
+<a href="figures/02-interaction-policy.png">PNG</a>
+<a href="figures/02-interaction-policy.svg">SVG</a>
+<a href="figures/02-interaction-policy.pdf">PDF</a>
+</p></article>
+<article><h2>03-hardware-positioning — Hardware positioning</h2><strong>literature-positioning schematic</strong>
+<a href="figures/03-hardware-positioning.png"><img src="figures/03-hardware-positioning.png" alt="Custom spatial-PPG prototype contrasted with an unmodified commercial watch; no performance bars."></a>
+<p>Original comparison schematic, not product photographs. μDPad uses custom hardware; this project uses built-in commercial-watch sensors. The interaction concept overlaps. No accuracy superiority or first-commercial-watch claim is made.</p><small>No transformation beyond labelled plotting of source values.</small><p>
+<a href="figures/03-hardware-positioning.png">PNG</a>
+<a href="figures/03-hardware-positioning.svg">SVG</a>
+<a href="figures/03-hardware-positioning.pdf">PDF</a>
+</p></article>
+<article><h2>04-annotation-telemetry — Observed telemetry and annotation</h2><strong>observed raw-data excerpt</strong>
+<a href="figures/04-annotation-telemetry.png"><img src="figures/04-annotation-telemetry.png" alt="PPG and gyroscope traces above original and corrected gesture-label bands."></a>
+<p>Unmodified recorded row subset around the first saved effective-label correction. Gesture bands are shaded and named. Green/red/IR are centred and divided by the unscaled MAD of the displayed excerpt for viewing only. No model scores, filtering or timing shifts are manufactured.</p><small>Display-only median/MAD scaling per PPG channel; gyroscope Euclidean norm; original timestamp differences.</small><p>
+<a href="figures/04-annotation-telemetry.png">PNG</a>
+<a href="figures/04-annotation-telemetry.svg">SVG</a>
+<a href="figures/04-annotation-telemetry.pdf">PDF</a>
+</p></article>
+<article><h2>05-historical-score-timeline — Historical score timeline</h2><strong>stored historical model replay</strong>
+<a href="figures/05-historical-score-timeline.png"><img src="figures/05-historical-score-timeline.png" alt="Stored classifier score with threshold, actual emissions and caught or missed reference starts."></a>
+<p>First 45 seconds of the stored pinch_in-ae0a22bf timeline. Vertical styles distinguish caught/missed reference starts; triangles mark actual stored emissions and background bands show stored gesture intervals. Scores/times were rounded by the original exporter. This is not a fresh inference run or a CNNv2 trace.</p><small>Original exporter rounding retained; display cropped at 45 s; no interpolation over unavailable intervals.</small><p>
+<a href="figures/05-historical-score-timeline.png">PNG</a>
+<a href="figures/05-historical-score-timeline.svg">SVG</a>
+<a href="figures/05-historical-score-timeline.pdf">PDF</a>
+</p></article>
+<article><h2>06-sensor-delivery-timing — Sensor delivery timing</h2><strong>stored historical timestamp analysis</strong>
+<a href="figures/06-sensor-delivery-timing.png"><img src="figures/06-sensor-delivery-timing.png" alt="PPG and IMU gap histograms distinguish real sampling/delivery from the inference grid."></a>
+<p>Stored positive timestamp-gap histograms over the historical model cohort. Equal timestamps were excluded by the original exporter. Gaps at or above 100 ms were folded into the last 99–100 ms bin; maxima and &gt;250 ms counts remain in the source JSON.</p><small>Counts normalized within stream; original tail clipping explicitly retained.</small><p>
+<a href="figures/06-sensor-delivery-timing.png">PNG</a>
+<a href="figures/06-sensor-delivery-timing.svg">SVG</a>
+<a href="figures/06-sensor-delivery-timing.pdf">PDF</a>
+</p></article>
+<article><h2>07-dataset-identity — Dataset identity audit</h2><strong>historical and current dataset audits</strong>
+<a href="figures/07-dataset-identity.png"><img src="figures/07-dataset-identity.png" alt="Grouped bars compare exported folders with distinct exact PPG/IMU stream pairs at two snapshots."></a>
+<p>Historical 37-export audit and the new read-only collection audit are separate snapshots. Exact hashes ignore label columns; they do not detect partial overlap. No duplicated source was found across the historical audited model split; duplicate presence alone does not prove leakage.</p><small>No transformation beyond labelled plotting of source values.</small><p>
+<a href="figures/07-dataset-identity.png">PNG</a>
+<a href="figures/07-dataset-identity.svg">SVG</a>
+<a href="figures/07-dataset-identity.pdf">PDF</a>
+</p></article>
+<article><h2>08-historical-day-transfer — Historical day transfer</h2><strong>historical exploratory results</strong>
+<a href="figures/08-historical-day-transfer.png"><img src="figures/08-historical-day-transfer.png" alt="Four bars show caught counts and recall varying across held-out days."></a>
+<p>Historical camera-label leave-one-day-out exploration with the all-moments/no-still-hand-gate configuration. Counts sum to 161/372. Days are not independent confidence-interval replicates; these results are not directly comparable with a newer hand-labelled or multiclass cohort.</p><small>No transformation beyond labelled plotting of source values.</small><p>
+<a href="figures/08-historical-day-transfer.png">PNG</a>
+<a href="figures/08-historical-day-transfer.svg">SVG</a>
+<a href="figures/08-historical-day-transfer.pdf">PDF</a>
+</p></article>
+<article><h2>09-motion-recovery-documented — Motion-history recovery</h2><strong>documented exploratory summary only</strong>
+<a href="figures/09-motion-recovery-documented.png"><img src="figures/09-motion-recovery-documented.png" alt="Before/after scaling counts show recovery at five delays after a spliced six-second movement."></a>
+<p>Counts transcribed programmatically from the original motion-hangover report for its 50-start pinch-in experiment. This is peak-window detection after a synthetic splice, not standard event recall, not raw replay regeneration, and not a live physical-motion study. No confidence intervals are asserted.</p><small>Reported counts divided by 50; straight lines connect only the five documented conditions.</small><p>
+<a href="figures/09-motion-recovery-documented.png">PNG</a>
+<a href="figures/09-motion-recovery-documented.svg">SVG</a>
+<a href="figures/09-motion-recovery-documented.pdf">PDF</a>
+</p></article>
+<article><h2>10-v2-operating-points — CNNv2 operating points</h2><strong>stored benchmark with verified OOF threshold arithmetic</strong>
+<a href="figures/10-v2-operating-points.png"><img src="figures/10-v2-operating-points.png" alt="Context-specific event recall and false activations for four stored model operating points."></a>
+<p>Each model is plotted at its stored chosen threshold. The two final V2 operating points were independently reselected from saved training-OOF budget tables; reference/app thresholds are stored values. This is a descriptive comparison, not an isolated component ablation. Repeated historical test exploration limits confirmatory interpretation; zero observed FA is not zero long-run risk.</p><small>Recall=100*caught/gestures; FAR=fa/negative_hours; no threshold optimized against test groups.</small><p>
+<a href="figures/10-v2-operating-points.png">PNG</a>
+<a href="figures/10-v2-operating-points.svg">SVG</a>
+<a href="figures/10-v2-operating-points.pdf">PDF</a>
+</p></article>
+<article><h2>11-multiclass-confusion — Multiclass confusion matrix</h2><strong>recomputed from original prediction vectors</strong>
+<a href="figures/11-multiclass-confusion.png"><img src="figures/11-multiclass-confusion.png" alt="Four-class confusion matrix exposes weaker hold recall despite high overall accuracy."></a>
+<p>Independently recomputed from all saved seed-17 held-out decision vectors. Rows are delayed annotated states; cells show row percentage and exact decision count. This is not onset-event accuracy or physical hold-duration accuracy.</p><small>Argmax of stored probabilities; exact integer counts; row-normalized percentages.</small><p>
+<a href="figures/11-multiclass-confusion.png">PNG</a>
+<a href="figures/11-multiclass-confusion.svg">SVG</a>
+<a href="figures/11-multiclass-confusion.pdf">PDF</a>
+</p></article>
+<article><h2>12-multiclass-seeds — Seed variation</h2><strong>recomputed from original prediction vectors</strong>
+<a href="figures/12-multiclass-seeds.png"><img src="figures/12-multiclass-seeds.png" alt="Three models have high overall accuracy but lower class-balanced scores."></a>
+<p>All three models are shown, not an ensemble or a test-selected best seed. Accuracy, balanced accuracy and macro-F1 were recomputed from saved vectors. Seed variation on one split is not participant uncertainty.</p><small>No transformation beyond labelled plotting of source values.</small><p>
+<a href="figures/12-multiclass-seeds.png">PNG</a>
+<a href="figures/12-multiclass-seeds.svg">SVG</a>
+<a href="figures/12-multiclass-seeds.pdf">PDF</a>
+</p></article>
+<article><h2>13-multiclass-events — Multiclass continuous events</h2><strong>stored events; frozen-source replay verified separately</strong>
+<a href="figures/13-multiclass-events.png"><img src="figures/13-multiclass-events.png" alt="Three panels report event recall, false activations and latency for pinch-in, pinch-out and hold entry."></a>
+<p>Stored seed-17 event aggregates, with recall/FAR arithmetic checked in analyze.py and independently reproducible via replay.py using frozen trainer source and matching raw recordings. Hold recall means hold-entry detection, not duration accuracy. Event classes use different negative exposure denominators. No binary-superiority claim is made.</p><small>No transformation beyond labelled plotting of source values.</small><p>
+<a href="figures/13-multiclass-events.png">PNG</a>
+<a href="figures/13-multiclass-events.svg">SVG</a>
+<a href="figures/13-multiclass-events.pdf">PDF</a>
+</p></article>
+<article><h2>14-prospective-protocol — Proposed validation protocol</h2><strong>proposed protocol — not performed</strong>
+<a href="figures/14-prospective-protocol.png"><img src="figures/14-prospective-protocol.png" alt="Six connected steps separate development, freezing, new data and interaction validation."></a>
+<p>Proposed frozen development, physical perturbation, prospective generalisation and complete-interaction workflow. This figure contains no measured results. Required sample size/exposure must be decided from pilot variability and precision goals.</p><small>No transformation beyond labelled plotting of source values.</small><p>
+<a href="figures/14-prospective-protocol.png">PNG</a>
+<a href="figures/14-prospective-protocol.svg">SVG</a>
+<a href="figures/14-prospective-protocol.pdf">PDF</a>
+</p></article>
+<article><h2>15-paired-model-summary — Paired detector summary</h2><strong>documented summary only</strong>
+<a href="figures/15-paired-model-summary.png"><img src="figures/15-paired-model-summary.png" alt="Three panels reproduce documented paired-detector recall, rounded FAR and median latency."></a>
+<p>Later paired-model Markdown summary: 95/120 pinch-in and 96/127 pinch-out catches. FAR was rounded in the original summary. Corresponding original full run artifacts were not recovered; similarly named results elsewhere have different denominators and were deliberately not substituted. Do not combine these with the older 47/57 cohort or call this a freshly verified model comparison.</p><small>No transformation beyond labelled plotting of source values.</small><p>
+<a href="figures/15-paired-model-summary.png">PNG</a>
+<a href="figures/15-paired-model-summary.svg">SVG</a>
+<a href="figures/15-paired-model-summary.pdf">PDF</a>
+</p></article>
+<article><h2>16-cnnv2-architecture — CNNv2 architecture</h2><strong>implemented architecture schematic</strong>
+<a href="figures/16-cnnv2-architecture.png"><img src="figures/16-cnnv2-architecture.png" alt="Three sensor-specific paths feed shared processing and an output head."></a>
+<p>Conceptual newer input/branch structure, not a layer-exact network diagram or proof that every sensor samples at 100 Hz. Binary onset and delayed-state experiments must remain distinct.</p><small>No transformation beyond labelled plotting of source values.</small><p>
+<a href="figures/16-cnnv2-architecture.png">PNG</a>
+<a href="figures/16-cnnv2-architecture.svg">SVG</a>
+<a href="figures/16-cnnv2-architecture.pdf">PDF</a>
+</p></article>
+</html>

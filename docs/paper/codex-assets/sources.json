@@ -1,0 +1,715 @@
+{
+  "source_commit": "e99f7dfd8278cfeeddb15b898bd9f4c1d82c64cb",
+  "scope": "existing evidence only; no retraining or new hardware collection; original recordings and global manifest unchanged",
+  "files": [
+    {
+      "path": "data/historical/evidence-audit.json",
+      "source": "docs/paper/revision-assets/evidence-audit.json",
+      "sha256": "04edee05fb5f2b5548ba609db590df31cf4259c515f1a08e57bed40b48d6c993",
+      "bytes": 83078,
+      "status": "stored historical audit/replay; not a new inference run"
+    },
+    {
+      "path": "data/historical/hand-labelled-replay.json",
+      "source": "docs/paper/revision-assets/hand-labelled-replay.json",
+      "sha256": "87027d14ab7b22f180fd630a41fbeea05a816d6f4f8422208e0df4e624dd3f27",
+      "bytes": 21462,
+      "status": "stored historical audit/replay; not a new inference run"
+    },
+    {
+      "path": "data/historical/report-figure-data.json",
+      "source": "docs/paper/revision-assets/report-figure-data.json",
+      "sha256": "e15a5bd397e0565ae8665368ee1b2cbbf44bd8238524846ee14cb092517a5af2",
+      "bytes": 56612,
+      "status": "stored historical audit/replay; not a new inference run"
+    },
+    {
+      "path": "data/historical/day-transfer.md",
+      "source": "docs/research/artifacts/cnn-all-days-2026-11/results.md",
+      "sha256": "0f2b32105132e0cd1251c3f2a711bcd7fa7be18821612f1ff4ad96528218f853",
+      "bytes": 4002,
+      "status": "historical camera-labelled exploration"
+    },
+    {
+      "path": "data/documented/motion-hangover.md",
+      "source": "docs/research/cnn-motion-hangover-2026-11.md",
+      "sha256": "177a68a533a909992f5545f076d1455c9ef598c5a6653b439c499c93cf94f6e1",
+      "bytes": 6478,
+      "status": "documented synthetic-splice study; raw replay output not recovered"
+    },
+    {
+      "path": "data/documented/paired-models.md",
+      "source": "docs/research/artifacts/training-improvements-2026-11/final-models.md",
+      "sha256": "d841a25b79f7247b1bfdacbfde8e893872ab0879bc343ed2c854ec82afa8798d",
+      "bytes": 993,
+      "status": "archived rounded summary; original matching run artifacts not recovered"
+    },
+    {
+      "path": "data/v2/FINDINGS.md",
+      "source": "docs/research/artifacts/pinch-cnn-v2-2026-11/FINDINGS.md",
+      "sha256": "793e1fe929810b8a18dd2bd5dcbfd496dfe37712aa32f2dc06d393f2425aabd1",
+      "bytes": 10914,
+      "status": "exploratory study context"
+    },
+    {
+      "path": "data/v2/PROTOCOL.md",
+      "source": "docs/research/artifacts/pinch-cnn-v2-2026-11/README.md",
+      "sha256": "767761e2a448286631ac95af8f5e0af464d9c708673f00e02b8d034357d1822a",
+      "bytes": 3407,
+      "status": "historical benchmark protocol"
+    },
+    {
+      "path": "data/v2/ref-ae0a22bf.json",
+      "source": "docs/research/artifacts/pinch-cnn-v2-2026-11/results/ref-ae0a22bf.json",
+      "sha256": "c49c0f67a095f0057d3f5662bfafc48f63c138da3147cf25c4944f71ec7fe430",
+      "bytes": 6839,
+      "status": "saved threshold sweep; use stored chosen threshold, not test optimum"
+    },
+    {
+      "path": "data/v2/final-branches-warp-env-m3-gate600q10.json",
+      "source": "docs/research/artifacts/pinch-cnn-v2-2026-11/results/final-branches-warp-env-m3-gate600q10.json",
+      "sha256": "a0e867ac26514466fec2f5147ebfaa839dbe31eafd027a33d116cc91b1816682",
+      "bytes": 10565,
+      "status": "saved threshold sweep; use stored chosen threshold, not test optimum"
+    },
+    {
+      "path": "data/v2/final-branches-warp-env-m3-overlay2-gate600q10.json",
+      "source": "docs/research/artifacts/pinch-cnn-v2-2026-11/results/final-branches-warp-env-m3-overlay2-gate600q10.json",
+      "sha256": "c1602ee3554ce5f941ec1905fe6874201b0d0d20aa25ecbfee6ff1c7b3df81d2",
+      "bytes": 10582,
+      "status": "saved threshold sweep; use stored chosen threshold, not test optimum"
+    },
+    {
+      "path": "data/v2/app-trained-v2-pinch_in-6e2053d0.json",
+      "source": "docs/research/artifacts/pinch-cnn-v2-2026-11/results/app-trained-v2-pinch_in-6e2053d0.json",
+      "sha256": "c97491fcfc04d24bc082484911d8ae3938dfa76674e03e1a239bcf798f5a14c0",
+      "bytes": 8797,
+      "status": "saved threshold sweep; use stored chosen threshold, not test optimum"
+    },
+    {
+      "path": "data/multiclass/results.json",
+      "source": "external-multiclass/results.json",
+      "sha256": "73f605240e1cbf3ce441dfbb32c4ece8f96848be1eeb250df3618852f3f491bb",
+      "bytes": 47021,
+      "status": "exploratory delayed-state study; historical reused test cohort"
+    },
+    {
+      "path": "data/multiclass/snapshot.json",
+      "source": "external-multiclass/snapshot.json",
+      "sha256": "0b4d20a337cc2fe9b36d3629819e9811594668815684b54b46c1305fe73be562",
+      "bytes": 24400,
+      "status": "exploratory delayed-state study; historical reused test cohort"
+    },
+    {
+      "path": "data/multiclass/audit.json",
+      "source": "external-multiclass/audit.json",
+      "sha256": "9d687116ea86f56d7380bf56c408c68878dccd9ed7f5295c300312542f124cfd",
+      "bytes": 12754,
+      "status": "exploratory delayed-state study; historical reused test cohort"
+    },
+    {
+      "path": "data/multiclass/verification.json",
+      "source": "external-multiclass/verification.json",
+      "sha256": "aa30707e7efaf818f8b31a8ada39f8736f7ef11556f5c4a11e42e8b02a515d88",
+      "bytes": 535,
+      "status": "exploratory delayed-state study; historical reused test cohort"
+    },
+    {
+      "path": "data/multiclass/REPORT.md",
+      "source": "external-multiclass/REPORT.md",
+      "sha256": "4915011b74d63d22e670f19e6b0339b9866cfd3b7057ba817325dc8409f80f4c",
+      "bytes": 6959,
+      "status": "exploratory delayed-state study; historical reused test cohort"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-everyday_noise-2026-11-04T03-44-21.667Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-everyday_noise-2026-11-04T03-44-21.667Z.npz",
+      "sha256": "0098c8b09e0a321c4fb847d3c9408048d8e0f1c3c87ed8b6c47f1bd0dd6497dd",
+      "bytes": 258382,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-everyday_noise-2026-11-04T04-27-35.286Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-everyday_noise-2026-11-04T04-27-35.286Z.npz",
+      "sha256": "7ade40578d99495c0a6d28ef0408603611a3b2b6b7ff3b9a67303e6962600cf3",
+      "bytes": 265091,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-03T01-08-34.844Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-03T01-08-34.844Z.npz",
+      "sha256": "7c24463530318cf185e08a7c0a41c2134e02b3cfc4b781d416a56f2c58615272",
+      "bytes": 56839,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-03T01-11-04.170Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-03T01-11-04.170Z.npz",
+      "sha256": "bb5925ccce516a6286a50a46cef77c290607352774ecdd42f956b33a5726a9d2",
+      "bytes": 56692,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-04T04-50-33.518Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-04T04-50-33.518Z.npz",
+      "sha256": "de23dfc1b24779ff8f38fe8cc96aad4c42f8e0d0d6ae0c99d3a0c00d6aac8cf8",
+      "bytes": 63332,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-06T05-46-24.047Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-06T05-46-24.047Z.npz",
+      "sha256": "1f2fa778241cd8b09d12e5e51a35c0fc12bb9807eb1f6e7265fd83beeb423e30",
+      "bytes": 58458,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-06T08-10-50.079Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-06T08-10-50.079Z.npz",
+      "sha256": "ce43971d5590fc94e53639e124b8b85a28b9a9cb3f06f2b5febb91fd4dc85bfc",
+      "bytes": 59227,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-09T10-59-34.843Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-09T10-59-34.843Z.npz",
+      "sha256": "3e8e3861a64a91ecb9aea3be4bf9fe07afe26bd8b2870771c15df77e15effa6e",
+      "bytes": 59719,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-09T12-00-11.890Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-09T12-00-11.890Z.npz",
+      "sha256": "51d3df06efd4947555ea5af7b4d5e5feddbceda3862b4bd12679eddd6dd8e969",
+      "bytes": 58629,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-09T13-48-35.709Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-09T13-48-35.709Z.npz",
+      "sha256": "a476975b6e830d1b321f80d135ee239ab0de11d88d3d2f7da92e168887bcce7d",
+      "bytes": 59023,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-09T13-51-14.408Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-09T13-51-14.408Z.npz",
+      "sha256": "cb2fef0007ca3fa2ad9f8eeb4d4b8df8313ab00e763d8e92f685666046cdbdf1",
+      "bytes": 61220,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-09T13-54-14.793Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-09T13-54-14.793Z.npz",
+      "sha256": "e1e6a5fdf66cf511c8aa3a11392fac7ededef6825c2e53e26005d70d7a8473ad",
+      "bytes": 60506,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-13T07-29-29.795Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-13T07-29-29.795Z.npz",
+      "sha256": "84b18bf7cc584e3e7a3c1182b6615f8afe5c3f981dd42d76aea7e7f37a0226a0",
+      "bytes": 16745,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-13T07-30-09.372Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-pinch_hold-2026-11-13T07-30-09.372Z.npz",
+      "sha256": "5717d07efb5ad9da65b7c4fed9785ab6d9c8fc0082cbe1151fb7ee2f3ca314dc",
+      "bytes": 16766,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-still-2026-11-04T04-00-31.075Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-still-2026-11-04T04-00-31.075Z.npz",
+      "sha256": "663907478745e6d45350646080ddf860dc7024fd0580731a517ce7f3d9567b48",
+      "bytes": 79278,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-still-2026-11-06T07-13-21.030Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-still-2026-11-06T07-13-21.030Z.npz",
+      "sha256": "035e40f44e931d2e6802f4e7a217b3e99c8ebb9efa69dce96b711173c57a03f7",
+      "bytes": 28252,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-supported-2026-11-04T04-10-07.238Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-supported-2026-11-04T04-10-07.238Z.npz",
+      "sha256": "a7c0b10cb0e38f6ed40360219673d3c4b8f2564653dc18154e5b0b633e796d0f",
+      "bytes": 122750,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-supported-2026-11-06T06-27-29.681Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-supported-2026-11-06T06-27-29.681Z.npz",
+      "sha256": "faf5c5eb730c929ce2d7e711031debe91795fc949ffc2469e4d4e7fb65f80e32",
+      "bytes": 126798,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-supported-2026-11-06T06-33-21.079Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-supported-2026-11-06T06-33-21.079Z.npz",
+      "sha256": "ae784363447ea122ce568220195c29709d2b524e8b6396847a9625a372867246",
+      "bytes": 125218,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/17-gesture-dataset-unlabeled-2026-11-14T10-29-35.618Z.npz",
+      "source": "external-multiclass/predictions/17-gesture-dataset-unlabeled-2026-11-14T10-29-35.618Z.npz",
+      "sha256": "82cb4693caad4721fc98fb9afa2140a141d83eb80d3534a6d2d6b43e27018843",
+      "bytes": 686859,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-everyday_noise-2026-11-04T03-44-21.667Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-everyday_noise-2026-11-04T03-44-21.667Z.npz",
+      "sha256": "dd867f8ff39236bd0831026f74b61e4f3bcd2e4471229bc0603adca0bcf1e924",
+      "bytes": 257718,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-everyday_noise-2026-11-04T04-27-35.286Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-everyday_noise-2026-11-04T04-27-35.286Z.npz",
+      "sha256": "fb36063d21088359eaba3684366f5fc901ccf0d6b1f15d9760bea60df59a22fe",
+      "bytes": 265612,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-03T01-08-34.844Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-03T01-08-34.844Z.npz",
+      "sha256": "be8f3edbf5eefe3e3244136f1689ce1c51ae97f14ea0c29dec15eecc8f2bd4c2",
+      "bytes": 57221,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-03T01-11-04.170Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-03T01-11-04.170Z.npz",
+      "sha256": "ee543aad02b86ba0ac7c6416ec0807ff14026f8f88b48179d20fc06c78c53a53",
+      "bytes": 56676,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-04T04-50-33.518Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-04T04-50-33.518Z.npz",
+      "sha256": "32b80afcf2cd763f572c8afc3f5c2f54c96220418c1a53a6d1b26c818eabe99e",
+      "bytes": 63670,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-06T05-46-24.047Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-06T05-46-24.047Z.npz",
+      "sha256": "08701d6b9313d9594c394763dab746e49406c5a71242f37ad340a75ea3605872",
+      "bytes": 58626,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-06T08-10-50.079Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-06T08-10-50.079Z.npz",
+      "sha256": "d8f1efe085b44c604bed0e73b691ec8c8c62b7b726827c5296da84a49d22421e",
+      "bytes": 59168,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-09T10-59-34.843Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-09T10-59-34.843Z.npz",
+      "sha256": "84a81fe3ee303fb1ed9f501462cee02db9db231badf94540d97d3e5f5d70b312",
+      "bytes": 60294,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-09T12-00-11.890Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-09T12-00-11.890Z.npz",
+      "sha256": "0d349fc21d0fd26fb0c2f71664458e2bd9141691f24c189e1948698e9572e4fc",
+      "bytes": 59177,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-09T13-48-35.709Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-09T13-48-35.709Z.npz",
+      "sha256": "f0df96a1b583bf66f64d5f3f40e9d5adfdb198bb095107e494d7d0b0589ae5d5",
+      "bytes": 59240,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-09T13-51-14.408Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-09T13-51-14.408Z.npz",
+      "sha256": "0c5595a26b6dc4b157b448032ff92e18f5d913b79ac4d5779c1185a6bafe66f0",
+      "bytes": 61311,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-09T13-54-14.793Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-09T13-54-14.793Z.npz",
+      "sha256": "ba86d2b4da354c2c26930a8606648a919613e5146fc72bd29cf1cc517dab5f55",
+      "bytes": 60847,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-13T07-29-29.795Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-13T07-29-29.795Z.npz",
+      "sha256": "23660eaa6ea498c6a2f5b1a9b077475096e619f6f7e1f1d31db449525f11ed19",
+      "bytes": 16809,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-13T07-30-09.372Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-pinch_hold-2026-11-13T07-30-09.372Z.npz",
+      "sha256": "b5522470910aadb395e5cfe94b7b47641152d9137b89c006b7d8e70225e29cd5",
+      "bytes": 16783,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-still-2026-11-04T04-00-31.075Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-still-2026-11-04T04-00-31.075Z.npz",
+      "sha256": "33bc0a970b10553e45657899a16ae58b161b6c130cc7cb67bfff1e6a64b38146",
+      "bytes": 78934,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-still-2026-11-06T07-13-21.030Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-still-2026-11-06T07-13-21.030Z.npz",
+      "sha256": "171ffdb2e9d381b348efa62351f944be10320e511423c8e87d1fd882346dea65",
+      "bytes": 27839,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-supported-2026-11-04T04-10-07.238Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-supported-2026-11-04T04-10-07.238Z.npz",
+      "sha256": "c60026175bbfc81ed551ca47ce2adf8801c9fca08577f58d5848299dde812fae",
+      "bytes": 121518,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-supported-2026-11-06T06-27-29.681Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-supported-2026-11-06T06-27-29.681Z.npz",
+      "sha256": "5a98e43190c3865e06d15e4e4df4c2e9fb0add18f8fad67ad499fca3b2a4675b",
+      "bytes": 124661,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-supported-2026-11-06T06-33-21.079Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-supported-2026-11-06T06-33-21.079Z.npz",
+      "sha256": "dd144229f00d8b7665b84a0beafbd1a9b5a646031fcbc77a4214343854cf7d7e",
+      "bytes": 123068,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/18-gesture-dataset-unlabeled-2026-11-14T10-29-35.618Z.npz",
+      "source": "external-multiclass/predictions/18-gesture-dataset-unlabeled-2026-11-14T10-29-35.618Z.npz",
+      "sha256": "cd5a8ad046ecc2aeb3d11ecdfdd04d969e9d741f8fbd5c25a2928efa8bc8d9ad",
+      "bytes": 678344,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-everyday_noise-2026-11-04T03-44-21.667Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-everyday_noise-2026-11-04T03-44-21.667Z.npz",
+      "sha256": "03c5856f8058eb5ae15c7e5f559a8300881b9c12bc4b3666109e480834bcadf5",
+      "bytes": 258230,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-everyday_noise-2026-11-04T04-27-35.286Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-everyday_noise-2026-11-04T04-27-35.286Z.npz",
+      "sha256": "a3b81fce68db98e5a7ca1202b41bd85dc471d3a894e319c9682580b984aeaf5a",
+      "bytes": 265763,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-03T01-08-34.844Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-03T01-08-34.844Z.npz",
+      "sha256": "a8766ba868e35ff19e287def3aa38f64d0768f2e26518f3754bee6deb0212282",
+      "bytes": 57386,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-03T01-11-04.170Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-03T01-11-04.170Z.npz",
+      "sha256": "282532e17ecc88f3497f7414eb52b552defc8b9b3e2ecf4b9ec9daa3f7465680",
+      "bytes": 56893,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-04T04-50-33.518Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-04T04-50-33.518Z.npz",
+      "sha256": "ef6f025f908c66e5e215d3db4d4d73defd1548ac9cb2b1b3e2dfa367ccd32022",
+      "bytes": 63576,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-06T05-46-24.047Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-06T05-46-24.047Z.npz",
+      "sha256": "5fa9581f5d3486c6cf33d412de021a6fcbf76434ca621c72e4775354468ee8c6",
+      "bytes": 58538,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-06T08-10-50.079Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-06T08-10-50.079Z.npz",
+      "sha256": "372c2bac28729175e81a891f678458a4c183224197f4421c44f64d9f1d0863d8",
+      "bytes": 59062,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-09T10-59-34.843Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-09T10-59-34.843Z.npz",
+      "sha256": "0b222a01a8e87b93406fbe8b58f7b235233d6a69c38b280350d47e78a614c99f",
+      "bytes": 60101,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-09T12-00-11.890Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-09T12-00-11.890Z.npz",
+      "sha256": "710cb9668ec8e5cfb12803643c7fc528ca532222ef39771f1d2d230820c141f7",
+      "bytes": 58721,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-09T13-48-35.709Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-09T13-48-35.709Z.npz",
+      "sha256": "52f5bb0af8d7e1b2b410f7c670afdf770085c6c2b83804749d63169da202d3d9",
+      "bytes": 59127,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-09T13-51-14.408Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-09T13-51-14.408Z.npz",
+      "sha256": "30708d0554363e3bb796dbc985789d865c544e4bc211d20792060d1758e15770",
+      "bytes": 61141,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-09T13-54-14.793Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-09T13-54-14.793Z.npz",
+      "sha256": "0536ced81dcc059240df9c58ec7ce9abe5251965519a2c894c2635bbc168db1c",
+      "bytes": 60788,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-13T07-29-29.795Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-13T07-29-29.795Z.npz",
+      "sha256": "fefdc97365a1d00ca0785bce3d7a619b08a2bb0af6f13d8497e0d5e47f576e0e",
+      "bytes": 16788,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-13T07-30-09.372Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-pinch_hold-2026-11-13T07-30-09.372Z.npz",
+      "sha256": "9e43510b6fbb6c79066515132c4cc62bbaef39e41255d39db08f87bc921d0602",
+      "bytes": 16838,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-still-2026-11-04T04-00-31.075Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-still-2026-11-04T04-00-31.075Z.npz",
+      "sha256": "40f3efe253c0fae29c2e2ef3b37daf399dba52383048b6ae0a6e1f51d3d710b8",
+      "bytes": 78640,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-still-2026-11-06T07-13-21.030Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-still-2026-11-06T07-13-21.030Z.npz",
+      "sha256": "2915b57ae5bc3ed4117acc9c17374b8b14bf1aa0ce5e89265f23922bfe4d7242",
+      "bytes": 27785,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-supported-2026-11-04T04-10-07.238Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-supported-2026-11-04T04-10-07.238Z.npz",
+      "sha256": "b23d7ad8a848c9087ca7c976ebc50bbe225edabecfc3b426f6d4e6159aae6241",
+      "bytes": 122030,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-supported-2026-11-06T06-27-29.681Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-supported-2026-11-06T06-27-29.681Z.npz",
+      "sha256": "9cde17e0031f85b9a76411e36ff76ee323a8a6d2bdab721674e4fe120f2fdd60",
+      "bytes": 123732,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-supported-2026-11-06T06-33-21.079Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-supported-2026-11-06T06-33-21.079Z.npz",
+      "sha256": "81e00877306e7f21f694750e3807b74c33e0893e1dc17f26feb54ccd43619646",
+      "bytes": 122543,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/predictions/19-gesture-dataset-unlabeled-2026-11-14T10-29-35.618Z.npz",
+      "source": "external-multiclass/predictions/19-gesture-dataset-unlabeled-2026-11-14T10-29-35.618Z.npz",
+      "sha256": "2978d42506ba5eafa527f13c4e0ad9477e12782ae75b08b51b81a84a7b43e005",
+      "bytes": 680788,
+      "status": "saved prediction vectors; no model fitting required"
+    },
+    {
+      "path": "data/multiclass/model-seed-17.pt",
+      "source": "external-multiclass/model-seed-17.pt",
+      "sha256": "0d834f8167e1c98597e21250f4a0bbe46f7bf0c0021228e6b9e164d566dd2c20",
+      "bytes": 142754,
+      "status": "archived checkpoint; do not activate"
+    },
+    {
+      "path": "data/multiclass/model-seed-18.pt",
+      "source": "external-multiclass/model-seed-18.pt",
+      "sha256": "6fea64f63e8ebdc04767b1bd9f4e5eb6e80b6dc6a34b2340fda6b5db8f7ba6fe",
+      "bytes": 142754,
+      "status": "archived checkpoint; do not activate"
+    },
+    {
+      "path": "data/multiclass/model-seed-19.pt",
+      "source": "external-multiclass/model-seed-19.pt",
+      "sha256": "5bc25ed48c72d5bdf1a2ffa0c49a0586a1d8099946fa18b08218b25fe036e513",
+      "bytes": 142754,
+      "status": "archived checkpoint; do not activate"
+    },
+    {
+      "path": "data/multiclass/original-runner/run.py",
+      "source": "external-multiclass/run.py",
+      "sha256": "435e7349de2a1859ab9435ecc34f8b0d49d06628c9306db26c61eebda8d4d3e7",
+      "bytes": 11412,
+      "status": "unaltered original runner; optional CUDA retraining only"
+    },
+    {
+      "path": "data/multiclass/original-runner/report.py",
+      "source": "external-multiclass/report.py",
+      "sha256": "049e68fdaba84351ada33554c830206366de5b5d56f4fcefa2d81ca2352ebe7f",
+      "bytes": 10945,
+      "status": "unaltered original runner; optional CUDA retraining only"
+    },
+    {
+      "path": "data/multiclass/frozen-trainer/src/label_trainer/__init__.py",
+      "source": "external-multiclass/inputs.tar.gz!src/label_trainer/__init__.py",
+      "sha256": "20cbde299fd839c720f3fc94a2124e39bcfdbfbb0b76eb46e102984f0db31e50",
+      "bytes": 105,
+      "status": "exact original trainer source from frozen archive"
+    },
+    {
+      "path": "data/multiclass/frozen-trainer/src/label_trainer/cnn.py",
+      "source": "external-multiclass/inputs.tar.gz!src/label_trainer/cnn.py",
+      "sha256": "e1b96652c43f98bcca5c7934694aa56aa19007e3cdfe1a959ccfaee79da1b998",
+      "bytes": 16603,
+      "status": "exact original trainer source from frozen archive"
+    },
+    {
+      "path": "data/multiclass/frozen-trainer/src/label_trainer/cnn_input.py",
+      "source": "external-multiclass/inputs.tar.gz!src/label_trainer/cnn_input.py",
+      "sha256": "927819c78f29fe4df03ab21f0c3d0692367687b3ba8934f12d5c5725f46b1257",
+      "bytes": 16282,
+      "status": "exact original trainer source from frozen archive"
+    },
+    {
+      "path": "data/multiclass/frozen-trainer/src/label_trainer/cnn_v2.py",
+      "source": "external-multiclass/inputs.tar.gz!src/label_trainer/cnn_v2.py",
+      "sha256": "bdd323372fb167ffdcb2ca612c776ee99bd97c6643b974430a676e729f75dbc7",
+      "bytes": 11926,
+      "status": "exact original trainer source from frozen archive"
+    },
+    {
+      "path": "data/multiclass/frozen-trainer/src/label_trainer/csv_io.py",
+      "source": "external-multiclass/inputs.tar.gz!src/label_trainer/csv_io.py",
+      "sha256": "a002606b78a8e6ba4e196ae16382ef2720e5fc3aec40894efa4fdc2da7f18f23",
+      "bytes": 18830,
+      "status": "exact original trainer source from frozen archive"
+    },
+    {
+      "path": "data/multiclass/frozen-trainer/src/label_trainer/events.py",
+      "source": "external-multiclass/inputs.tar.gz!src/label_trainer/events.py",
+      "sha256": "b649569d07a2ec65365f2bfb14000f45320262d2a5cc4348520990feae72bb57",
+      "bytes": 4719,
+      "status": "exact original trainer source from frozen archive"
+    },
+    {
+      "path": "data/multiclass/frozen-trainer/src/label_trainer/gpu_check.py",
+      "source": "external-multiclass/inputs.tar.gz!src/label_trainer/gpu_check.py",
+      "sha256": "efae14e9c9bd4a437acedf204d9f624d3ccc4910d543e0da55a94204718267f6",
+      "bytes": 2517,
+      "status": "exact original trainer source from frozen archive"
+    },
+    {
+      "path": "data/multiclass/frozen-trainer/src/label_trainer/imu_onset.py",
+      "source": "external-multiclass/inputs.tar.gz!src/label_trainer/imu_onset.py",
+      "sha256": "8444b094c8a9b8bed3d5b7aa6c9f1b96a81ad4676982dd1b3fddf37c9be2f793",
+      "bytes": 6545,
+      "status": "exact original trainer source from frozen archive"
+    },
+    {
+      "path": "data/multiclass/frozen-trainer/src/label_trainer/label_train.py",
+      "source": "external-multiclass/inputs.tar.gz!src/label_trainer/label_train.py",
+      "sha256": "da995f00ed7420397c15f6c5cc817180d7931105e7fcf420862314a97766713d",
+      "bytes": 75715,
+      "status": "exact original trainer source from frozen archive"
+    },
+    {
+      "path": "data/multiclass/frozen-trainer/src/label_trainer/ppg_onset.py",
+      "source": "external-multiclass/inputs.tar.gz!src/label_trainer/ppg_onset.py",
+      "sha256": "41ff8268db6b3b4ddabd9f8112e7cc736056641ebfaf9e1908233c6a44678eb8",
+      "bytes": 16610,
+      "status": "exact original trainer source from frozen archive"
+    },
+    {
+      "path": "data/multiclass/frozen-trainer/src/label_trainer/research.py",
+      "source": "external-multiclass/inputs.tar.gz!src/label_trainer/research.py",
+      "sha256": "8e6b08adfad277bb6ed56c9b70304002e0bad79ff6480c109401cfd30c3f0b8f",
+      "bytes": 5005,
+      "status": "exact original trainer source from frozen archive"
+    },
+    {
+      "path": "data/multiclass/frozen-trainer/src/label_trainer/schema.py",
+      "source": "external-multiclass/inputs.tar.gz!src/label_trainer/schema.py",
+      "sha256": "a2d28eec84e16e208ae00fee36ead64475e68bcb3f82e3d9c64b5585ad3170b3",
+      "bytes": 3735,
+      "status": "exact original trainer source from frozen archive"
+    },
+    {
+      "path": "data/multiclass/frozen-trainer/src/label_trainer/steadiness.py",
+      "source": "external-multiclass/inputs.tar.gz!src/label_trainer/steadiness.py",
+      "sha256": "7f05fc6f3482f55962678fb925a68ff652b5f74a3fae4a4c04fe2ffa3bb5b70b",
+      "bytes": 3783,
+      "status": "exact original trainer source from frozen archive"
+    },
+    {
+      "path": "data/multiclass/frozen-trainer/src/label_trainer/trees.py",
+      "source": "external-multiclass/inputs.tar.gz!src/label_trainer/trees.py",
+      "sha256": "13603a3e23e32bc22b01b71489834bc46d69cbafd14cb149d7403715c31ae9e4",
+      "bytes": 4071,
+      "status": "exact original trainer source from frozen archive"
+    },
+    {
+      "path": "data/telemetry/ppg.csv",
+      "source": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-03T01-05-59.434Z/ppg.csv",
+      "source_sha256": "1f5f4796528a3036e2a7ae17f92f970027d1cdf89043f3a9fb229627cf2317f5",
+      "sha256": "c1fa8d307d21f2fef82d5774b4d4bbcb172f5dbb30f46c3e809ed76978ec5304",
+      "bytes": 17239,
+      "status": "exact recorded row subset; no sensor or label edits"
+    },
+    {
+      "path": "data/telemetry/imu.csv",
+      "source": "data/recordings/Hand labeled/gesture-dataset-pinch_hold-2026-11-03T01-05-59.434Z/imu.csv",
+      "source_sha256": "6ecaf6ce7d3a1f68abce04e77bea18b03feb8a1354ea1ab3fec1c41dc7fc2664",
+      "sha256": "5f854744d376fbf02ee8ce0de5aa6a774d594e08ab85fc374a745705ebd229bf",
+      "bytes": 299366,
+      "status": "exact recorded row subset; no sensor or label edits"
+    },
+    {
+      "path": "data/current-inventory.json",
+      "source": "collect.py derived from identified original sources",
+      "sha256": "7d0d0824c5beb44b902eaff22715dbbe1722a4f804c96dd554bc207b41c3a850",
+      "bytes": 103833,
+      "status": "collection metadata or current read-only audit"
+    },
+    {
+      "path": "data/multiclass/repository-input-check.json",
+      "source": "collect.py derived from identified original sources",
+      "sha256": "d8d998dd77c52dc564bfa2bea7402e7bf2a71dac7782008d131d9c3974f41b18",
+      "bytes": 33496,
+      "status": "collection metadata or current read-only audit"
+    },
+    {
+      "path": "data/telemetry/selection.json",
+      "source": "collect.py derived from identified original sources",
+      "sha256": "1cb96ba31970dbbe938ef7b3b07fab710b6c32ad6c9addc61c69e0d3ea3bca7e",
+      "bytes": 318,
+      "status": "collection metadata or current read-only audit"
+    }
+  ]
+}

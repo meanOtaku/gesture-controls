@@ -12,6 +12,7 @@ project report.
 | [`notes/`](notes/) | Working notes behind the paper: the [paper improvement guide](notes/PAPER_IMPROVEMENT_GUIDE.md), the [evidence audit](notes/EVIDENCE_AUDIT.md), the [Q2 research plan](notes/Q2_RESEARCH_PLAN.md) and the [journal companion](notes/JOURNAL_COMPANION.md) |
 | [`rewrite/`](rewrite/README.md) | Your own-words rewrite: one document per source file, applied back with `rewrite.py` |
 | [`revision-assets/`](revision-assets/README.md) | Reproducible figures, data inventory, provenance and the `verify.py` check |
+| [`codex-assets/`](codex-assets/README.md) | Paper-improvement assets: 16 reproducible figure sets, collected evidence, independent metric/event checks, local scripts, captions and an offline gallery |
 | [`archive/`](archive/) | The four earlier format variants, frozen for reference |
 
 The evidence-qualified rewrite of 8 Nov 2026 (its IEEE and Springer folders and its Markdown → LaTeX tools) was

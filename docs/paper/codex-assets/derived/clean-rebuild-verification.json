@@ -1,0 +1,7 @@
+{
+  "status": "passed",
+  "method": "isolated folder copied without venv, bytecode or external experiment data; shared locked Python environment",
+  "identical_pngs": 16,
+  "identical_numeric_metrics": true,
+  "gpu_used": false
+}
