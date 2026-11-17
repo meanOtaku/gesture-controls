@@ -634,14 +634,16 @@ number-flow-react {
 .model-rows > li { grid-column: 1 / -1; }
 .model-row { display: grid; grid-template-columns: subgrid; align-items: center; row-gap: .5rem; }
 .model-row > .recipe-item-actions { justify-content: flex-end; }
-.model-row-stats { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(5.5rem, auto); column-gap: 1rem; font-size: .75rem; }
+/* Every model's figures in the same columns, whatever their notes say. */
+.model-row-stats { display: grid; grid-template-columns: 4.5rem 6.5rem 6.5rem; column-gap: 1rem; font-size: .75rem; }
+.model-rename { display: flex; flex-wrap: nowrap; align-items: center; gap: .4rem; }
 .model-row-stats > div { display: flex; flex-direction: column; }
 /* A multi-gesture model's outputs, one row each. */
 .network-outputs { width:100%; font-size:.8rem; }
 .network-outputs td, .network-outputs th { text-align:left; }
 .model-row-more { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
 /* The always-shown bar of a model's other actions, lightly set apart so it reads as the model's own. */
-.model-actions-bar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .25rem; padding: .15rem .35rem; border: 1px solid var(--line-soft); background: color-mix(in srgb, var(--surface-2) 70%, var(--ink) 4%); }
+.model-actions-bar { grid-column: 1 / -1; justify-self: start; display: flex; flex-wrap: wrap; align-items: center; gap: .1rem; padding: 0 .25rem; border: 1px solid var(--line-soft); background: color-mix(in srgb, var(--surface-2) 70%, var(--ink) 4%); }
 .floating-menu { z-index: 1000; min-width: 10rem; display: flex; flex-direction: column; padding: .25rem 0; border: 1px solid var(--line); background: var(--surface-2); box-shadow: 0 6px 18px rgb(0 0 0 / .35); }
 .floating-menu-item { text-align: left; padding: .4rem .8rem; font-size: .85rem; background: none; border: 0; color: var(--ink); cursor: pointer; }
 .floating-menu-item:hover, .floating-menu-item:focus-visible { background: var(--line-soft); outline: none; }

@@ -145,19 +145,19 @@ export function LabelModelsPanel({
   const identity = (model: LabelModel) => (
     <div className="flex min-w-0 flex-col gap-1">
       {renaming?.id === model.id ? (
-        <form className="flex flex-wrap items-center gap-2" onSubmit={(event) => { event.preventDefault(); saveName(model, renaming.draft); }}>
+        <form className="model-rename" onSubmit={(event) => { event.preventDefault(); saveName(model, renaming.draft); }}>
           <Input
             aria-label={`Name for ${model.id}`}
-            className="max-w-xs"
+            className="h-8 max-w-xs"
             autoFocus
             maxLength={MAX_MODEL_NAME}
-            placeholder={model.id}
+            placeholder="A name for it (empty: its id)"
             value={renaming.draft}
             onChange={(event) => setRenaming({ id: model.id, draft: event.target.value })}
             onKeyDown={(event) => { if (event.key === "Escape") setRenaming(null); }}
           />
-          <Button type="submit" variant="outline">Save name</Button>
-          <Button type="button" variant="ghost" onClick={() => setRenaming(null)}>Cancel</Button>
+          <Button type="submit" variant="outline" size="sm">Save name</Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setRenaming(null)}>Cancel</Button>
         </form>
       ) : (
         <strong className="text-sm">{modelName(model)}</strong>
@@ -187,10 +187,11 @@ export function LabelModelsPanel({
     const facts = modelStats(model);
     return facts.length === 0 ? <div aria-hidden="true" /> : (
       <dl className="model-row-stats" aria-label={`${model.id} figures`}>
-        {facts.map(({ term, value }) => (
+        {facts.map(({ term, value, note }) => (
           <div key={term} className="flex flex-col">
             <dt className="text-muted-foreground">{term}</dt>
             <dd className="m-0 tabular-nums"><AnimatedText>{value}</AnimatedText></dd>
+            {note && <dd className="m-0 text-[0.7rem] text-muted-foreground">{note}</dd>}
           </div>
         ))}
       </dl>

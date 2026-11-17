@@ -68,6 +68,34 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
   const [editError, setEditError] = useState<string | null>(null);
   const [cascade, setCascade] = useState<CascadePlan | null>(null);
   const openCascade = (mode: CascadeMode, id: string) => planFor && setCascade(planFor(mode, id));
+  // Under the label it edits, as the archive / delete panel is, so it opens where Edit was clicked.
+  const editForm = editing ? (
+          <form className="flex flex-col gap-3" aria-label={`Edit ${editing.id}`} onSubmit={(event) => void saveEdit(event)}>
+            <div className="field">
+              <div className="field-head"><Label htmlFor={`${uid}-edit-name`} required>Name</Label></div>
+              <Input id={`${uid}-edit-name`} required aria-required="true" value={editing.displayName} maxLength={80} autoFocus onChange={(event) => setEditing({ ...editing, displayName: event.target.value })} />
+              <p className="field-hint">Its id, <code>{editing.id}</code>, stays the same, so recordings, models, recipes and gestures keep pointing at it.</p>
+            </div>
+            <div className="field">
+              <div className="field-head"><Label htmlFor={`${uid}-edit-kind`} required>What is it?</Label></div>
+              <select id={`${uid}-edit-kind`} className="recipe-select" value={editing.role} onChange={(event) => setEditing({ ...editing, role: event.target.value as DatasetLabel["role"] })}>
+                <option value="positiveGesture">A gesture to detect</option>
+                <option value="negativeBackground">Everyday activity (something it should not mistake for a gesture)</option>
+                {editing.role === "calibrationOnly" && <option value="calibrationOnly">Calibration only</option>}
+              </select>
+            </div>
+            <div className="field">
+              <div className="field-head"><Label htmlFor={`${uid}-edit-notes`}>Notes (optional)</Label></div>
+              <Input id={`${uid}-edit-notes`} value={editing.description} maxLength={500} onChange={(event) => setEditing({ ...editing, description: event.target.value })} />
+            </div>
+            <p className="required-note"><span aria-hidden="true">*</span> Required</p>
+            {editError && <p className="field-error" role="alert">{editError}</p>}
+            <div className="flex gap-2">
+              <Button type="submit" disabled={saving || editing.displayName.trim() === ""}>Save changes</Button>
+              <Button type="button" variant="outline" onClick={() => { setEditing(null); setEditError(null); }}>Cancel</Button>
+            </div>
+          </form>
+  ) : null;
   // Shown under the label it is for, so a label far down the list (a gesture's phase) shows it where it was clicked.
   const cascadePanel = cascade && onRunPlan
     ? <CascadePanel key={`${cascade.mode}-${cascade.label}`} plan={cascade} onCancel={() => setCascade(null)} onOpenLabel={(other) => openCascade("delete", other)} onRun={onRunPlan} />
@@ -172,33 +200,6 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
         )}
         {/* Under the label it is for (below); here only for a label not in the list. */}
         {cascade && onRunPlan && !rows.some((row) => row.id === cascade.label) && cascadePanel}
-        {editing && (
-          <form className="flex flex-col gap-3" aria-label={`Edit ${editing.id}`} onSubmit={(event) => void saveEdit(event)}>
-            <div className="field">
-              <div className="field-head"><Label htmlFor={`${uid}-edit-name`} required>Name</Label></div>
-              <Input id={`${uid}-edit-name`} required aria-required="true" value={editing.displayName} maxLength={80} autoFocus onChange={(event) => setEditing({ ...editing, displayName: event.target.value })} />
-              <p className="field-hint">Its id, <code>{editing.id}</code>, stays the same, so recordings, models, recipes and gestures keep pointing at it.</p>
-            </div>
-            <div className="field">
-              <div className="field-head"><Label htmlFor={`${uid}-edit-kind`} required>What is it?</Label></div>
-              <select id={`${uid}-edit-kind`} className="recipe-select" value={editing.role} onChange={(event) => setEditing({ ...editing, role: event.target.value as DatasetLabel["role"] })}>
-                <option value="positiveGesture">A gesture to detect</option>
-                <option value="negativeBackground">Everyday activity (something it should not mistake for a gesture)</option>
-                {editing.role === "calibrationOnly" && <option value="calibrationOnly">Calibration only</option>}
-              </select>
-            </div>
-            <div className="field">
-              <div className="field-head"><Label htmlFor={`${uid}-edit-notes`}>Notes (optional)</Label></div>
-              <Input id={`${uid}-edit-notes`} value={editing.description} maxLength={500} onChange={(event) => setEditing({ ...editing, description: event.target.value })} />
-            </div>
-            <p className="required-note"><span aria-hidden="true">*</span> Required</p>
-            {editError && <p className="field-error" role="alert">{editError}</p>}
-            <div className="flex gap-2">
-              <Button type="submit" disabled={saving || editing.displayName.trim() === ""}>Save changes</Button>
-              <Button type="button" variant="outline" onClick={() => { setEditing(null); setEditError(null); }}>Cancel</Button>
-            </div>
-          </form>
-        )}
         {rows.length === 0 ? (
           <p className="hint">No labels yet. Add one to get started: a label is a name for a gesture or activity you want the app to learn, like snap_fingers.</p>
         ) : (
@@ -229,6 +230,7 @@ export function LabelCoverage({ labels, models, coverageByLabel, onCreate, onSet
                     </small>
                     {usageFor && usageCount(usageFor(row.id)) > 0 && <UsageList usage={usageFor(row.id)} onOpenTab={onOpenTab} label={row.id} />}
                     {cascade?.label === row.id && cascadePanel}
+                    {editing?.id === row.id && editForm}
                   </div>
                   <div className="recipe-item-actions label-actions">
                     {onAddPhases && full && isGesture(full) && !row.archived && !labels.some((label) => label.parent === full.id) && (

@@ -80,7 +80,7 @@ export function RecipesPage({ automation, calibration, pendingRecipeIds, error, 
       )}
 
       {editing && (
-        <Card role="region" aria-label="Recipe editor">
+        <Card role="region" aria-label="Recipe editor" ref={(node: HTMLDivElement | null) => node?.scrollIntoView?.({ block: "start", behavior: "smooth" })}>
           <CardHeader>
             <SectionHeader
               title={editing.id === "" ? "New recipe" : "Edit recipe"}

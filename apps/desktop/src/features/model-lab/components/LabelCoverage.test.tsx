@@ -180,4 +180,11 @@ describe("LabelCoverage", () => {
     fireEvent.click(within(panel).getByRole("button", { name: /^Delete/ }));
     await waitFor(() => expect(onRunPlan).toHaveBeenCalledWith(plan, expect.any(Function)));
   });
+
+  it("opens a label's edit form under that label", async () => {
+    setup({ labels: [label("fist", "Fist"), label("snap", "Snap")], onUpdate: vi.fn().mockResolvedValue(null) });
+    fireEvent.click(screen.getByRole("button", { name: "Edit snap" }));
+    const row = screen.getByRole("button", { name: "Edit snap" }).closest("li")!;
+    expect(within(row).getByRole("form", { name: "Edit snap" })).toBeInTheDocument();
+  });
 });

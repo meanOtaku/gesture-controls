@@ -126,16 +126,17 @@ export interface ShadowReport {
 export const LABEL_MODELS_EVENT = "label-models-changed";
 
 /** The figures shown beside a model: its threshold and, when its manifest has them, its held-out results. */
-export function modelStats(model: Pick<LabelModel, "activation" | "evaluation">): { term: string; value: string }[] {
-  const facts: { term: string; value: string }[] = [];
+export function modelStats(model: Pick<LabelModel, "activation" | "evaluation">): { term: string; value: string; note?: string }[] {
+  const facts: { term: string; value: string; note?: string }[] = [];
   if (model.activation != null) facts.push({ term: "Threshold", value: model.activation.toFixed(2) });
   const at = model.evaluation?.atThreshold;
   // Figures measured at another threshold than the one it runs at say which, so they are not taken for its own.
   const elsewhere = at != null && model.activation != null && Math.abs(at - model.activation) > 1e-9;
-  const note = elsewhere ? ` at ${at.toFixed(2)}${model.evaluation?.measured === "training" ? ", when trained" : ""}` : "";
-  if (model.evaluation?.recall != null) facts.push({ term: "Held-out recall", value: `${Math.round(model.evaluation.recall * 100)}%${note}` });
+  // Said on a line of its own under the figure, so the columns stay the same width for every model.
+  const note = elsewhere ? `at ${at.toFixed(2)}${model.evaluation?.measured === "training" ? ", when trained" : ""}` : undefined;
+  if (model.evaluation?.recall != null) facts.push({ term: "Held-out recall", value: `${Math.round(model.evaluation.recall * 100)}%`, ...(note ? { note } : {}) });
   const perHour = model.evaluation?.falseActivationsPerHour;
-  if (perHour != null) facts.push({ term: "False / hour", value: `${perHour.toFixed(perHour < 10 ? 1 : 0)}${note}` });
+  if (perHour != null) facts.push({ term: "False / hour", value: perHour.toFixed(perHour < 10 ? 1 : 0), ...(note ? { note } : {}) });
   return facts;
 }
 
