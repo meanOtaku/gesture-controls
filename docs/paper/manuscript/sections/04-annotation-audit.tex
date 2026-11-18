@@ -29,11 +29,14 @@ Each sample has an original \nolinkurl{label} and an optional \nolinkurl{manual_
 These rules guard against two mistakes. A blank manual field does not mean someone checked the sample and found no gesture. And an older script that reads only the \nolinkurl{label} column will ignore the corrections even when it runs on a newer file. Every result therefore has to name the loader and evaluator it used as well as the label version. Unit tests confirm that the override and fallback rules work; they cannot tell us whether the human-drawn boundaries are correct.
 \fi
 
+% The two-column paper shows the signals around every pinch instead (Fig.~\ref{fig-event-locked}).
+\ifmorefigures
 \begin{widefigure}
 \centering
 \includegraphics[width=1\linewidth,height=\textheight,keepaspectratio,alt={Saved optical and gyroscope data with original and effective row-label bands from a manually revised recording.}]{figures/annotation-telemetry.png}
 \caption[Recorded PPG and gyroscope data with original and corrected labels]{Recorded PPG and gyroscope data from \nolinkurl{gesture-dataset-pinch_hold-2026-11-03T01-05-59.434Z}, with original and corrected label bands. Time is relative to the first PPG sample on the watch clock. For display only, each PPG channel is centred on its median and scaled by its MAD; gyroscope magnitude is in rad/s. No model output is shown.}\label{fig-annotation}
 \end{widefigure}
+\fi
 
 \iffull
 \subsect{Audit method}\label{audit-method}

@@ -6,8 +6,8 @@ variants are frozen in [`../archive/`](../archive/) for reference only.
 | Build file | Output | Notes |
 | --- | --- | --- |
 | `paper-ieee.tex` | IEEE conference paper (`IEEEtran`, conference mode) | Latest verified build: 6 pages including references; confirm the target venue's limit |
-| `paper-lncs.tex` | Springer LNCS conference paper (`llncs`, `splncs04`) | Latest verified build: 16 pages including references; confirm the target venue's limit |
-| `report.tex` | Project report (`report` class, 12 pt, 1.5 spacing) | Latest verified build: 66 physical PDF pages including front matter and appendices |
+| `paper-lncs.tex` | Springer LNCS conference paper (`llncs`, `splncs04`) | Latest verified build: 18 pages including references; confirm the target venue's limit |
+| `report.tex` | Project report (`report` class, 12 pt, 1.5 spacing) | Latest verified build: 68 physical PDF pages including front matter and appendices |
 
 Build any of them with `latexmk -pdf <file>.tex`. PDFs and TeX temporaries are git-ignored.
 The LNCS paper and the report use `placeins` (`tlmgr install placeins`); without it they fall back to

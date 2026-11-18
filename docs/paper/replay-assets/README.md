@@ -1,4 +1,4 @@
-# Replay assets: operating curves and event confusion
+# Replay assets: operating curves, event confusion and signal figures
 
 The data and figures behind the paper's operating-curve figure (`fig-operating`) and the current model's event
 confusion matrix (`fig-event-confusion`). Both come from replaying model files over recordings; nothing is trained and
@@ -41,3 +41,29 @@ the repository. After plotting, copy the two PDFs to `../manuscript/figures/`.
 
 The first model's sweep also reproduces the manuscript's sensitivity statement (one false activation at 0.98, two at
 0.95), which `revision-assets/hand-labelled-replay.json` records but no script there produces.
+
+## Signal figures
+
+`signal_figures.py` makes two more figures from the repository's recordings and model files (nothing from Model Lab):
+
+| File | What it is |
+| --- | --- |
+| `event-locked.pdf/png` | `fig-event-locked`: gyroscope, acceleration change and scaled green PPG around every pinch-in and pinch-out start with a full history in the 22 training recordings of `trained-models/pinch_in-motion` (hand-corrected labels), against random no-gesture moments |
+| `event-locked-compact.pdf/png` | The same for pinch-in only, gyroscope and PPG, one column wide (the IEEE paper) |
+| `blind-spot.pdf/png` | `fig-blind-spot`: the first model (`trained-models/pinch_in-hand-labeled`) on one held-out pinch-in with 6 s of everyday motion spliced in to end 1 s before it, scored with all-history and motion-filtered scaling |
+| `signal-figures.json` | The plotted data, the splice counts over all 50 pinches (43 caught without motion, 13 with all-history scaling, 40 motion-filtered) and the pinch-in to pinch-out interval |
+
+The splice reuses `docs/research/artifacts/readiness-2026-11/readiness.py`'s `busiest` and `splice`. Its counts differ by a
+few pinches from `docs/research/cnn-motion-hangover-2026-11.md` (11 and 41 at 1 s), because the motion segments are
+assigned to the pinches in a different order.
+
+```bash
+tools/label-trainer/.venv/bin/python docs/paper/replay-assets/signal_figures.py
+```
+
+```bash
+docs/paper/codex-assets/.venv/bin/python docs/paper/replay-assets/signal_figures.py --plot
+```
+
+The first takes about ten seconds. Then copy `event-locked.pdf`, `event-locked-compact.pdf` and `blind-spot.pdf` to
+`../manuscript/figures/`.
