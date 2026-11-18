@@ -8,9 +8,9 @@
 The prototype combines Sony WH-1000XM5 consumer headphones, a Samsung Galaxy Watch and a Tauri desktop application \cite{tauri}. The headphones provide head orientation through the open-source sony-head-tracker interface \cite{sonyheadtracker}. The watch streams raw green, red and infrared PPG through the Samsung Health Sensor SDK \cite{samsungsdk}, along with three-axis acceleration and angular velocity. Both devices act only as sensors; training, inference and every interaction decision happen on the laptop. A camera is used while recording to produce reference labels from MediaPipe hand landmarks \cite{mediapipe}, but it plays no part in normal use.
 
 \iffull
-The watch can connect over Bluetooth Low Energy or Wi-Fi. Samples keep the timestamps assigned on the watch rather than the time they arrive at the laptop. We treat transport, buffering and resampling as separate steps: the model works on a 50\,Hz grid, but that does not mean every sensor was sampled at 50\,Hz or that the detector makes a decision every 20\,ms. We record the actual input and decision rates for each experiment.
+The watch can connect over Bluetooth Low Energy or Wi-Fi. Samples keep the timestamps assigned on the watch rather than the time they arrive at the laptop. We treat transport, buffering and resampling as separate steps: the first model works on a 50\,Hz grid and later ones on 100\,Hz, but that does not mean every sensor was sampled at that rate or that the detector makes a decision every tick. We record the actual input and decision rates for each experiment.
 \else
-The watch connects over Bluetooth Low Energy or Wi-Fi, and samples keep their watch timestamps. The model works on a 50\,Hz grid, which does not imply that every sensor was sampled at that rate.
+The watch connects over Bluetooth Low Energy or Wi-Fi, and samples keep their watch timestamps. The first model works on a 50\,Hz grid, later ones on 100\,Hz; neither implies every sensor was sampled at that rate.
 \fi
 
 \begin{widefigure}
@@ -22,6 +22,9 @@ The watch connects over Bluetooth Low Energy or Wi-Fi, and samples keep their wa
 \subsect{Head targeting and paired interaction}\label{head-targeting-and-paired-interaction}
 
 Head orientation is mapped to a calibrated point on the screen. This is head-directed selection; we do not track the eyes. While the head rests on the volume target, a fresh pinch-in event starts a grab. Wrist roll relative to the grab position then sets an absolute volume level, and a separate pinch-out event ends the grab. Silence from the detector is never taken to mean the fingers have opened, and further pinch-in events during a grab are ignored.
+\iffull
+In the application this interaction is a recipe that the user sets up, with pinch-in and pinch-out models they train themselves; the recipe the application ships with holds the watch's button in place of the pinch, so it works before any model has been trained.
+\fi
 
 \iffull
 The reason for this split is that a pinch is a momentary event, while adjusting the volume takes time. Letting one classifier score drive the output directly would tie the two together. Instead, recognition, interaction state and cancellation are handled separately. A grab also ends when the head leaves the target, when the user presses Escape, when the data become stale or are rejected, when the mode changes or when the model is replaced. If a start and a release arrive together, the release wins.
@@ -32,7 +35,7 @@ Because a pinch is momentary while adjusting the volume takes time, recognition,
 \subsect{Bounded actuation and failure handling}\label{bounded-actuation-and-failure-handling}
 
 \iffull
-The application has three modes: Off, Monitor and Live. Monitor shows what the system would do without touching the system volume, and a saved Live setting is lowered to Monitor at startup, so the system never acts on its own after a restart. All output goes through the interaction policy; the web view cannot inject gesture events directly. Each model is checked against its declared hash and input format before loading. A matching hash shows the file is intact, not that the model works well.
+The application has three modes: Off, Monitor and Live. In Monitor, gesture detections are shown but cannot touch the system volume (the watch-button recipe does not depend on a model), and a saved Live setting is lowered to Monitor at startup, so the system never acts on its own after a restart. All output goes through the interaction policy; the web view cannot inject gesture events directly. Each model is checked against its declared hash and input format before loading. A matching hash shows the file is intact, not that the model works well.
 \else
 Off, Monitor and Live modes control actuation: Monitor shows what the system would do without changing the volume, and a saved Live setting starts as Monitor. All output passes through the interaction policy, and each model is checked against its declared hash and input format before loading. The wrist mapper bounds the rate and range of change, and queued volume writes are tagged with their grab so stale writes are discarded; a write already sent to the operating system still completes.
 \fi

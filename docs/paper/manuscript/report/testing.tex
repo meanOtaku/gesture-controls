@@ -36,7 +36,7 @@ The Rust total, 950 tests, also includes 117 tests for the separate drone-contro
 
 \subsection{What the tests check}
 
-\paragraph{Fail-closed behaviour.} Many of the backend tests feed the decision chain with bad input (out-of-order timestamps, stale orientation, a different device, non-finite values, a model that returns something other than a probability) and check that an open grab is released and no volume change is made. The gesture policy has tests for its cancellation paths and for the rule that a simultaneous release beats a start.
+\paragraph{Fail-closed behaviour.} Many of the backend tests feed the decision chain with bad input (out-of-order timestamps, stale orientation, a different device, non-finite values, a model that returns something other than a probability) and check that an open grab is released and no volume change is made. The recipe engine has tests for its cancellation paths and for the rule that a simultaneous release beats a start.
 
 \paragraph{Model integrity.} The label-inference tests try to load bundles that are malformed, oversized, carry the wrong hash, declare the wrong features or contain non-finite weights, and check that each one is refused.
 
