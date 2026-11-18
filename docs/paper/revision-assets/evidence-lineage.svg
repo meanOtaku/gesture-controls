@@ -9,7 +9,7 @@
     <dc:format>image/svg+xml</dc:format>
     <dc:creator>
      <cc:Agent>
-      <dc:title>Matplotlib v3.11.2, https://matplotlib.org/</dc:title>
+      <dc:title>Matplotlib v3.10.8, https://matplotlib.org/</dc:title>
      </cc:Agent>
     </dc:creator>
    </cc:Work>
@@ -124,32 +124,32 @@ z
 " clip-path="url(#p4f568918e0)" style="fill: #444444; stroke: #444444; stroke-width: 1.2; stroke-linecap: round"/>
    </g>
    <g id="text_1">
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(37.622313 102.049125)">Historical cue/camera labels</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(45.819969 114.051859)">October–early November</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(13.02075 126.054594)">Mixed benchmarks; multiple protocols</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(37.622313 103.015375)">Historical cue/camera labels</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(45.819969 114.213187)">October–early November</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(13.025438 125.411)">Mixed benchmarks; multiple protocols</text>
    </g>
    <g id="text_2">
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(247.64375 102.049125)">Existing manuscript tables</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(248.922656 114.051859)">Fusion, CNN / trees, LODO</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(242.25625 126.054594)">Retain as historical evidence</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(247.64375 103.015375)">Existing manuscript tables</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(248.929688 114.213187)">Fusion, CNN / trees, LODO</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(242.257031 125.411)">Retain as historical evidence</text>
    </g>
    <g id="text_3">
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(49.815281 222.173758)">Hand-labelled directory</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(17.222313 234.176492)">37 exports → 28 unique sensor pairs</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(29.265281 246.179227)">14 have manual-label PPG rows</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(20.300438 258.181961)">Freeze sensor + annotation hashes</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(49.817625 223.542469)">Hand-labelled directory</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(17.222313 234.740281)">37 exports → 28 unique sensor pairs</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(29.267625 245.938094)">14 have manual-label PPG rows</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(20.301219 257.135906)">Freeze sensor + annotation hashes</text>
    </g>
    <g id="text_4">
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(244.422656 222.173758)">pinch_in-ae0a22bf manifest</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(246.554688 234.176492)">20 train + 8 evaluation IDs</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(240.189844 246.179227)">82.46% recorded event recall</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(238.855469 258.181961)">0 observed false activations/h</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(244.422656 223.403406)">pinch_in-ae0a22bf manifest</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(246.554688 234.879344)">20 train + 8 evaluation IDs</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(240.194531 246.077156)">82.46% recorded event recall</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(238.855469 257.274969)">0 observed false activations/h</text>
    </g>
    <g id="text_5">
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(440.419875 222.173758)">Needed before headline update</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(444.108938 234.176492)">Recover event log + exposure</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(434.375344 246.179227)">Audit label versions and all tuning</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(446.3105 258.181961)">Run a prospective frozen test</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(440.422219 223.542469)">Needed before headline update</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(444.112063 234.740281)">Recover event log + exposure</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(434.375344 245.938094)">Audit label versions and all tuning</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(446.315969 257.135906)">Run a prospective frozen test</text>
    </g>
    <g id="text_6">
     <text style="font-weight: 700; font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="314.1" y="175.209812" transform="rotate(-0 314.1 175.209812)">No direct improvement claim across different cohorts, labels or thresholds</text>

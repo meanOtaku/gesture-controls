@@ -9,7 +9,7 @@
     <dc:format>image/svg+xml</dc:format>
     <dc:creator>
      <cc:Agent>
-      <dc:title>Matplotlib v3.11.2, https://matplotlib.org/</dc:title>
+      <dc:title>Matplotlib v3.10.8, https://matplotlib.org/</dc:title>
      </cc:Agent>
     </dc:creator>
    </cc:Work>
@@ -157,34 +157,34 @@ z
 " clip-path="url(#pa5500aeca8)" style="fill: #444444; stroke: #444444; stroke-width: 1.2; stroke-linecap: round"/>
    </g>
    <g id="text_1">
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(30.4955 93.622245)">1. Canonical recording groups</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(27.024406 105.624979)">Sensor hashes + label versions</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(27.012688 117.627714)">Keep aliases in the same group</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(30.500188 94.588495)">1. Canonical recording groups</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(27.024406 105.786307)">Sensor hashes + label versions</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(27.015813 116.98412)">Keep aliases in the same group</text>
    </g>
    <g id="text_2">
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(261.914062 93.622245)">2. Development only</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(251.973438 105.624979)">Grouped inner validation</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(230.278125 117.627714)">Choose architecture + thresholds</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(261.914062 94.588495)">2. Development only</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(251.975781 105.786307)">Grouped inner validation</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(230.285156 116.98412)">Choose architecture + thresholds</text>
    </g>
    <g id="text_3">
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(444.938094 93.622245)">3. Freeze before new collection</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(434.041219 105.624979)">Models, code, matching, exclusions</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(445.49825 117.627714)">Declare hypotheses + budgets</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(444.941219 94.588495)">3. Freeze before new collection</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(434.041219 105.786307)">Models, code, matching, exclusions</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(445.500594 116.98412)">Declare hypotheses + budgets</text>
    </g>
    <g id="text_4">
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(445.595906 218.694885)">4. New participants / new days</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(442.041219 230.697619)">Strap refits + realistic negatives</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(445.166219 242.700354)">No fitting or threshold changes</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(445.595906 219.661135)">4. New participants / new days</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(442.045906 230.858947)">Strap refits + realistic negatives</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(445.168563 242.05676)">No fitting or threshold changes</text>
    </g>
    <g id="text_5">
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(231.403906 218.694885)">5. Continuous replay + live tasks</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(247.823438 230.697619)">Catch / miss / repeat / late</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(233.450781 242.700354)">Raw decision and action latency</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(231.40625 219.661135)">5. Continuous replay + live tasks</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(247.825781 230.858947)">Catch / miss / repeat / late</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(233.453125 242.05676)">Raw decision and action latency</text>
    </g>
    <g id="text_6">
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(48.904094 218.694885)">6. Report all outcomes</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(26.008781 230.697619)">Per-label and per-person results</text>
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(20.406438 242.700354)">Exposure + uncertainty + failures</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(48.904875 219.661135)">6. Report all outcomes</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(26.012688 230.858947)">Per-label and per-person results</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(20.411125 242.05676)">Exposure + uncertainty + failures</text>
    </g>
    <g id="text_7">
     <text style="font-size: 14px; font-family: 'DejaVu Sans'; text-anchor: middle" x="314.1" y="17.837812" transform="rotate(-0 314.1 17.837812)">Proposed confirmatory protocol — not yet performed</text>
