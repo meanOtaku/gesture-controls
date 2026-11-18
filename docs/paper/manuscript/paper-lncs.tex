@@ -4,9 +4,10 @@
 \input{preamble-common}
 \morefigurestrue
 \usepackage[hidelinks]{hyperref}
+\usepackage{placeins}
 \let\sect\section
 \let\subsect\subsection
-\newenvironment{widefigure}{\begin{figure}[t]}{\end{figure}}
+\newenvironment{widefigure}{\begin{figure}[htbp]}{\end{figure}}
 \newenvironment{pagewidefigure}{\begin{figure}[t]}{\end{figure}}
 \begin{document}
 \title{\paperTitle}

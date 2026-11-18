@@ -5,9 +5,9 @@ variants are frozen in [`../archive/`](../archive/) for reference only.
 
 | Build file | Output | Notes |
 | --- | --- | --- |
-| `paper-ieee.tex` | IEEE conference paper (`IEEEtran`, conference mode) | About 4.7 pages incl. references; limit is usually 6 |
-| `paper-lncs.tex` | Springer LNCS conference paper (`llncs`, `splncs04`) | 12 pages incl. references; LNCS limits are usually 12–16 |
-| `report.tex` | Project report (`report` class, 12 pt, 1.5 spacing) | Shared sections become chapters; report-only chapters in `report/` |
+| `paper-ieee.tex` | IEEE conference paper (`IEEEtran`, conference mode) | Latest verified build: 6 pages including references; confirm the target venue's limit |
+| `paper-lncs.tex` | Springer LNCS conference paper (`llncs`, `splncs04`) | Latest verified build: 16 pages including references; confirm the target venue's limit |
+| `report.tex` | Project report (`report` class, 12 pt, 1.5 spacing) | Latest verified build: 65 physical PDF pages including front matter and appendices |
 
 Build any of them with `latexmk -pdf <file>.tex`. PDFs and TeX temporaries are git-ignored.
 For Overleaf, upload this whole folder and choose the main document in the menu.

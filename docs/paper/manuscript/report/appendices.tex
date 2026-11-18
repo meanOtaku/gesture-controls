@@ -1,6 +1,43 @@
-% Report-only appendices.
+% Report-only appendices. Sources are repository artifacts, not new measurements.
 \chapter{Dataset Inventory}
-\todo{Recording inventory and hashes. Source: docs/paper/revision-assets/hand-labelled-inventory.csv.}
+
+The historical hand-labelled inventory contains 37 exported directories representing 28 distinct PPG/IMU stream pairs. Nine pairs are exact duplicates under different export names. Total PPG duration is 127.918 minutes across exports and 98.080 minutes after exact-stream deduplication. These are historical inventory counts, not independent participant sessions or no-gesture exposure.
+
+The machine-readable inventory is \nolinkurl{docs/paper/revision-assets/hand-labelled-inventory.csv}. Its fields identify the export, PPG duration and row count, manual-override and changed-row counts, gesture-label runs, excluded runs and manual intervals. A label-run count is not automatically an eligible event count: event eligibility also depends on the experiment's exclusions, input availability and matching rules.
+
+The companion \nolinkurl{docs/paper/revision-assets/evidence-audit.json} records sensor-column hashes and manifest associations. Exact PPG and IMU hash pairs identify duplicate source streams without depending on labels. Hashes establish exact identity, not independence of partial crops, participants or days. The original pinch-in model's 20 training and eight evaluation exports share no exact source stream in this audit.
+
+For replication, use the inventory and audit together rather than treating export names as unique recordings. Preserve the original sensor columns and timestamps, apply the effective-label rules in Chapter~\ref{reference-annotations-and-source-audit}, and group duplicate streams before defining any new split. Later recordings and model studies require their own versioned inventory; they must not be silently added to these historical denominators.
 
 \chapter{User Guide}
-\todo{How to run the system. Source: docs/using-the-application.md.}
+
+This appendix summarises the development workflow documented in \nolinkurl{docs/using-the-application.md} and the repository README. It does not certify clean-machine installation or physical-device acceptance on every platform.
+
+\section{Prerequisites and launch}
+
+Use the Node.js version specified by the checkout's \nolinkurl{.nvmrc}, the host prerequisites in \nolinkurl{docs/development/running-project.md}, a compatible Galaxy Watch and supported Sony headset tracking. Training additionally requires a complete repository checkout and \nolinkurl{uv} on the executable search path; importing an existing model does not require retraining. From the repository root:
+
+\begin{verbatim}
+npm ci
+npm start
+\end{verbatim}
+
+On macOS and Windows, the launcher uses the in-process headset tracker by default. Linux lacks the upstream hardware backend; sample-sender development is not evidence of physical Sony tracking. The documented sample workflow is:
+
+\begin{verbatim}
+npm run tauri -- dev
+# In a separate terminal:
+python3 tools/sony-head-tracker/scripts/send_sample.py
+\end{verbatim}
+
+\section{Connect, record and review}
+
+Keep inference Off initially. Connect the watch using its default Bluetooth LE transport and approve the desktop with ``Trust this computer'', or select Wi-Fi on a non-isolated local network. Check incoming streams in Live signals and calibrate the headphone centre and named target locations. Calibration is head-directed targeting, not eye tracking.
+
+Record separate gesture and ordinary-activity sessions. Camera-assisted annotation is a recording aid only; review its intervals and exclusions against the saved evidence before training. Do not interpret a blank manual override as proof that an interval was reviewed. Keep source-grouped development and evaluation recordings separate, and preserve original timestamps.
+
+\section{Model review and actuation}
+
+Use Model Lab to train or import and inspect models, then begin in Monitor mode. Monitor displays detections but cannot change the system volume. A remembered Live setting is reduced to Monitor on application startup; Live must be deliberately selected again. Review missed starts, releases, false activations and input availability before considering actuation.
+
+Only after the applicable release-readiness and platform checks should Live be tried with an isolated test audio output. Head-target exit, Escape and stale/rejected input provide cancellation paths, but these do not establish a measured guarantee against unintended actions. The full operating guide and \nolinkurl{docs/release-readiness.md} remain the references for current controls and acceptance gates.

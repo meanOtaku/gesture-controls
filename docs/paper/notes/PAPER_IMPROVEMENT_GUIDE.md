@@ -2,9 +2,50 @@
 
 **Prepared:** 17 November 2026
 
-**Reviewed repository snapshot:** `2010e2837c65854275a58933e3836e28f5cafe62`
+**Original evidence-review snapshot:** `2010e2837c65854275a58933e3836e28f5cafe62`
+
+**Revision status reviewed against:** `a052f7b`, followed by the local shared-manuscript correction pass documented below. The status and follow-up checklist supersede the original future-tense suggestions where the manuscript now incorporates them. Historical evidence links remain pinned to their original snapshot.
 
 **Purpose:** An editable revision companion for the IEEE paper, LNCS paper and project report—not a replacement manuscript, a new experiment, or a claim of research priority.
+
+## Revision status — start here
+
+A checked item means the manuscript now addresses the writing/reporting recommendation, not that a proposed experiment has been performed or a capability physically validated. Unchecked items remain open. R1–R7 have now been applied to the shared manuscript and rebuilt in all three formats. The dissertation's registered title is unchanged. Empty inventory/user-guide appendices were replaced with documented content; missing institutional dates and prescribed certificate wording remain explicit placeholders.
+
+### Incorporated in the revised manuscript
+
+- [x] **§1 — Prior-work positioning:** distinguish μDPad's custom spatial-PPG hardware from the commercial watch while acknowledging interaction overlap and commercial-watch precedents (`sections/02-related-work.tex`).
+- [x] **§2.1 — Systems contribution:** describe recognition, sustained control and cancellation separately; distinguish head targeting from eye tracking and camera-assisted annotation from camera-independent use (`sections/01-introduction.tex`, `03-system-design.tex`). The abstract's remaining guarantee is tracked below.
+- [x] **§2.2 — Offline-to-live investigation:** include motion-contaminated scaling, representative training data and context-dependent failures (`05-detection-method.tex`, `06-results.tex`, `07-discussion.tex`). Interpretation still needs the wording corrections below.
+- [x] **§2.3 — Evidence-aware evaluation:** retain effective-label rules, exact-source duplicate audit and the finding of no shared stream in the original split; distinguish leakage risk from demonstrated score inflation (`04-annotation-audit.tex`).
+- [x] **§3.1 — Motion-history intervention:** add the mechanism, parameters, recovery counts and explicit splice/peak-window limitations. The detailed figure is report-only; the conference text gives a condensed account.
+- [x] **§3.2 — CNNv2:** add architecture, input grid, jerk channel/gate, augmentation, context-specific counts and reused-benchmark limitations. Detailed architecture/component discussion is report-only.
+- [x] **§3.3 — Paired detectors:** report both transitions separately and disclose that only an archived summary was recovered. Full provenance recovery remains open.
+- [x] **§3.4 — Four-class experiment:** include accuracy versus balanced accuracy/event reliability, delayed-state target, weak hold recall and fixed-split seed limitations. The decision confusion figure appears in LNCS/report, not IEEE.
+- [x] **§3.6 — Haptic confound:** discuss the feedback-loop hypothesis and disclose that no motor-aligned causal study has been completed (`07-discussion.tex`, `08-prospective-protocol.tex`).
+- [x] **§4 — Protocol distinctions:** explicitly separate 300–900 ms paper replay from 100–900 ms application accounting and distinguish onset, delayed-state and interaction outcomes. Add the same-cohort current-model comparison without merging generations.
+- [x] **§5 — Future-study plans:** describe matched modalities/preprocessing, physical motion/haptics, prospective participants/refits, complete tasks/faults and headset comparisons as planned, not measured (`08-prospective-protocol.tex`). Execution remains unchecked below.
+- [x] **Reproducibility assets:** add `../codex-assets/` and `../replay-assets/` with saved evidence and regeneration/replay instructions. The newer application model's Model Lab files are not bundled, so this is not complete independent reproduction of that model.
+
+### Applied manuscript corrections from the revision review
+
+- [x] **R1 — Abstract: remove the unwanted-command guarantee.** In both branches of `../manuscript/abstract.tex`, replace “stop a missed or spurious detection from becoming an unwanted command.” Suggested wording: “Separate pinch-start and pinch-release detectors and explicit cancellation paths separate recognition from sustained actuation and provide ways to terminate a grab.” A spurious eligible start can still initiate an unwanted grab; cancellation is not guaranteed prevention.
+- [x] **R2 — Limitations: identify models and source eras explicitly.** In `sections/09-limitations.tex`, attribute reconstructed specifications/missing original provenance to `pinch_in-ae0a22bf`, rather than ambiguously to the “latest/current” model. Separately describe the newer application's stored run specification and any remaining missing files. Scope snapshot `6709b2a` to the original audit, not all later experiments. Check the Results and conference branches for the same distinction.
+- [x] **R3 — Results: correct the zero-false-activation threshold wording.** In `sections/06-results.tex`, the strictest swept threshold, 0.999, gives 39/57 pinch-ins, 52/59 pinch-outs and **30/56** hold entries. Hold entry reaches **35/56 at 0.995**, also with zero observed false activations. If retaining 39/57, 52/59 and 35/56 together, describe them as the highest catches among the swept zero-observed-FA thresholds, not one strictest threshold. These are descriptive evaluation sweeps, not deployment selections (`../replay-assets/replay-sweeps.json`).
+- [x] **R4 — Results: locate threshold-sensitivity false events accurately.** The everyday-activity recording peaks at about 0.970, but the additional event at 0.98 occurs in an **unlabelled interval elsewhere in the cohort**. At 0.95, one event occurs in everyday noise and one in an unlabelled interval. Clarify this in both Results branches so a 0.970 maximum is not implied to cross 0.98 (`../revision-assets/hand-labelled-replay.json`, `thresholdSweep.rows`).
+- [x] **R5 — Title: align with the demonstrated scope.** Suggested `preamble-common.tex` title: **“Look, Pinch, Turn: Continuous Desktop Control with Unmodified Consumer Wearables.”** The present “from the Desktop to AR/VR” implies a demonstrated headset extension; “hands-free” is ambiguous when finger/wrist movement is required. The paper title has been applied; the registered dissertation title is preserved separately.
+- [x] **R6 — Results/Discussion: qualify exploratory interpretations.** Replace “compare methods but are not results” with “exploratory development results rather than independent performance estimates.” Replace “differences of one to three pinches are within chance” with a statement that the small single-session sample does not support a confident ranking, unless a suitable uncertainty analysis is supplied. Scope claims that representative data mattered more than architecture to the explored configurations on the reused benchmark, including the shortened conference text.
+- [x] **R7 — Build documentation and figure placement.** Update `../manuscript/README.md`'s stale approximate page counts: the corrected build produced **6 IEEE pages, 16 LNCS pages and 65 report PDF pages**, including references/front matter as applicable. Check the selected venue's actual limit. Keep LNCS confusion figures nearer their Results discussion rather than floating into the bibliography's page sequence; rebuild after changes. Page counts alone do not verify visual layout.
+
+### Verification already completed for this review
+
+- [x] Built the IEEE and LNCS papers in scratch from `a052f7b`: 6 and 15 pages respectively; no unresolved references or overfull boxes were reported. Missing template files were supplied in scratch, not added to the repository.
+- [x] Independently replayed the original model with its historical trainer: 47/57 catches, zero false activations, median 441.999872 ms; threshold 0.98 adds one false event and 0.95 adds two.
+- [x] Checked the newer model's committed threshold sweep and event-confusion implementation against the reported figures.
+- [ ] Independently replay the newer application model with its actual weights and run files. The documented Model Lab location was absent on this host; checking committed outputs is not an independent weight replay.
+- [x] Rebuilt all three corrected variants: IEEE 6 pages, LNCS 16 pages, report 65 physical PDF pages. No unresolved references or overfull boxes were reported. Verified that LNCS event confusion appears on page 11, before Discussion on page 12. LNCS retains its template's amsmath vector-accent warning. This is build/text/float-order verification, not a claim of exhaustive visual inspection.
+- [ ] Supply the report's submission month/year, declaration date and any prescribed institutional certificate wording. Do not invent these details.
+- [ ] Confirm the actual selected venues' page limits and submission requirements.
 
 ## Reading order
 
@@ -356,19 +397,26 @@ Only add “demonstrates improved task performance,” “generalises across use
 
 ## 8. Author checklist
 
-- [ ] Choose whether this revision reports the historical system, CNNv2, or explicitly separated generations.
-- [ ] Correct the μDPad comparison without removing its interaction overlap.
-- [ ] State exactly which hardware is commercial and which SDK/device access is required.
-- [ ] Select and freeze the primary target, cohort and temporal matching protocol.
-- [ ] Audit underlying artifacts before adding the later paired detector outcomes.
-- [ ] Decide whether the multiclass experiment belongs in the main paper or supplement.
-- [ ] Add the motion-history mechanism and its synthetic/live boundary.
+- [x] Choose explicitly separated model generations, retaining the original 47/57 replay as the headline development result.
+- [x] Correct the μDPad comparison without removing its interaction overlap.
+- [x] Identify the consumer headphones/watch, Samsung raw-sensor SDK and laptop-side computation. This does not establish compatibility with every commercial watch.
+- [x] State the original headline cohort and 300–900 ms replay protocol; distinguish later application accounting.
+- [ ] Freeze a prospective protocol before new confirmatory data collection; stating the historical protocol is not a prospective freeze.
+- [x] Audit the available paired-detector evidence sufficiently to label it as an archived summary only, rather than a fully recovered run.
+- [ ] Recover the paired-detector run artifacts, exact source groups and complete event logs for independent reproduction.
+- [x] Include the multiclass findings in Results, with the decision confusion figure in LNCS/report and detailed evidence in the asset package.
+- [x] Add the motion-history mechanism and its synthetic/live boundary.
+- [x] Discuss haptic confounds as a hypothesis and specify a motor-logged physical study, without claiming that study was performed.
 - [ ] Recover haptic timings before attempting event-aligned haptic claims.
 - [ ] Run matched modality/preprocessing comparisons before claiming PPG or architecture gains.
-- [ ] Measure complete interactions and physical fault behaviour.
-- [ ] Collect an explicitly prospective test after freezing the method.
-- [ ] Reconcile every abstract/result number with its own model, labels, denominators and exposure.
-- [ ] Keep the report, IEEE and LNCS variants scientifically consistent.
+- [ ] Measure complete interactions and physical fault behaviour (Priority 1).
+- [ ] Run matched IMU-only, PPG-only and fused comparisons (Priority 2).
+- [ ] Test physical post-motion recovery and haptics-on/off behaviour (Priority 3).
+- [ ] Collect an explicitly prospective test across days/refits/participants after freezing the method (Priority 4).
+- [ ] Run the later headset/out-of-view comparison before claiming an AR/VR advantage.
+- [x] Apply the reviewed abstract, model-identity, threshold, exposure and exploratory-wording corrections (R1–R4 and R6). This does not close the missing-artifact and future-experiment items above.
+- [x] Apply the revised paper title, build documentation and Results float placement (R5 and R7).
+- [x] Rebuild IEEE, LNCS and report after the shared corrections; verify the reported counts and absence of unresolved references/overfull boxes. Institutional placeholders and unperformed validation remain open.
 
 ## 9. Evidence and primary references
 
