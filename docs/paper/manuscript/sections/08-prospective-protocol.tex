@@ -10,7 +10,7 @@
 \iffull
 This section describes planned work; none of these experiments has been run yet. The first step is to freeze everything that affects the result: model files, label versions, source groups, exclusions, thresholds, matching rules and how unavailable input is counted. Before any headline comparison, the full event logs for the current model and the pinch-out data should be recovered.
 \else
-Three studies come next; none has been run yet. First, with models, labels and thresholds frozen in advance, compare IMU-only, PPG-only and fused inputs, rolling against median scaling, and the CNN against engineered-feature trees on the same corrected data. Second, test generalisation with multiple participants across new days and strap refits, holding out whole participants for user-independent claims. Third, run a counterbalanced task comparing look--pinch--turn with a conventional volume control, with fault trials and a latency breakdown, and repeat the selection task inside an AR/VR headset, comparing its camera pinch, the watch pinch and both combined.
+Three studies come next; none has been run yet. First, with models, labels and thresholds frozen in advance, compare IMU-only, PPG-only and fused inputs, rolling against median scaling, and the CNN against engineered-feature trees on the same corrected data, and repeat the motion and haptic-feedback tests with real wrist movement and logged motor activity. Second, test generalisation with multiple participants across new days and strap refits, holding out whole participants for user-independent claims. Third, run a counterbalanced task comparing look--pinch--turn with a conventional volume control, with fault trials and a latency breakdown, and repeat the selection task inside an AR/VR headset, comparing its camera pinch, the watch pinch and both combined.
 \fi
 
 \iffull
@@ -27,6 +27,14 @@ Three studies come next; none has been run yet. First, with models, labels and t
 
 \iffull
 The smallest useful ablation compares IMU-only, PPG-only and fused inputs on the same corrected source groups, then rolling against median scaling, then the CNN against the engineered-feature trees. All variants should share the selection procedure, false-activation target, input rate, exclusions and matching rules. Each may have its own threshold, chosen the same way on development data and never on test data. Synthetic splices are useful, but real pinches after real movement should be tested as well.
+\fi
+
+\iffull
+\subsect{Physical motion recovery and haptic feedback}\label{physical-motion-and-haptics}
+\fi
+
+\iffull
+The motion-filtered scaling was tested only with spliced motion. A physical trial should compare rolling, all-history median and motion-filtered scaling after predefined real wrist movements, with pinches at predefined delays, and count false events during and after the movement as well as misses. A separate trial should compare matched haptics-on and haptics-off sessions with the motor's activation times logged, including releases made while feedback is playing, to test whether feedback causes detections and whether suppressing input around it masks a real release. Parameters should be frozen before these recordings.
 \fi
 
 \iffull

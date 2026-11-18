@@ -15,6 +15,10 @@
 %   \iffull <long text, report only> \else <short text, papers only> \fi
 % or \iffull <report-only text> \fi. report.tex sets \fulltrue; the papers leave it false.
 \newif\iffull
+% Figures the LNCS paper and the report carry but the 6-page IEEE paper leaves out. Wrap them as
+%   \ifmorefigures <figure> \fi
+% paper-lncs.tex and report.tex set \morefigurestrue; paper-ieee.tex leaves it false.
+\newif\ifmorefigures
 \newcommand{\paperTitle}{Look, Pinch, Turn: A Hands-Free Way to Interact with Computers, from the Desktop to AR/VR}
 \newcommand{\paperShortTitle}{Look, Pinch, Turn}
 % Registered M.Tech dissertation title, used on the report.

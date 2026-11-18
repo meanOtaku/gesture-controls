@@ -19,6 +19,16 @@ The audit also exposed a reproducibility problem that is easy to fall into. A re
 The audit also shows how easily a dataset can mislead. A re-exported recording looks like a new session, and corrections vanish when a script reads the old label column; hashing streams and storing both label versions makes this visible.
 \fi
 
+\iffull
+\subsect{The gap between offline scores and continuous use}\label{offline-to-live-gap}
+\fi
+
+\iffull
+The later generations point to why a detector that scores well offline can still fail in use. Wrist motion corrupts the normalisation history and silences pinches that follow it; pinches made during real pinch--hold--turn--release use differ from the ones recorded for training; and everyday movement produces signals that resemble a pinch. The first model's nine false activations on new everyday recordings, and the four-class network's 95.7\% accuracy alongside 13--46 false activations per hour, both show that a summary score can hide the behaviour that decides whether control is usable. Newer is also not uniformly better: on the first model's own eight evaluation recordings, the multi-gesture model the application now runs caught fewer pinch-ins and produced false activations where the first produced none, although the redesigned network ranked higher on the later benchmark. The most effective change we found was not architectural: adding real-use and everyday-activity recordings to training improved real-use recall more than any network change. These mechanisms come from replays and spliced motion, so the next step is to measure them physically, not to add model capacity.
+
+The watch's own feedback is a further source of error that we have not yet measured. Its vibration motor shakes the device that supplies the inertial input, so a haptic confirmation could itself be detected as a gesture and cause another action. That vibration affects smartwatch accelerometers is well known \cite{viband}; what matters here is whether it closes a loop in this interaction, and whether suppressing input around feedback would also hide a genuine release. We have recorded everyday activity with feedback active, but without a log of when the motor ran, so no time-aligned analysis is yet possible.
+\fi
+
 \subsect{Prospects for AR and VR}\label{prospects-for-ar-and-vr}
 
 \iffull
@@ -52,9 +62,9 @@ Manual review is itself a measurement, with its own error. The definitions of co
 \fi
 
 \iffull
-Seeing zero false activations does not mean the true rate is zero. If false events follow a constant-rate Poisson process, observing none in \(T_h\) eligible hours gives a one-sided 95\% upper bound of \(-\ln(0.05)/T_h\) \cite{garwood1936poisson}, the basis of the ``rule of three'' for zero counts \cite{hanley1983zero}. Real activities and people are not that uniform, so this is an approximation. With 0.48 eligible hours, the upper bound is 6.2 false activations per hour, which is far from all-day reliability.
+Seeing zero false activations does not mean the true rate is zero. If false events follow a constant-rate Poisson process, observing none in \(T_h\) eligible hours gives a one-sided 95\% upper bound of \(-\ln(0.05)/T_h\) \cite{garwood1936poisson}, the basis of the ``rule of three'' for zero counts \cite{hanley1983zero}. Real activities and people are not that uniform, so this is an approximation. With 0.48 eligible hours, the upper bound is 6.2 false activations per hour, which is far from all-day reliability. The same model later produced 14.8 per hour on new everyday recordings (Section~\ref{later-model-generations}), above that bound, because the activities differed.
 \else
-Finally, zero observed false activations does not mean a zero rate. Under a constant-rate Poisson model, observing none in \(T_h\) hours gives a one-sided 95\% upper bound of \(-\ln(0.05)/T_h\) \cite{garwood1936poisson,hanley1983zero}; for 0.48\,h that is 6.2 per hour, far from all-day reliability.
+Finally, zero observed false activations does not mean a zero rate. Under a constant-rate Poisson model, observing none in \(T_h\) hours gives a one-sided 95\% upper bound of \(-\ln(0.05)/T_h\) \cite{garwood1936poisson,hanley1983zero}; for 0.48\,h that is 6.2 per hour, and the same model later produced 14.8 per hour on new everyday recordings.
 \fi
 
 \iffull

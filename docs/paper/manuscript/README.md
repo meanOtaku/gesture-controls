@@ -33,6 +33,8 @@ refs.bib                one bibliography (entries with % VERIFY still need check
 - Papers print the short conference text; the report prints everything. In `sections/`, wrap
   report-only detail as `\iffull … \fi`, or give both versions as `\iffull <long> \else <short> \fi`
   (each keyword on its own line). Edit the long branch for the report, the short one for the papers.
+- Wrap a figure that the LNCS paper and the report carry but the 6-page IEEE paper leaves out as
+  `\ifmorefigures … \fi`. `paper-lncs.tex` and `report.tex` set `\morefigurestrue`.
 - Mark unwritten text with `\todo{...}` (red in the PDF). Search for `\todo` before submitting.
 - Edit a shared section once; both papers and the report pick it up. Paper-only or
   report-only material goes in the wrapper or in `report/`, not in `sections/`.

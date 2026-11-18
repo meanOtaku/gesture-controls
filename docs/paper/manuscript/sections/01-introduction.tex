@@ -4,9 +4,9 @@
 \sect{Introduction}\label{introduction}
 
 \iffull
-Someone listening to music while they work may want to turn the volume down without reaching for the keyboard, the mouse or a tiny watch screen. Wearables make another option possible: look at a volume control on the screen, pinch to grab it, rotate the wrist to change the level, and release. Selection and manipulation are split between the head and the hand. Every part of this uses hardware people already own. The difficulty is that a smartwatch sees finger movement only indirectly. The motion of a pinch has to be picked out from everyday arm movement, the optical signal shifts with strap fit and placement, and a single false detection can change the volume when nobody asked it to.
+Someone listening to music while they work may want to turn the volume down without reaching for the keyboard, the mouse or a tiny watch screen. Wearables make another option possible: turn the head toward a volume control on the screen, pinch to grab it, rotate the wrist to change the level, and release. Selection and manipulation are split between the head and the hand. Every part of this uses hardware people already own. The difficulty is that a smartwatch sees finger movement only indirectly. The motion of a pinch has to be picked out from everyday arm movement, the optical signal shifts with strap fit and placement, and a single false detection can change the volume when nobody asked it to.
 \else
-Someone listening to music while they work may want to turn the volume down without reaching for the keyboard or mouse. Wearables offer another option: look at a volume control on the screen, pinch to grab it, rotate the wrist to set the level, and release. All of this uses hardware people already own. The difficulty is that a smartwatch sees finger movement only indirectly: a pinch has to be picked out from everyday arm movement, the optical signal shifts with strap fit, and one false detection can change the volume unasked.
+Someone listening to music while they work may want to turn the volume down without reaching for the keyboard or mouse. Wearables offer another option: turn the head toward a volume control on the screen, pinch to grab it, rotate the wrist to set the level, and release. All of this uses hardware people already own. The difficulty is that a smartwatch sees finger movement only indirectly: a pinch has to be picked out from everyday arm movement, the optical signal shifts with strap fit, and one false detection can change the volume unasked.
 \fi
 
 \iffull
@@ -23,16 +23,18 @@ We see the laptop as a first test-bed. AR/VR headsets already combine looking wi
 
 \iffull
 While preparing this evaluation we also found that the dataset was less independent than it looked. Some recordings had been exported more than once under different names, and the project's labels had changed over time, from cue-based and automatic camera labels to manually corrected ones. We report these findings because they directly affect which results can be trusted. All recordings come from one participant, the author, so the results describe a working prototype and its development history, not performance across a population.
+
+The detector also changed while we wrote. The main result comes from the first convolutional model. Later work changed how inputs are normalised after wrist motion, redesigned the network, paired it with a matching release detector, tried a single four-class network and finally combined pinch-in, pinch-hold and pinch-out in the multi-gesture model the application now runs. These later generations used different recordings, targets or selection rules, so we report each one separately with its own cohort and protocol, and never merge their numbers into one headline.
 \else
 We also found that the dataset was less independent than it looked: some recordings had been exported twice under different names, and labels changed over time from camera-based to manually corrected. All recordings come from one participant, the author, so the results describe a working prototype, not performance across a population.
 \fi
 
 This paper makes three contributions:
 \begin{itemize}
-\item a sensing-to-action design that combines consumer head tracking, smartwatch PPG and inertial sensing, and a paired grab/release policy with bounded output and explicit cancellation;
-\item a continuous, event-level evaluation of the pinch detector, including exposure-normalised false activations and a reproduction of the stored result by replay;
-\item a dataset audit showing how duplicate exports and changing label versions can distort results, together with a protocol for the confirmatory study that should follow.
+\item an implemented sensing-to-action architecture on unmodified consumer devices, in which recognition, sustained control and cancellation are explicitly separated;
+\item a source- and annotation-aware continuous evaluation of the available development recordings: event-level recall and exposure-normalised false activations, a dataset audit of duplicate exports and label versions, and historical and newer model generations kept distinct;
+\item an exploratory analysis of how wrist motion corrupts input normalisation and silences later pinches, with a candidate remedy, labelled as replay evidence rather than physical validation.
 \end{itemize}
-We do not claim that multimodal smartwatch sensing or convolutional classification is new in itself.
+We do not claim that multimodal smartwatch sensing, the pinch--rotate interaction or convolutional classification is new in itself. Our distinction is building and evaluating continuous control on unmodified consumer hardware.
 
 We address three questions. \textbf{RQ1:} how can the system keep a brief gesture event separate from sustained control and cancellation? \textbf{RQ2:} what does the recorded evidence show about the manually relabelled detector, and where are its gaps? \textbf{RQ3:} which failure modes and evaluation choices limit stronger claims about transfer across days and everyday reliability?

@@ -45,7 +45,7 @@ The model was saved without its event log, so we recovered it by replaying the s
 \begin{table}[t]
 \centering\small
 \caption[Replayed event outcomes of the pinch-in model]{Replayed event outcomes of the hand-labelled pinch-in model on its eight evaluation recordings.}\label{tab-replay}
-\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}Xr>{\raggedright\arraybackslash}X@{}}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{0.31\linewidth}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}p{0.22\linewidth}@{}}
 \toprule
 \textbf{Outcome} & \textbf{Value} & \textbf{Basis} \\
 \midrule
@@ -85,15 +85,21 @@ Fig.~\ref{fig:score-timeline} shows one evaluation recording over time. Of its 2
 \fi
 
 \iffull
-Latency is measured from the annotated start to the moment the event is emitted. The margin behind the zero false-activation count is thin. In the everyday-activity recording the highest score reached 0.970, just under the 0.99 threshold; lowering the threshold to 0.98 would have added one false activation, and 0.95 would have added two. We report this as a sensitivity check, not as a reason to pick a different threshold.
+Latency is measured from the annotated start to the moment the event is emitted. The margin behind the zero false-activation count is thin. In the everyday-activity recording the highest score reached 0.970, just under the 0.99 threshold; lowering the threshold to 0.98 would have added one false activation, and 0.95 would have added two. We report this as a sensitivity check, not as a reason to pick a different threshold. Figure~\ref{fig-operating} shows the whole trade-off, with the current model on the same recordings for comparison (Section~\ref{later-model-generations}).
 \else
-The margin behind the zero false-activation count is thin. In the everyday-activity recording the highest score reached 0.970 against the 0.99 threshold, and thresholds of 0.98 and 0.95 would have added one and two false activations.
+The margin behind the zero false-activation count is thin. In the everyday-activity recording the highest score reached 0.970 against the 0.99 threshold, and thresholds of 0.98 and 0.95 would have added one and two false activations. Fig.~\ref{fig-operating} shows the full trade-off.
 \fi
 
+\begin{widefigure}
+\centering
+\includegraphics[width=\linewidth,alt={Event recall against false activations per hour as the threshold varies, for the first model and the current model on the same eight recordings.}]{figures/operating-curve.pdf}
+\caption[Event-level operating curves]{Event recall against false activations per hour as the threshold falls from 0.999 to 0.1, on the eight recordings of Table~\ref{tab-replay} (300--900\,ms window). Open markers: thresholds chosen on training recordings. Dotted: the 6.2 per hour bound for zero events in 0.48\,h. The sweep is for display, not selection.}\label{fig-operating}
+\end{widefigure}
+
 \iffull
-There is no hand-labelled pinch-out model. A median pinch-out model exists, but its training data cannot be traced, so it is not a matched counterpart. The result above therefore covers pinch-in only, not the full grab-and-release interaction.
+In this generation there is no hand-labelled pinch-out model. A median pinch-out model exists, but its training data cannot be traced, so it is not a matched counterpart. The result above therefore covers pinch-in only, not the full grab-and-release interaction; later paired detectors are reported separately in Section~\ref{later-model-generations}.
 \else
-There is no matched hand-labelled pinch-out model, so these results cover pinch-in only.
+This generation has no matched hand-labelled pinch-out model, so these results cover pinch-in only.
 \fi
 
 \iffull
@@ -103,18 +109,20 @@ There is no matched hand-labelled pinch-out model, so these results cover pinch-
 \iffull
 The best historical configuration, trained on camera labels with noise recordings and without a still-hand gate and evaluated leave-one-day-out, caught 161 of 372 pinch-in starts (43.3\%). It produced seven false activations per hour on noise recordings and 49 per hour during no-gesture time inside pinch recordings. These rates use different denominators and should not be averaged.
 \else
-An earlier configuration trained on camera labels caught 161 of 372 pinch-in starts (43.3\%) under leave-one-day-out evaluation, with seven false activations per hour on noise recordings and 49 per hour within pinch recordings. Recall ranged from 21 of 171 on 14 October to 67 of 92 on 3 November (Fig.~\ref{fig-historical}), a spread that a pooled number hides.
+An earlier configuration trained on camera labels caught 161 of 372 pinch-in starts (43.3\%) under leave-one-day-out evaluation, with seven false activations per hour on noise recordings and 49 per hour within pinch recordings. Recall ranged from 21 of 171 on 14 October to 67 of 92 on 3 November\ifmorefigures{} (Fig.~\ref{fig-historical})\fi, a spread that a pooled number hides.
 \fi
 
 \iffull
 Performance varied widely by day: 21 of 171 on 14 October, 37 of 52 on 17 October, 67 of 92 on 3 November and 36 of 57 on 4 November (Fig.~\ref{fig-historical}). The later days support the earlier statement that the model catches about two thirds of unseen pinches; the pooled result does not. An earlier result of 204 of 372 came from a model trained on many October sessions and is not a clean October holdout.
 \fi
 
+\ifmorefigures
 \begin{widefigure}
 \centering
 \includegraphics[width=1\linewidth,height=\textheight,keepaspectratio,alt={Historical day-level continuous recall and condition-specific false activations for the selected camera-labelled configuration.}]{figures/historical-day-transfer.png}
 \caption[Historical camera-label results by day]{Historical camera-label results, leave-one-day-out. Bars show caught/eligible starts per day; the dashed line is the pooled 161/372. False-activation rates use each condition's own no-gesture time. All days come from one participant.}\label{fig-historical}
 \end{widefigure}
+\fi
 
 \iffull
 So, for RQ2: the stored files are intact, the hand-labelled pinch-in split is free of exact duplicates, and the stored development result can be reproduced. We cannot conclude that the manual relabelling improved recall over the older model, because the labels, recordings, preprocessing and thresholds all changed at once.
@@ -129,14 +137,94 @@ For RQ2, the stored result is reproducible and its split is free of exact duplic
 \iffull
 Earlier fusion experiments on a frozen benchmark raised the worst-split AUC from 0.789 to 0.837. That is a reason to study inertial fusion further, but it does not measure what PPG contributes to the current CNN. A matched comparison of IMU-only, PPG-only and fused inputs is still needed.
 \else
-Earlier exploratory work points to the open issues behind RQ3. Fusing inertial data raised worst-split AUC from 0.789 to 0.837 on a frozen benchmark, and a strong movement burst can inflate the normalisation scale and hide a pinch that follows it. Both need matched tests on the current model.
+Earlier exploratory work points to the open issues behind RQ3. Fusing inertial data raised worst-split AUC from 0.789 to 0.837 on a frozen benchmark, and a strong movement burst can inflate the normalisation scale and hide a pinch that follows it (Section~\ref{motion-filtered-scaling}). Both need matched tests on the current model.
 \fi
 
 \iffull
-The motion-normalisation study found a likely failure mode: a strong movement burst inflates the rolling scale and shrinks a pinch that follows it. Median scaling helped in several synthetic splices, but those numbers only checked whether the peak score 0.1--1\,s after the start crossed the threshold. That is neither continuous causal recall nor a live robustness test, and long bursts were still a problem.
+The motion-normalisation study found a likely failure mode: a strong movement burst inflates the rolling scale and shrinks a pinch that follows it. Median scaling helped in several synthetic splices, and leaving fast-motion history out of the scaling helped after long bursts (Section~\ref{motion-filtered-scaling}), but those numbers only checked whether the peak score 0.1--1\,s after the start crossed the threshold. That is neither continuous causal recall nor a live robustness test.
 \fi
 
 \iffull
 A November curriculum report recorded 15 of 19 pinch-in and 10 of 19 pinch-out catches on a small reserved pair of recordings, with no false activations. The same pair was used to choose the thresholds, so this is exploratory. These results answer RQ3: variation across days, label uncertainty, changes in normalisation and reuse of evaluation data limit our claims more than the choice of architecture does.
 
+\fi
+
+\subsect{Later model generations, reported separately}\label{later-model-generations}
+
+\iffull
+After the result above, the detector went through four further generations. Each used different recordings, targets or selection rules, so we report them side by side but do not merge them with the 47 of 57 result or with each other (Table~\ref{tab-generations}). All were scored with the trainer's own detection rule and the same 300--900\,ms match window as above; a later change that widens the window to 100--900\,ms was not applied to any number here. None is a prospective test: each cohort has been used in earlier project research.
+\else
+Four later generations, with their own recordings, targets and selection rules, are reported separately; all use the same 300--900\,ms window and none is a prospective test.
+\fi
+
+\iffull
+\begin{table}[t]
+\centering\small
+\caption[Later model generations]{Later model generations, each with its own cohort and threshold rule. Rows are not interchangeable and should not be ranked against Table~\ref{tab-replay}. FA: false activations.}\label{tab-generations}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{0.30\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Model and threshold rule} & \textbf{Outcome} \\
+\midrule
+\multicolumn{2}{@{}>{\raggedright\arraybackslash}p{\linewidth}@{}}{\emph{Live-style benchmark: 20 real-use, 102 moving and 57 resting pinch-ins; 0.61\,h everyday activity}} \\
+First model, \(\tau=0.99\) (manifest) & 7/20, 58/102, 47/57; 9 everyday FA (14.8 per hour) \\
+CNNv2, \(\tau=0.995\) chosen out of fold on training recordings & 13/20, 80/102, 44/57; no everyday FA; one FA each in moving and resting recordings \\
+\midrule
+\multicolumn{2}{@{}>{\raggedright\arraybackslash}p{\linewidth}@{}}{\emph{Paired binary detectors, 11 held-out recordings (archived summary only)}} \\
+Pinch-in, \(\tau=0.99\) by trainer budget & 95/120; 3.6 FA per hour; median 451\,ms \\
+Pinch-out, \(\tau=0.99\) by trainer budget & 96/127; 3.4 FA per hour; median 434\,ms \\
+\midrule
+\multicolumn{2}{@{}>{\raggedright\arraybackslash}p{\linewidth}@{}}{\emph{Four-class network, 16 test recordings, state delayed by 500\,ms (seed 17)}} \\
+Decisions, \(\tau=0.8\) chosen on validation & 95.73\% accuracy, 77.09\% balanced accuracy, 77.84\% macro-F1; pinch-hold recall 49.9\% \\
+Events & Pinch-in 125/179, 13.3 FA per hour; pinch-out 140/181, 21.7 per hour; hold entry 122/167, 46.3 per hour \\
+\midrule
+\multicolumn{2}{@{}>{\raggedright\arraybackslash}p{\linewidth}@{}}{\emph{The eight evaluation recordings of Table~\ref{tab-replay} (same cohort as the first model)}} \\
+First model, \(\tau=0.99\) & Pinch-in 47/57; no FA in 0.48\,h \\
+Current multi-gesture model, \(\tau\) per gesture chosen out of fold on training recordings & Pinch-in 40/57, 4 FA (8.3 per hour); pinch-out 53/59, 6.3 per hour; hold entry 37/56, 6.2 per hour \\
+\bottomrule
+\end{tabularx}
+\end{table}
+\fi
+
+\iffull
+\textbf{CNNv2.} The redesigned network works on a 100\,Hz grid and adds a tenth channel, an envelope of acceleration jerk. Accelerometer, gyroscope and PPG each have their own convolutional branch, joined partway and again at the end (Fig.~\ref{fig-cnnv2}). Training adds time and magnitude warping and copies of pinch recordings overlaid with recorded everyday wrist motion, three networks are averaged, and a gate lets a decision fire only if raw accelerometer jerk reached 157\,m/s\textsuperscript{3}, the tenth percentile of training pinches, within the previous 600\,ms. The benchmark splits by session so that no test pinch, or window overlapping one, was trained on. Its test set adds 20 pinches from a real-use session, 102 pinches made with the arm moving and 0.61\,h of everyday activity to the first model's three held-out pinch recordings. The threshold in Table~\ref{tab-generations} was chosen out of fold on the training recordings only, as the highest-recall cut-off with at most five false activations per hour; the same configuration retrained inside the application gave identical counts.
+
+\begin{widefigure}
+\centering
+\includegraphics[width=1\linewidth,height=0.35\textheight,keepaspectratio,alt={Three sensor-specific paths feed shared processing and an output head.}]{figures/16-cnnv2-architecture.pdf}
+\caption[CNNv2 branch structure]{CNNv2 branch structure: accelerometer with jerk envelope, gyroscope and PPG branches feed shared layers and a binary output. A conceptual diagram, not a layer-exact specification.}\label{fig-cnnv2}
+\end{widefigure}
+
+On this benchmark CNNv2 caught almost twice as many real-use pinches as the first model and 22 more moving pinches, with no false activation in the everyday recordings against nine, at the cost of three resting pinches (Fig.~\ref{fig-v2}). The component experiments behind it point to one lever above the others: making the training data resemble real use. The trainer's network, trained only on the first model's recordings, caught 3.0 of 20 real-use pinches; adding one real-use session and 20 minutes of everyday activity raised this to 12.7 (means of three seeds), whereas several network types reached 11--16 from the same 100\,Hz inputs, so the input rate was not what caused the misses. The jerk envelope was the only added input that helped in every group, and warping helped slightly. These comparisons chose thresholds on the test set to match false-activation rates, so they compare methods but are not results; only the out-of-fold row is reported as one. With 20 real-use pinches from one session, differences of one to three pinches are within chance, and repeated architectural exploration on one test set makes this development evidence.
+
+\begin{widefigure}
+\centering
+\includegraphics[width=1\linewidth,height=0.4\textheight,keepaspectratio,alt={Context-specific event recall and false activations for four stored model operating points.}]{figures/10-v2-operating-points.pdf}
+\caption[Operating points on the live-style benchmark]{Event recall (top) and false activations per hour of each condition's no-gesture time (bottom) on the live-style benchmark, each model at its stored threshold. The reference is the first model; ``V2 gated'' omits the motion overlay. A reused benchmark, not an untouched test; zero observed false activations is not zero risk.}\label{fig-v2}
+\end{widefigure}
+
+The first model's row matters on its own. On 0.61\,h of everyday activity recorded after its development, it produced nine false activations, 14.8 per hour. That is more than twice the 6.2 per hour upper bound computed from its own zero-event evaluation, which shows how much the rate depends on what the wearer is doing (Section~\ref{why-zero-observed-events-is-not-all-day-reliability}).
+
+\textbf{Paired binary detectors.} A later training loop produced matched pinch-in and pinch-out detectors whose cut-offs were chosen by the trainer within a budget of five false activations per hour on training recordings, then replayed once on 11 held-out recordings. Only the archived summary of this run was recovered; the complete run files behind its counts were not, and other runs with similar names have different denominators, so we did not substitute them. Separate success at grab and at release does not establish complete grab--adjust--release cycles.
+
+\textbf{Four-class network.} A single CNNv2 backbone with a softmax over background, pinch-in, pinch-out and pinch-hold was trained with three seeds on 18 recordings, with 4 for validation and 16 for test, and source streams verified disjoint by hash. Its target is the annotated state 500\,ms before each decision, not the binary onset target, and no stillness or jerk gate was applied. The confidence threshold was selected by macro-F1 on validation only. Accuracy is high because background makes up 91.5\% of decisions; the balanced accuracy and per-class recall tell a different story, and 41\% of pinch-hold decisions were classified as background (Fig.~\ref{fig-confusion}). In continuous replay the same model produced 13--46 false activations per hour. The three seeds gave 95.2--95.7\% accuracy and 77.3--78.2\% macro-F1 on the same split, a stability check rather than a confidence interval. Because targets, gating and thresholds differ, this is not a test of joint against separate detectors; hold entry is not hold-duration accuracy; and the 725--744\,ms median latency includes the deliberate 500\,ms label delay.
+
+\textbf{Current multi-gesture model.} The model the application now runs is a CNNv2 with a softmax over no gesture, pinch-in, pinch-hold and pinch-out onsets, each gesture with its own threshold (0.90, 0.95 and 0.95) chosen out of fold on 24 training recordings within five false activations per hour. Its held-out set contains exactly the eight sensor streams behind Table~\ref{tab-replay}, confirmed by hashing, so it is the one later model that can be compared with the first on the same recordings and false-activation exposure. We replayed the deployed model file with the trainer version it was trained with. Under the application's later 100--900\,ms window this reproduced the application's stored figures exactly (pinch-in 42/57, pinch-out 55/59, hold entry 38/55). Under this paper's 300--900\,ms window it caught 40 of 57 pinch-ins with four false activations in 0.48\,h (8.3 per hour, median latency 456\,ms), 53 of 59 pinch-outs (6.3 per hour) and 37 of 56 hold entries (6.2 per hour). On this cohort the newer model therefore catches fewer pinch-ins than the first model and fires during everyday activity where the first did not, the opposite of the CNNv2 benchmark's ranking. Its own trainer flagged the pinch-in rate as above the five-per-hour budget, and the application runs it in Monitor mode. Across thresholds its pinch-in curve stays below the first model's (Fig.~\ref{fig-operating}); at its strictest threshold with no false activation it catches 39 of 57 pinch-ins, 52 of 59 pinch-outs and 35 of 56 hold entries. Its detectors rarely confuse one gesture for another: one hold start fired the pinch-out detector and one pinch-out the hold detector, and the remaining errors are misses (Fig.~\ref{fig-event-confusion}). The two comparisons use different recordings, which is the point: which model looks better depends on the cohort, and neither cohort is a prospective test.
+\else
+\textbf{CNNv2} (per-sensor branches, jerk envelope, motion overlay, jerk gate) caught 13 of 20 real-use pinches on a later benchmark against the first model's 7, with no everyday false activation in 0.61\,h against nine (14.8 per hour, above the first model's 6.2 per hour bound); representative training data mattered more than the network. \textbf{Paired detectors} caught 95/120 starts and 96/127 releases (3.6 and 3.4 per hour; archived summary only). \textbf{A four-class network} on a 500\,ms-delayed state reached 95.73\% decision accuracy because background is 91.5\% of decisions, yet balanced accuracy was 77.09\%\ifmorefigures{} (Fig.~\ref{fig-confusion})\fi{} and replay gave 13--46 false activations per hour: high accuracy is not reliable control. \textbf{The multi-gesture model the application now runs}, replayed on Table~\ref{tab-replay}'s eight recordings and window, caught 40/57 pinch-ins with four false activations (8.3 per hour): no improvement on that cohort (Fig.~\ref{fig-operating}\ifmorefigures{}; confusions in Fig.~\ref{fig-event-confusion}\fi).
+\fi
+
+\ifmorefigures
+\begin{widefigure}
+\centering
+\includegraphics[width=0.9\linewidth,height=0.35\textheight,keepaspectratio,alt={Four-class confusion matrix exposes weaker hold recall despite high overall accuracy.}]{figures/11-multiclass-confusion.pdf}
+\caption[Four-class confusion matrix]{Four-class network, seed 17: held-out decisions by annotated state (delayed 500\,ms) and predicted state, as row percentages with counts, recomputed from the saved prediction vectors. Background dominates, so 95.73\% accuracy hides 49.9\% pinch-hold recall. Decision-level states, not onset events or hold duration.}\label{fig-confusion}
+\end{widefigure}
+\fi
+
+\ifmorefigures
+\begin{widefigure}
+\centering
+\includegraphics[width=0.85\linewidth,alt={Event confusion matrix of the current multi-gesture model: which detector fired for each annotated gesture start, misses, and false activations with no gesture.}]{figures/event-confusion.pdf}
+\caption[Event confusion of the current multi-gesture model]{Event confusion of the application's current multi-gesture model on the eight evaluation recordings of Table~\ref{tab-replay}, each gesture's detector at its operating threshold and the 300--900\,ms window. Rows are annotated starts; columns are the detector that fired in the match window, or none (missed). The bottom row counts false activations while no gesture was under way. Recomputed by replaying the deployed model file.}\label{fig-event-confusion}
+\end{widefigure}
 \fi
