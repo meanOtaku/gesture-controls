@@ -11,7 +11,7 @@
 \onehalfspacing
 \usepackage[numbers]{natbib}
 \usepackage[hidelinks]{hyperref}
-\usepackage{placeins}
+\IfFileExists{placeins.sty}{\usepackage{placeins}}{\input{floatbarrier-fallback}}
 \let\sect\chapter
 \let\subsect\section
 \newenvironment{widefigure}{\begin{figure}[htbp]}{\end{figure}}

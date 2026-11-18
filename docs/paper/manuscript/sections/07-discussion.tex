@@ -34,13 +34,13 @@ The watch's own feedback is a further source of error that we have not yet measu
 \iffull
 Nothing in the detection pipeline depends on the laptop. The detector sees only watch signals, and head orientation is also available from any AR/VR headset. In principle, the same pinch-in and pinch-out events could confirm and release a selection made by head or eye direction inside a headset. The wrist sensor would add most where camera hand tracking struggles: hands out of the cameras' view, hands occluded by objects, poor lighting, or interfaces where running the hand-tracking cameras just to detect a pinch costs too much power. It could also work alongside camera tracking, filling the gaps when the hand leaves the view.
 \else
-Nothing in the detection pipeline depends on the laptop: the detector sees only watch signals, and AR/VR headsets provide head orientation. The same pinch events could confirm a head- or gaze-directed selection in a headset, and would help most where camera hand tracking struggles: hands out of view or occluded, poor lighting, or when running cameras just to detect a pinch costs too much power.
+The detector sees only watch signals, so the same pinch events could confirm a head- or gaze-directed selection in an AR/VR headset, most usefully where camera hand tracking struggles: hands out of view, poor light, or a power budget too tight for cameras.
 \fi
 
 \iffull
 These are possibilities, not findings. We have not run the system in a headset. Head movement in immersive use is larger and faster than at a desk, which may change both targeting and how much arm motion the detector has to reject. A pinch sensed at the wrist also gives no visual feedback of the hand unless the application adds it. The false-activation and latency results reported here would need to be measured again under those conditions.
 \else
-These are possibilities, not findings. Immersive use involves larger head movements and more arm motion, so the false-activation and latency results would need to be measured again in a headset.
+These are possibilities, not findings: larger head and arm movement in a headset means false activations and latency must be measured again.
 \fi
 
 \iffull
@@ -50,7 +50,7 @@ These are possibilities, not findings. Immersive use involves larger head moveme
 \iffull
 If scores improve after relabelling, there are two possible reasons: the reference labels became more accurate, or the model was retrained differently. Often both happen at once. Two analyses can separate them. The first rescores the same frozen predictions against the original and the corrected labels. The second trains a model on each label version with the same source groups and selection procedure. A single before-and-after number cannot tell the two effects apart.
 \else
-If scores improve after relabelling, either the labels became more accurate or the model was retrained differently, and often both. Rescoring the same frozen predictions against each label version, and training one model per label version on the same split, would separate the two effects. Manual review is itself a measurement: an independent reviewer should label a pre-chosen sample, because relabelling while looking at a model's own false alarms biases the result toward that model.
+Better scores after relabelling can come from better labels or from retraining; rescoring frozen predictions against each label version separates the two. Relabelling while looking at a model's false alarms biases the result toward that model, so an independent reviewer should label a pre-chosen sample.
 \fi
 
 \iffull

@@ -178,7 +178,7 @@ def measured_and_documented(m):
     save(fig,'15-paired-model-summary','Paired detector summary','Later paired-model Markdown summary: 95/120 pinch-in and 96/127 pinch-out catches. FAR was rounded in the original summary. Corresponding original full run artifacts were not recovered; similarly named results elsewhere have different denominators and were deliberately not substituted. Do not combine these with the older 47/57 cohort or call this a freshly verified model comparison.','documented summary only',['data/documented/paired-models.md'],'Three panels reproduce documented paired-detector recall, rounded FAR and median latency.')
 
 def multiclass(m):
-    first=m['multiclass'][0];cm=np.array(first['test']['confusion_matrix']);pct=100*cm/cm.sum(1,keepdims=True);labels=['Background','Pinch-in','Pinch-out','Pinch-hold']
+    first=m['multiclass'][0];order=[0,1,3,2];cm=np.array(first['test']['confusion_matrix'])[order][:,order];pct=100*cm/cm.sum(1,keepdims=True);labels=['Background','Pinch-in','Pinch-hold','Pinch-out']  # in, hold, out: the gesture's order, as in the event confusion
     fig,ax=plt.subplots(figsize=(8.5,7),layout='constrained');im=ax.imshow(pct,vmin=0,vmax=100,cmap='Blues')
     for i in range(4):
         for j in range(4):ax.text(j,i,f'{pct[i,j]:.1f}%\n({cm[i,j]:,})',ha='center',va='center',color='white' if pct[i,j]>55 else '#14243c')
@@ -192,7 +192,7 @@ def multiclass(m):
     save(fig,'12-multiclass-seeds','Seed variation','All three models are shown, not an ensemble or a test-selected best seed. Accuracy, balanced accuracy and macro-F1 were recomputed from saved vectors. Seed variation on one split is not participant uncertainty.','recomputed from original prediction vectors',['data/multiclass/predictions/*.npz','derived/multiclass-metrics.csv'],'Three models have high overall accuracy but lower class-balanced scores.')
     events=first['stored_test_events'];fig,axs=plt.subplots(1,3,figsize=(11,4.6),layout='constrained')
     for ax,key,title in zip(axs,['gestureRecall','falseActivationsPerHour','medianLatencyMs'],['Event recall (%)','False activations / negative h','Matched median latency (ms)']):
-        vals=[events[k][key]*(100 if key=='gestureRecall' else 1) for k in ['pinch_in','pinch_out','pinch_hold']];bars=ax.bar(labels[1:],vals,color=COLORS[:3]);ax.bar_label(bars,fmt='%.1f',padding=3);ax.set_ylabel(title);ax.tick_params(axis='x',labelrotation=25);ax.set_ylim(0,max(vals)*1.22)
+        vals=[events[k][key]*(100 if key=='gestureRecall' else 1) for k in ['pinch_in','pinch_hold','pinch_out']];bars=ax.bar(labels[1:],vals,color=COLORS[:3]);ax.bar_label(bars,fmt='%.1f',padding=3);ax.set_ylabel(title);ax.tick_params(axis='x',labelrotation=25);ax.set_ylim(0,max(vals)*1.22)
     fig.suptitle('Seed 17 continuous replay — delayed-state target, not production onset target')
     save(fig,'13-multiclass-events','Multiclass continuous events','Stored seed-17 event aggregates, with recall/FAR arithmetic checked in analyze.py and independently reproducible via replay.py using frozen trainer source and matching raw recordings. Hold recall means hold-entry detection, not duration accuracy. Event classes use different negative exposure denominators. No binary-superiority claim is made.','stored events; frozen-source replay verified separately',['data/multiclass/results.json','derived/event-replay-verification.json'],'Three panels report event recall, false activations and latency for pinch-in, pinch-out and hold entry.')
 

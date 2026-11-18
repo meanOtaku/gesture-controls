@@ -4,7 +4,7 @@
 \input{preamble-common}
 \morefigurestrue
 \usepackage[hidelinks]{hyperref}
-\usepackage{placeins}
+\IfFileExists{placeins.sty}{\usepackage{placeins}}{\input{floatbarrier-fallback}}
 \let\sect\section
 \let\subsect\subsection
 \newenvironment{widefigure}{\begin{figure}[htbp]}{\end{figure}}

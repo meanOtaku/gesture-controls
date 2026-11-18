@@ -1,0 +1,8 @@
+% Used only when placeins.sty is not installed (e.g. BasicTeX): \FloatBarrier places any floats still waiting before
+% going on, as placeins does, by starting a new page only when floats are pending. Install it with
+% `tlmgr install placeins` for the exact behaviour.
+\makeatletter
+\providecommand\FloatBarrier{\par\begingroup\let\@elt\relax
+  \edef\@tempa{\@botlist\@deferlist\@dbldeferlist}\def\@tempb{}%
+  \ifx\@tempa\@tempb\else\clearpage\fi\endgroup}
+\makeatother

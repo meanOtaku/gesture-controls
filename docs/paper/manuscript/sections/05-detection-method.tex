@@ -37,7 +37,7 @@ Normalising against recent history has a failure mode that matters for continuou
 
 The remedy leaves fast-turning ticks out of the statistics used for scaling. A grid tick counts as moving when the gyroscope RMS magnitude over the 0.3\,s ending at it exceeds 1.0\,rad/s; that tick and every tick within 0.5\,s of a moving tick are left out of \(m_c(T)\) and \(s_c(T)\) for all nine channels. The final second, which the model sees, is never left out, and no decision is suppressed: this changes only the reference the input is scaled against. With a still hand nothing is left out, so the inputs, and the replayed result of Table~\ref{tab-replay}, are unchanged.
 \else
-A burst of wrist motion inflates the scale so that a following pinch looks far smaller, and once motion fills over half the history even the median follows it. We therefore exclude fast-turning ticks (gyroscope RMS over 0.3\,s above 1.0\,rad/s, plus 0.5\,s either side) from \(m_c(T)\) and \(s_c(T)\); the final second is never excluded, and with a still hand the inputs and Table~\ref{tab-replay} are unchanged. With 6\,s of real motion spliced 0.5--5\,s before 50 held-out pinches, detection rose from 8--30 to 40--45. This is peak-window detection after spliced motion, with the threshold level chosen on the same recordings, not a physical trial.
+A burst of wrist motion inflates the scale so that a following pinch looks far smaller. We therefore exclude fast-turning ticks (gyroscope RMS over 0.3\,s above 1.0\,rad/s, plus 0.5\,s either side) from \(m_c(T)\) and \(s_c(T)\); with a still hand, inputs and Table~\ref{tab-replay} are unchanged. With 6\,s of real motion spliced before 50 held-out pinches, detection rose from 8--30 to 40--45: an exploratory replay, not a physical trial.
 \fi
 
 \iffull

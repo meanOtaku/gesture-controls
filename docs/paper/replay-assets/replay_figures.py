@@ -154,24 +154,29 @@ def plot() -> None:
     starts = np.array([r["starts"] for r in c["rows"]], dtype=float)
     pct = 100 * m / starts[:, None]
     fa = c["noGesture"]["falseActivations"]; fah = c["noGesture"]["falseActivationsPerHour"]; hrs = c["noGesture"]["hours"]
-    fig, ax = plt.subplots(figsize=(3.5, 2.9))
-    shown = np.vstack([pct, np.full((1, pct.shape[1]), np.nan)])
-    ax.imshow(np.ma.masked_invalid(shown), cmap="Blues", vmin=0, vmax=100, aspect="auto")
-    ax.axhspan(len(g) - 0.5, len(g) + 0.5, color="#f3f3f3", zorder=0)
+    fig, ax = plt.subplots(figsize=(3.6, 3.1))
+    ax.imshow(pct, cmap="Blues", vmin=0, vmax=100, aspect="auto", extent=(-0.5, len(g) + 0.5, len(g) - 0.5, -0.5))
     for i in range(m.shape[0]):
         for j in range(m.shape[1]):
-            ax.text(j, i, f"{int(m[i, j])}\n({pct[i, j]:.0f}%)", ha="center", va="center", fontsize=7,
+            ax.text(j, i, f"{int(m[i, j])}\n({pct[i, j]:.0f}%)", ha="center", va="center", fontsize=8.5,
                     color="white" if pct[i, j] > 60 else "black")
+    # The no-gesture row is counted in time, not in starts, so it has no percentages: each detector's false activations
+    # (shaded by rate per hour on a scale of its own) and, where no detector fired, the correct rejections.
+    reds = plt.get_cmap("Reds")
     for j, k in enumerate(g):
-        ax.text(j, len(g), f"{fa[k]} false\n({fah[k]:.1f}/h)", ha="center", va="center", fontsize=6.5, color="#B22222")
-    ax.text(len(g), len(g), "—", ha="center", va="center", fontsize=7, color="0.5")
-    ax.axhline(len(g) - 0.5, color="white", lw=2)
-    ax.set_xticks(range(len(g) + 1), [names[k] for k in g] + ["Missed"], fontsize=7)
+        ax.add_patch(plt.Rectangle((j - 0.5, len(g) - 0.5), 1, 1, color=reds(min(fah[k], 20) / 20 * 0.6 + 0.08), lw=0))
+        ax.text(j, len(g), f"{fa[k]}\n({fah[k]:.1f}/h)", ha="center", va="center", fontsize=8.5, color="black")
+    ax.add_patch(plt.Rectangle((len(g) - 0.5, len(g) - 0.5), 1, 1, color=plt.get_cmap("Blues")(0.08), lw=0))
+    ax.text(len(g), len(g), "correctly\nquiet", ha="center", va="center", fontsize=8, color="black")
+    ax.axhline(len(g) - 0.5, color="white", lw=3)
+    ax.axvline(len(g) - 0.5, color="white", lw=1)
+    ax.set_xticks(range(len(g) + 1), [names[k] for k in g] + ["None"], fontsize=8)
     ax.set_yticks(range(len(g) + 1), [f'{names[r["gesture"]]}\n(n={r["starts"]})' for r in c["rows"]]
                   + [f"No gesture\n({min(hrs.values()):.2f} h)" if f"{min(hrs.values()):.2f}" == f"{max(hrs.values()):.2f}"
-                     else f"No gesture\n({min(hrs.values()):.2f}\u2013{max(hrs.values()):.2f} h)"], fontsize=7)
-    ax.set_xlabel("Detector that fired", fontsize=8)
-    ax.set_ylabel("Annotated start", fontsize=8)
+                     else f"No gesture\n({min(hrs.values()):.2f}\u2013{max(hrs.values()):.2f} h)"], fontsize=8)
+    ax.set_xlim(-0.5, len(g) + 0.5)
+    ax.set_xlabel("Detector that fired", fontsize=9)
+    ax.set_ylabel("Annotated", fontsize=9)
     ax.set_ylim(len(g) + 0.5, -0.5)
     for s in ax.spines.values(): s.set_visible(False)
     fig.tight_layout()

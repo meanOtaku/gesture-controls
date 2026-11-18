@@ -47,16 +47,16 @@ z
    <g id="patch_4">
     <path d="M 118.748216 290.474702
 L 176.534076 290.474702
-L 176.534076 69.277791
-L 118.748216 69.277791
+L 176.534076 81.558098
+L 118.748216 81.558098
 z
 " clip-path="url(#pe4efc21f55)" style="fill: #d55e00"/>
    </g>
    <g id="patch_5">
     <path d="M 190.980541 290.474702
 L 248.766401 290.474702
-L 248.766401 81.558098
-L 190.980541 81.558098
+L 248.766401 69.277791
+L 190.980541 69.277791
 z
 " clip-path="url(#pe4efc21f55)" style="fill: #009e73"/>
    </g>
@@ -83,7 +83,7 @@ L 0 3.5
       </g>
      </g>
      <g id="text_2">
-      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(127.541646 324.193908) rotate(-25)">Pinch-out</text>
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(125.267379 326.314923) rotate(-25)">Pinch-hold</text>
      </g>
     </g>
     <g id="xtick_3">
@@ -93,7 +93,7 @@ L 0 3.5
       </g>
      </g>
      <g id="text_3">
-      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(197.499705 326.314923) rotate(-25)">Pinch-hold</text>
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(199.773971 324.193908) rotate(-25)">Pinch-out</text>
      </g>
     </g>
    </g>
@@ -171,10 +171,10 @@ L 258.878927 290.474702
     <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="75.408821" y="85.691099" transform="rotate(-0 75.408821 85.691099)">69.8</text>
    </g>
    <g id="text_11">
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="147.641146" y="64.198103" transform="rotate(-0 147.641146 64.198103)">77.3</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="147.641146" y="76.478411" transform="rotate(-0 147.641146 76.478411)">73.1</text>
    </g>
    <g id="text_12">
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="219.873471" y="76.478411" transform="rotate(-0 219.873471 76.478411)">73.1</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="219.873471" y="64.198103" transform="rotate(-0 219.873471 64.198103)">77.3</text>
    </g>
   </g>
   <g id="axes_2">
@@ -197,16 +197,16 @@ z
    <g id="patch_10">
     <path d="M 380.627382 290.474702
 L 438.413243 290.474702
-L 438.413243 186.569186
-L 380.627382 186.569186
+L 438.413243 69.277791
+L 380.627382 69.277791
 z
 " clip-path="url(#p5c147c5469)" style="fill: #d55e00"/>
    </g>
    <g id="patch_11">
     <path d="M 452.859708 290.474702
 L 510.645568 290.474702
-L 510.645568 69.277791
-L 452.859708 69.277791
+L 510.645568 186.569186
+L 452.859708 186.569186
 z
 " clip-path="url(#p5c147c5469)" style="fill: #009e73"/>
    </g>
@@ -228,7 +228,7 @@ z
       </g>
      </g>
      <g id="text_14">
-      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(389.420812 324.193908) rotate(-25)">Pinch-out</text>
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(387.146546 326.314923) rotate(-25)">Pinch-hold</text>
      </g>
     </g>
     <g id="xtick_6">
@@ -238,7 +238,7 @@ z
       </g>
      </g>
      <g id="text_15">
-      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(459.378871 326.314923) rotate(-25)">Pinch-hold</text>
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(461.653137 324.193908) rotate(-25)">Pinch-out</text>
      </g>
     </g>
    </g>
@@ -321,10 +321,10 @@ L 520.758093 290.474702
     <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="337.287987" y="221.809753" transform="rotate(-0 337.287987 221.809753)">13.3</text>
    </g>
    <g id="text_24">
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="409.520313" y="181.489498" transform="rotate(-0 409.520313 181.489498)">21.7</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="409.520313" y="64.198103" transform="rotate(-0 409.520313 64.198103)">46.3</text>
    </g>
    <g id="text_25">
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="481.752638" y="64.198103" transform="rotate(-0 481.752638 64.198103)">46.3</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="481.752638" y="181.489498" transform="rotate(-0 481.752638 181.489498)">21.7</text>
    </g>
   </g>
   <g id="axes_3">
@@ -347,16 +347,16 @@ z
    <g id="patch_16">
     <path d="M 648.869049 290.474702
 L 706.654909 290.474702
-L 706.654909 75.078049
-L 648.869049 75.078049
+L 706.654909 69.277791
+L 648.869049 69.277791
 z
 " clip-path="url(#pc793d30703)" style="fill: #d55e00"/>
    </g>
    <g id="patch_17">
     <path d="M 721.101374 290.474702
 L 778.887234 290.474702
-L 778.887234 69.277791
-L 721.101374 69.277791
+L 778.887234 75.078049
+L 721.101374 75.078049
 z
 " clip-path="url(#pc793d30703)" style="fill: #009e73"/>
    </g>
@@ -378,7 +378,7 @@ z
       </g>
      </g>
      <g id="text_27">
-      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(657.662479 324.193908) rotate(-25)">Pinch-out</text>
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(655.388213 326.314923) rotate(-25)">Pinch-hold</text>
      </g>
     </g>
     <g id="xtick_9">
@@ -388,7 +388,7 @@ z
       </g>
      </g>
      <g id="text_28">
-      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(727.620538 326.314923) rotate(-25)">Pinch-hold</text>
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'" transform="translate(729.894804 324.193908) rotate(-25)">Pinch-out</text>
      </g>
     </g>
    </g>
@@ -461,10 +461,10 @@ L 788.99976 290.474702
     <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="605.529654" y="64.428146" transform="rotate(-0 605.529654 64.428146)">743.6</text>
    </g>
    <g id="text_36">
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="677.761979" y="69.998361" transform="rotate(-0 677.761979 69.998361)">724.9</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="677.761979" y="64.198103" transform="rotate(-0 677.761979 64.198103)">744.4</text>
    </g>
    <g id="text_37">
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="749.994304" y="64.198103" transform="rotate(-0 749.994304 64.198103)">744.4</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="749.994304" y="69.998361" transform="rotate(-0 749.994304 69.998361)">724.9</text>
    </g>
   </g>
   <g id="text_38">

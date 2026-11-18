@@ -10,6 +10,8 @@ variants are frozen in [`../archive/`](../archive/) for reference only.
 | `report.tex` | Project report (`report` class, 12 pt, 1.5 spacing) | Latest verified build: 65 physical PDF pages including front matter and appendices |
 
 Build any of them with `latexmk -pdf <file>.tex`. PDFs and TeX temporaries are git-ignored.
+The LNCS paper and the report use `placeins` (`tlmgr install placeins`); without it they fall back to
+`floatbarrier-fallback.tex`, which behaves the same for these documents.
 For Overleaf, upload this whole folder and choose the main document in the menu.
 
 ## Layout

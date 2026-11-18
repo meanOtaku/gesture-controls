@@ -8,7 +8,7 @@ The main limitation is that all data come from a single participant, and we have
 
 The later generations have their own limits. The motion remedy was tested with spliced motion on pinch-in only, and its parameter was chosen on the same recordings. The CNNv2 benchmark has been used repeatedly during development and holds only 20 real-use pinches from one session. The paired-detector counts rest on an archived summary whose run files were not recovered. The four-class network learns a delayed state rather than onsets, so it cannot settle whether one joint model or separate detectors is better. The current multi-gesture model was compared with the first on the first model's evaluation recordings, which had already guided earlier development.
 \else
-All data come from one participant, and no confirmatory or usability study has been run. The original model's training specification was reconstructed; its original threshold-selection log and label-version hashes are missing. The newer application model used its stored run specification, but its weights and run files are not bundled with the replay assets. Exact hashing misses partial overlaps, and the manual labels have not been checked by a second annotator.
+All data come from one participant, and no confirmatory or usability study has been run. The original model's training specification was reconstructed and its threshold-selection log and label-version hashes are missing; the newer model's weights are not bundled with the replay assets. Exact hashing misses partial overlaps, and the manual labels have not been checked by a second annotator.
 \fi
 
 \iffull
