@@ -33,7 +33,8 @@ from . import cnn, cnn_input
 FORMAT = "ppg-imu-cnn-branches"
 VERSION = 1
 CHANNELS = len(cnn_input.V2_CHANNELS)
-LENGTH = cnn_input.grid_of(100).window
+LENGTH = cnn_input.grid_of(100).window       # the default rate's window; a model's own is `Model.length`
+LENGTHS = {cnn_input.grid_of(hz).window: hz for hz in cnn_input.V2_RATES}
 # The channels of each branch, as indices into the v2 inputs: accelerometer (and its jerk envelope), gyroscope, pulse.
 GROUPS = ((0, 1, 2, 9), (3, 4, 5), (6, 7, 8))
 PULSE = slice(6, 9)
@@ -93,15 +94,16 @@ class Model:
     """Trained networks, averaged, with the `predict_proba` the trainer's evaluation uses: [nothing, gesture] for one
     gesture, [nothing, each gesture...] for a multi-gesture network (`classes`, its gestures in output order)."""
 
-    def __init__(self, nets, classes: tuple[str, ...] | None = None):
+    def __init__(self, nets, classes: tuple[str, ...] | None = None, length: int = LENGTH):
         self.nets = nets
         self.classes = classes
+        self.length = length    # ticks per channel: the window of the rate it was trained at
 
     def predict_proba(self, x: np.ndarray) -> np.ndarray:
         import torch
 
         where = cnn.device()
-        windows = torch.from_numpy(np.asarray(x, dtype=np.float32).reshape(-1, CHANNELS, LENGTH))
+        windows = torch.from_numpy(np.asarray(x, dtype=np.float32).reshape(-1, CHANNELS, self.length))
         width = 1 if self.classes is None else len(self.classes) + 1
         p = np.zeros((len(windows), width))
         with torch.no_grad():
@@ -161,7 +163,7 @@ def _train(net, x: np.ndarray, y: np.ndarray, rng: np.random.Generator, epochs: 
         x, y = x[rows], y[rows]
     where = cnn.device()
     net.to(where)
-    windows = torch.from_numpy(np.asarray(x, dtype=np.float32).reshape(-1, CHANNELS, LENGTH)).to(where)
+    windows = torch.from_numpy(np.asarray(x, dtype=np.float32).reshape(-1, CHANNELS, np.asarray(x).shape[1] // CHANNELS)).to(where)
     optimiser = torch.optim.Adam(net.parameters(), lr=learning_rate, weight_decay=cnn.WEIGHT_DECAY)
     if net.outputs == 1:
         truth = torch.from_numpy(np.asarray(y, dtype=np.float32)).to(where)
@@ -202,11 +204,13 @@ def fit(x: np.ndarray, y: np.ndarray, seed: int, epochs: int | None = None, star
     `classes`, a multi-gesture network: `y` is 0 for nothing and i + 1 for `classes[i]`."""
     import torch
 
-    if np.asarray(x).shape[1] != CHANNELS * LENGTH:
-        raise ValueError(f"the v2 CNN reads {CHANNELS * LENGTH} inputs, not {np.asarray(x).shape[1]}")
+    width = np.asarray(x).shape[1]
+    if width % CHANNELS or width // CHANNELS not in LENGTHS:
+        raise ValueError(f"the v2 CNN reads {CHANNELS} channels of {' or '.join(str(n) for n in sorted(LENGTHS))} ticks, not {width} inputs")
+    length = width // CHANNELS
     if classes is not None and start is not None:
         raise ValueError("a multi-gesture network trains from scratch")
-    begun = load(start) if start is not None else None
+    begun = load(start, length) if start is not None else None
     nets = []
     for member in range(len(begun) if begun is not None else MEMBERS):
         torch.manual_seed(seed + member)
@@ -219,10 +223,10 @@ def fit(x: np.ndarray, y: np.ndarray, seed: int, epochs: int | None = None, star
             _train(net, np.asarray(x), np.asarray(y), np.random.default_rng(seed + member), epochs or CONTINUE_EPOCHS,
                    cnn.LEARNING_RATE * CONTINUE_LEARNING_RATE_SCALE, frozen_norm=True)
         nets.append(net.eval())
-    return Model(nets, classes)
+    return Model(nets, classes, length)
 
 
-def load(model_bytes: bytes) -> list:
+def load(model_bytes: bytes, length: int = LENGTH) -> list:
     """The networks of a saved model file, ready to train on: each convolution takes the file's weights (batch
     normalisation already folded in) and its batch normalisation is set to pass values through unchanged, so before any
     training they score exactly as the file does. Refused when the file is not a v2 CNN of this shape."""
@@ -233,8 +237,8 @@ def load(model_bytes: bytes) -> list:
         raise ValueError(f"the model to start from is not a {FORMAT} file of version {VERSION}")
     if "outputs" in file:
         raise ValueError("a multi-gesture model cannot be trained on from where it is: train it from scratch")
-    if file.get("channels") != CHANNELS or file.get("length") != LENGTH or not file.get("members"):
-        raise ValueError(f"the model to start from reads {file.get('channels')} x {file.get('length')}, not {CHANNELS} x {LENGTH}")
+    if file.get("channels") != CHANNELS or file.get("length") != length or not file.get("members"):
+        raise ValueError(f"the model to start from reads {file.get('channels')} x {file.get('length')}, not {CHANNELS} x {length}")
 
     def set_conv(seq, convs):
         layers = list(seq)
@@ -298,7 +302,7 @@ def _member(net) -> dict:
 
 
 def to_bytes(model: Model) -> bytes:
-    file = {"format": FORMAT, "version": VERSION, "channels": CHANNELS, "length": LENGTH,
+    file = {"format": FORMAT, "version": VERSION, "channels": CHANNELS, "length": model.length,
             **({"outputs": [NOTHING, *model.classes]} if model.classes is not None else {}),
             "members": [_member(net) for net in model.nets]}
     return (json.dumps(cnn._single_precision(file), separators=(",", ":")) + "\n").encode()

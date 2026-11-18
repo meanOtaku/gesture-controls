@@ -82,15 +82,21 @@ pub const GATE_WINDOW_MS: u64 = 600;
 pub const V2_CHANNELS: usize = CHANNELS.len() + 1;
 
 /// The v2 model's inputs' names on the 100 Hz grid: `cnn_{channel}_t{tick:02}` for [`CHANNELS`] then [`ENVELOPE_CHANNEL`].
-pub static V2_FEATURE_NAMES: LazyLock<Vec<String>> = LazyLock::new(|| {
-    let window = CnnGrid::HZ_100.window;
+pub static V2_FEATURE_NAMES: LazyLock<Vec<String>> =
+    LazyLock::new(|| v2_names(CnnGrid::HZ_100.window));
+static V2_FEATURE_NAMES_50: LazyLock<Vec<String>> =
+    LazyLock::new(|| v2_names(CnnGrid::HZ_50.window));
+static V2_FEATURE_NAMES_25: LazyLock<Vec<String>> =
+    LazyLock::new(|| v2_names(CnnGrid::HZ_25.window));
+
+fn v2_names(window: usize) -> Vec<String> {
     let digits = (window - 1).to_string().len();
     CHANNELS
         .iter()
         .chain(std::iter::once(&ENVELOPE_CHANNEL))
         .flat_map(|channel| (0..window).map(move |tick| format!("cnn_{channel}_t{tick:0digits$}")))
         .collect()
-});
+}
 
 /// `cnn_{channel}_t{tick}`, channel by channel, ticks 00 (oldest) to 49 (the decision).
 pub static FEATURE_NAMES: LazyLock<Vec<String>> = LazyLock::new(|| {
@@ -112,6 +118,7 @@ pub struct CnnGrid {
 }
 
 static FEATURE_NAMES_100: LazyLock<Vec<String>> = LazyLock::new(|| names(CnnGrid::HZ_100.window));
+static FEATURE_NAMES_25: LazyLock<Vec<String>> = LazyLock::new(|| names(CnnGrid::HZ_25.window));
 
 fn names(window: usize) -> Vec<String> {
     let digits = (window - 1).to_string().len();
@@ -138,10 +145,20 @@ impl CnnGrid {
         moving_rms: 30,
         moving_margin: 50,
     };
+    /// The pulse's own rate, for the v2 CNN only: the same 1 s window and 10 s history, a quarter of the 100 Hz ticks, the
+    /// moving-wrist spans rounded to whole ticks (8 = 0.32 s RMS, 13 = 0.52 s either side). The trainer's `GRIDS[25]`.
+    pub const HZ_25: Self = Self {
+        tick_ns: 40_000_000,
+        window: 25,
+        history: 250,
+        moving_rms: 8,
+        moving_margin: 13,
+    };
 
     /// The grid for a rate a manifest names, if this app has it.
     pub fn at_hz(hz: u32) -> Option<Self> {
         match hz {
+            25 => Some(Self::HZ_25),
             50 => Some(Self::HZ_50),
             100 => Some(Self::HZ_100),
             _ => None,
@@ -164,8 +181,21 @@ impl CnnGrid {
     pub fn feature_names(&self) -> &'static [String] {
         if *self == Self::HZ_100 {
             &FEATURE_NAMES_100
+        } else if *self == Self::HZ_25 {
+            &FEATURE_NAMES_25
         } else {
             &FEATURE_NAMES
+        }
+    }
+
+    /// The v2 model's inputs' names on this grid ([`V2_FEATURE_NAMES`] at 100 Hz), in order.
+    pub fn v2_feature_names(&self) -> &'static [String] {
+        if *self == Self::HZ_25 {
+            &V2_FEATURE_NAMES_25
+        } else if *self == Self::HZ_50 {
+            &V2_FEATURE_NAMES_50
+        } else {
+            &V2_FEATURE_NAMES
         }
     }
 }
@@ -348,14 +378,17 @@ pub fn inputs_v2(
     pulse: &[PpgSample],
     decision_ns: u64,
 ) -> Option<Vec<f64>> {
-    scaled_inputs(
-        CnnGrid::HZ_100,
-        motion,
-        pulse,
-        decision_ns,
-        Scaling::Median,
-        true,
-    )
+    inputs_v2_on(CnnGrid::HZ_100, motion, pulse, decision_ns)
+}
+
+/// [`inputs_v2`] on grid `g`: a v2 model trained at 25, 50 or 100 Hz reads its own rate's ticks.
+pub fn inputs_v2_on(
+    g: CnnGrid,
+    motion: &[MotionSample],
+    pulse: &[PpgSample],
+    decision_ns: u64,
+) -> Option<Vec<f64>> {
+    scaled_inputs(g, motion, pulse, decision_ns, Scaling::Median, true)
 }
 
 /// The v2 gate's measure at a decision: the largest accelerometer jerk (m/s³) between consecutive motion samples whose
@@ -479,6 +512,9 @@ mod tests {
         expected_median_100: Vec<Option<Vec<f64>>>,
         /// The v2 model's inputs ([`inputs_v2`]).
         expected_v2: Vec<Option<Vec<f64>>>,
+        /// The same on the 25 and 50 Hz grids ([`inputs_v2_on`]).
+        expected_v2_25: Vec<Option<Vec<f64>>>,
+        expected_v2_50: Vec<Option<Vec<f64>>>,
         /// The v2 gate's measure ([`spike`] over [`GATE_WINDOW_MS`]).
         expected_spike: Vec<f64>,
     }
@@ -488,6 +524,8 @@ mod tests {
         feature_names: Vec<String>,
         feature_names_100: Vec<String>,
         feature_names_v2: Vec<String>,
+        feature_names_v2_25: Vec<String>,
+        feature_names_v2_50: Vec<String>,
         cases: Vec<Case>,
     }
 
@@ -590,6 +628,52 @@ mod tests {
             }
         }
         assert!(compared >= 6);
+    }
+
+    #[test]
+    fn v2_inputs_at_25_and_50_hz_match_the_trainer() {
+        let all = cases();
+        assert_eq!(CnnGrid::at_hz(25), Some(CnnGrid::HZ_25));
+        assert_eq!(CnnGrid::HZ_25.v2_feature_names(), all.feature_names_v2_25);
+        assert_eq!(CnnGrid::HZ_50.v2_feature_names(), all.feature_names_v2_50);
+        assert_eq!(CnnGrid::HZ_100.v2_feature_names(), &V2_FEATURE_NAMES[..]);
+        for (g, pick) in [
+            (
+                CnnGrid::HZ_25,
+                (|c: &Case| &c.expected_v2_25) as fn(&Case) -> &Vec<Option<Vec<f64>>>,
+            ),
+            (CnnGrid::HZ_50, |c: &Case| &c.expected_v2_50),
+        ] {
+            let mut compared = 0;
+            for case in &all.cases {
+                let (motion, pulse) = streams(case);
+                for (decision, expected) in case.decisions.iter().zip(pick(case)) {
+                    match (inputs_v2_on(g, &motion, &pulse, *decision), expected) {
+                        (None, None) => {}
+                        (Some(got), Some(expected)) => {
+                            assert_eq!(got.len(), V2_CHANNELS * g.window);
+                            for (i, (a, b)) in got.iter().zip(expected).enumerate() {
+                                assert!(
+                                    (a - b).abs() <= TOLERANCE,
+                                    "{} at {} Hz: {} at {decision}: {a} vs {b}",
+                                    case.name,
+                                    1_000_000_000 / g.tick_ns,
+                                    g.v2_feature_names()[i]
+                                );
+                            }
+                            compared += 1;
+                        }
+                        (got, expected) => panic!(
+                            "{}: at {decision} v2 inputs: runtime {}, trainer {}",
+                            case.name,
+                            got.is_some(),
+                            expected.is_some()
+                        ),
+                    }
+                }
+            }
+            assert!(compared >= 6, "{compared}");
+        }
     }
 
     fn check(scaling: Scaling, g: CnnGrid) {

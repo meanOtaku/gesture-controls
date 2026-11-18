@@ -94,6 +94,9 @@ pub struct TrainRequest {
     /// all reading the one network, split alike and trained in one run of the trainer. Empty: `label` alone.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gestures: Vec<String>,
+    /// CNN v2 only: the rate its grid reads the motion and pulse at, one of [`V2_RATES`]. Absent: [`MOTION_HZ`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub motion_hz: Option<u32>,
 }
 
 /// At most this many gestures in one multi-gesture model (the trainer's `MAX_GESTURES`).
@@ -111,6 +114,8 @@ struct StartPoint {
     gate_min_jerk: Option<f64>,
     /// The recordings it trained on (its manifest's `provenance.trainRecordings`).
     trained_on: Vec<String>,
+    /// The rate it reads at (its manifest's `preprocessing.motionHz`): the model continuing from it must read the same.
+    motion_hz: u32,
 }
 
 /// A model a run can continue from, for the Train panel's choice.
@@ -124,6 +129,8 @@ pub struct StartPointView {
     pub trained_on: Vec<String>,
     /// How many of the recordings it trained on are no longer in Model Lab.
     pub missing: usize,
+    /// The rate it reads at: a model continuing from it trains at the same.
+    pub motion_hz: u32,
 }
 
 /// The model version `version_id` as a model to continue from: a v2 CNN for `target` whose manifest says what it
@@ -196,6 +203,9 @@ fn start_point(
         threshold: version.thresholds.activation,
         gate_min_jerk: manifest["preprocessing"]["gate"]["minJerk"].as_f64(),
         trained_on,
+        motion_hz: manifest["preprocessing"]["motionHz"]
+            .as_u64()
+            .map_or(MOTION_HZ, |hz| hz as u32),
     })
 }
 
@@ -223,6 +233,7 @@ fn start_points(
                 created_at: v.created_at.clone(),
                 trained_on: here,
                 missing: gone.len(),
+                motion_hz: point.motion_hz,
             })
         })
         .collect();
@@ -353,6 +364,22 @@ fn spec_stages(stages: &[StageRequest], train: &BTreeSet<String>) -> Vec<serde_j
 /// The rate of the grid the models this app trains read the motion (and, for the CNN, the pulse) on: the watch's full
 /// rate. The trainer is told it, its manifest says it, and the runtime reads the same (`preprocessing.motionHz`).
 pub const MOTION_HZ: u32 = 100;
+/// The rates a v2 CNN can be trained at (the trainer's `cnn_input.V2_RATES`): the same 1 s seen and 10 s scaled
+/// against, at a quarter, half or all of the watch's motion rate. 25 Hz is the pulse's own rate.
+pub const V2_RATES: [u32; 3] = [25, 50, 100];
+
+/// The rate a request trains at: [`MOTION_HZ`] unless a v2 CNN names one of [`V2_RATES`].
+fn check_motion_hz(request: &TrainRequest, backend: &str) -> Result<u32, String> {
+    match request.motion_hz {
+        None => Ok(MOTION_HZ),
+        Some(hz) if hz == MOTION_HZ => Ok(hz),
+        Some(_) if backend != CNN_V2_BACKEND => {
+            Err("only a v2 CNN can be trained at another rate: choose CNN v2".into())
+        }
+        Some(hz) if V2_RATES.contains(&hz) => Ok(hz),
+        Some(hz) => Err(format!("a v2 CNN trains at 25, 50 or 100 Hz, not {hz} Hz")),
+    }
+}
 
 /// Every trainer backend this app trains with. The start-up purge in `label_runtime` keeps the runs and models whose inputs
 /// are what one of these reads, so a backend added to `method_named` without being listed here would have its models
@@ -364,6 +391,19 @@ pub(crate) fn trained_contract(backend: &str) -> Option<InputContract> {
     method_named(Some(backend))
         .ok()
         .map(|(_, contract)| contract)
+}
+
+/// Every input contract a model trained with `backend` can have: one per rate it trains at ([`V2_RATES`] for the v2
+/// CNN). The start-up purge keeps all of them, or a model trained at another rate would be set aside at the next start.
+pub(crate) fn trained_contracts(backend: &str) -> Vec<InputContract> {
+    if backend == CNN_V2_BACKEND {
+        V2_RATES
+            .iter()
+            .map(|&hz| label_inference::cnn_v2_contract_at(hz))
+            .collect()
+    } else {
+        trained_contract(backend).into_iter().collect()
+    }
 }
 
 /// The trainer backend a request asks for, and what its model reads.
@@ -411,6 +451,8 @@ struct Checked {
     train_only: Vec<RecordingId>,
     /// A multi-gesture model's gestures, `target` first; empty for one gesture.
     gestures: Vec<LabelId>,
+    /// The rate the model reads at (`check_motion_hz`).
+    motion_hz: u32,
 }
 
 impl Checked {
@@ -538,9 +580,14 @@ fn check_request(
             "the label offset must be from -{MAX_LABEL_OFFSET_MS} to {MAX_LABEL_OFFSET_MS} milliseconds, got {label_offset_ms}"
         ));
     }
-    let (backend, input) = method_of(request)?;
+    let (backend, mut input) = method_of(request)?;
     let stages = check_stages(request, backend)?;
     let gestures = check_gestures(request, backend, &target, &mut entries)?;
+    let motion_hz = check_motion_hz(request, backend)?;
+    if backend == CNN_V2_BACKEND {
+        // What it reads at its rate: the trained bundle is checked against this.
+        input = label_inference::cnn_v2_contract_at(motion_hz);
+    }
     let label_timing = label_timing_of(&recordings_ids(&recordings), datasets, &target.to_string());
     Ok(Checked {
         target,
@@ -558,6 +605,7 @@ fn check_request(
         start_from: None,
         train_only: Vec::new(),
         gestures,
+        motion_hz,
     })
 }
 
@@ -673,7 +721,7 @@ fn build_spec(
         "hardNegatives": checked.hard_negatives,
         "labelOffsetMs": checked.label_offset_ms,
         "labelTiming": checked.label_timing,
-        "motionHz": MOTION_HZ,
+        "motionHz": checked.motion_hz,
         // Recordings of one session, by the session's first recording, and where each starts deciding (`session_plan`).
         "sessions": checked.sessions.iter().flat_map(|set| set.iter().map(move |id| (id.to_string(), set[0].to_string()))).collect::<BTreeMap<_, _>>(),
         "decideFromNs": checked.decide_from_ns,
@@ -871,6 +919,12 @@ fn recordings_for(app: &AppHandle, request: &TrainRequest) -> Result<Checked, St
         let target = checked.target.to_string();
         let point =
             host.with_store(|store| start_point(store.registry(), &lab, version, &target))?;
+        if point.motion_hz != checked.motion_hz {
+            return Err(format!(
+                "{} reads at {} Hz: train at {} Hz to continue from it",
+                point.name, point.motion_hz, point.motion_hz
+            ));
+        }
         checked.train_only = continued_train_only(&checked.recordings, &point);
         checked.start_from = Some(point);
     }
@@ -1869,7 +1923,48 @@ mod tests {
             stages: vec![],
             start_from: None,
             gestures: vec![],
+            motion_hz: None,
         }
+    }
+
+    #[test]
+    fn a_v2_cnn_trains_at_25_50_or_100_hz_and_reads_that_rate_s_inputs() {
+        let mut r = request();
+        r.method = Some(CNN_V2_BACKEND.into());
+        let checked = check_request(&r, &datasets(), &sha).unwrap();
+        assert_eq!(checked.motion_hz, 100);
+        assert_eq!(checked.input.features.len(), 1000);
+        for (hz, inputs) in [(25, 250), (50, 500), (100, 1000)] {
+            r.motion_hz = Some(hz);
+            let checked = check_request(&r, &datasets(), &sha).unwrap();
+            assert_eq!(checked.motion_hz, hz);
+            assert_eq!(checked.input, label_inference::cnn_v2_contract_at(hz));
+            assert_eq!(checked.input.features.len(), inputs);
+            let split = plan_split_sessions(
+                &checked.recordings,
+                &checked.mapping,
+                &checked.target,
+                &[],
+                &checked.sessions,
+            )
+            .unwrap();
+            assert_eq!(
+                build_spec(&checked, &split, &BTreeMap::new())["motionHz"],
+                hz
+            );
+        }
+        r.motion_hz = Some(75);
+        let odd = check_request(&r, &datasets(), &sha).err().unwrap();
+        assert!(odd.contains("25, 50 or 100 Hz, not 75 Hz"), "{odd}");
+        // The trees and the first CNN keep the watch's rate.
+        r.motion_hz = Some(25);
+        r.method = Some(CNN_BACKEND.into());
+        let other = check_request(&r, &datasets(), &sha).err().unwrap();
+        assert!(other.contains("only a v2 CNN"), "{other}");
+        r.method = None;
+        assert!(check_request(&r, &datasets(), &sha).is_err());
+        r.motion_hz = Some(100);
+        assert!(check_request(&r, &datasets(), &sha).is_ok());
     }
 
     fn stage(name: &str, ids: &[&str]) -> StageRequest {

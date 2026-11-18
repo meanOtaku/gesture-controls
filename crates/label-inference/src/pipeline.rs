@@ -602,7 +602,7 @@ impl LabelPipeline {
             // The model's inputs, from the samples' own timestamps, for a decision at this sample: what the trainer computes.
             let inputs = match (motion_through, sample.watch_ns, cnn_scaling) {
                 (Some(_), Some(at), Some(_)) if model.kind == crate::inputs::ModelKind::CnnV2 => {
-                    cnn_input::inputs_v2(&motion, &pulse_on_watch, at)
+                    cnn_input::inputs_v2_on(model.cnn_grid, &motion, &pulse_on_watch, at)
                 }
                 (Some(_), Some(at), Some(scaling)) => {
                     cnn_input::inputs_on(model.cnn_grid, &motion, &pulse_on_watch, at, scaling)
@@ -647,9 +647,10 @@ impl LabelPipeline {
 pub(crate) mod tests {
     use super::*;
     use crate::model::tests::{
-        expected, expected_cnn, expected_cnn_v2, expected_median_cnn, expected_median_cnn_100hz,
-        expected_motion, expected_motion_100hz, loaded, loaded_cnn, loaded_cnn_v2,
-        loaded_median_cnn, loaded_median_cnn_100hz, loaded_motion, loaded_motion_100hz,
+        expected, expected_cnn, expected_cnn_v2, expected_cnn_v2_25hz, expected_median_cnn,
+        expected_median_cnn_100hz, expected_motion, expected_motion_100hz, loaded, loaded_cnn,
+        loaded_cnn_v2, loaded_cnn_v2_25hz, loaded_median_cnn, loaded_median_cnn_100hz,
+        loaded_motion, loaded_motion_100hz,
     };
 
     /// One PPG batch of the samples `from..to` of `trace` (statuses all valid).
@@ -1008,6 +1009,14 @@ pub(crate) mod tests {
             "the fixture must have decisions on both sides of the gate: {gated} gated, {open} open"
         );
         scores_the_live_streams(&model, expected);
+    }
+
+    #[test]
+    fn a_25_hz_v2_cnn_scores_the_watch_s_100_hz_streams_as_the_trainer_did() {
+        let model = loaded_cnn_v2_25hz();
+        assert_eq!(model.kind, crate::inputs::ModelKind::CnnV2);
+        assert_eq!(model.cnn_grid, pinch_inference::cnn_input::CnnGrid::HZ_25);
+        scores_the_live_streams(&model, expected_cnn_v2_25hz());
     }
 
     fn scores_the_live_streams(

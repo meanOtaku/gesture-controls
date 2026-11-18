@@ -45,11 +45,15 @@ def test_the_exported_file_reproduces_the_trained_networks(monkeypatch):
     assert abs(cnn_v2.predict(data, x[:40]) - model.predict_proba(x[:40])[:, 1]).max() < cnn_v2.PARITY_TOLERANCE
 
 
-def test_a_v2_spec_reads_motion_at_100_hz():
+def test_a_v2_spec_reads_motion_at_100_hz_unless_it_names_25_or_50():
     raw = {"version": 1, "target": "pinch_in", "recordings": {}, "train": [], "evaluation": [], "backend": lt.CNN_V2_BACKEND}
-    assert lt.parse_spec(raw).cnn and lt.parse_spec(raw).cnn_v2
-    with pytest.raises(lt.TrainingRefused):
-        lt.parse_spec({**raw, "motionHz": 50})
+    assert lt.parse_spec(raw).cnn and lt.parse_spec(raw).cnn_v2 and lt.parse_spec(raw).motion_hz == 100
+    assert [lt.parse_spec({**raw, "motionHz": hz}).motion_hz for hz in (25, 50, 100)] == [25, 50, 100]
+    with pytest.raises(lt.TrainingRefused, match="motionHz must be one of"):
+        lt.parse_spec({**raw, "motionHz": 75})
+    # The first CNN and the trees keep their own rates.
+    with pytest.raises(lt.TrainingRefused, match="motionHz must be one of"):
+        lt.parse_spec({**raw, "backend": lt.CNN_BACKEND, "motionHz": 25})
     with pytest.raises(lt.TrainingRefused):
         lt.parse_spec({**raw, "sources": ["watchPpg"]})
 
@@ -149,3 +153,54 @@ def test_a_cnn_catches_a_start_from_100_ms_the_trees_from_680():
     ms = 1_000_000
     assert ppg_onset.match_pairs([1200 * ms], [1000 * ms], 500, (100, 900)) == [(0, 0)]
     assert ppg_onset.match_pairs([1200 * ms], [1000 * ms], 500) == []
+
+
+@pytest.mark.parametrize("hz, ticks", [(25, 25), (50, 50)])
+def test_v2_inputs_at_a_slower_rate_keep_the_same_spans(hz, ticks):
+    mts, motion, pts, pulse = streams()
+    d = pts[-3:]
+    v2 = cnn_input.inputs(mts, motion, pts, pulse, d, hz=hz, envelope=True)
+    assert v2.shape == (3, 10 * ticks) and np.isfinite(v2).all()
+    names = cnn_input.feature_names(hz, envelope=True)
+    assert len(names) == 10 * ticks and names[-1] == f"cnn_accel_jerk_env_t{ticks - 1:02d}"
+    g = cnn_input.grid_of(hz)
+    assert g.window * g.tick_ns == 1_000_000_000 and g.history * g.tick_ns == 10_000_000_000   # 1 s seen, 10 s scaled against
+
+
+def test_a_25_hz_network_saves_its_length_and_scores_as_its_file_does(monkeypatch):
+    import json
+
+    monkeypatch.setattr(cnn_v2, "MEMBERS", 2)
+    rng = np.random.default_rng(5)
+    x = rng.random((300, 250)).astype(np.float32)
+    y = (rng.random(300) < 0.2).astype(int)
+    model = cnn_v2.fit(x, y, 17, epochs=1)
+    data = cnn_v2.to_bytes(model)
+    assert json.loads(data)["length"] == 25
+    assert abs(cnn_v2.predict(data, x[:40]) - model.predict_proba(x[:40])[:, 1]).max() < cnn_v2.PARITY_TOLERANCE
+    # It continues only on inputs of its own rate.
+    assert len(cnn_v2.fit(x, y, 17, epochs=1, start=data).nets) == 2
+    with pytest.raises(ValueError, match="reads 10 x 25, not 10 x 100"):
+        cnn_v2.fit(rng.random((300, 1000)).astype(np.float32), y, 17, epochs=1, start=data)
+    with pytest.raises(ValueError, match="channels of"):
+        cnn_v2.fit(rng.random((300, 300)).astype(np.float32), y, 17, epochs=1)
+
+
+def test_a_v2_model_trains_and_is_published_at_25_hz(tmp_path, monkeypatch):
+    import json
+
+    from label_trainer import cnn
+
+    from .pulse_data import spec_for
+
+    monkeypatch.setattr(cnn_v2, "MEMBERS", 1)
+    monkeypatch.setattr(cnn, "EPOCHS", 1)
+    monkeypatch.setattr(lt, "OVERLAY_COPIES", 0, raising=False)
+    spec = {**spec_for(tmp_path, motion=True, every_s=5.0, motion_hz=100), "backend": lt.CNN_V2_BACKEND, "motionHz": 25}
+    result = lt.run(spec, tmp_path / "out")
+    assert result["outcome"] in ("deployable", "evaluationOnly"), result["message"]
+    bundle = tmp_path / "out" / "bundle"
+    manifest = json.loads((bundle / "manifest.json").read_text())
+    assert manifest["preprocessing"]["motionHz"] == 25
+    assert len(manifest["input"]["features"]) == 250
+    assert json.loads((bundle / "model.cnn").read_text())["length"] == 25

@@ -192,7 +192,7 @@ pub struct Gate {
 }
 
 impl Preprocessing {
-    /// The CNN grid a median-scaled CNN reads: what the manifest names, 50 Hz when it names none.
+    /// The CNN grid a median-scaled or v2 CNN reads: what the manifest names, 50 Hz when it names none.
     pub fn cnn_grid(&self) -> pinch_inference::cnn_input::CnnGrid {
         self.motion_hz
             .and_then(pinch_inference::cnn_input::CnnGrid::at_hz)
@@ -395,15 +395,21 @@ pub fn validate_bundle(
                 kind.preprocessing()
             ));
         }
-        if pinch_inference::imu_onset::MotionGrid::at_hz(hz).is_none() {
+        if kind == ModelKind::CnnV2 {
+            if pinch_inference::cnn_input::CnnGrid::at_hz(hz).is_none() {
+                return mismatch(format!(
+                    "a v2 CNN reads its motion at 25, 50 or 100 Hz, not {hz} Hz"
+                ));
+            }
+        } else if pinch_inference::imu_onset::MotionGrid::at_hz(hz).is_none() {
             return mismatch(format!(
                 "a '{}' model reads its motion at 50 or 100 Hz, not {hz} Hz",
                 kind.preprocessing()
             ));
         }
     }
-    if kind == ModelKind::CnnV2 && manifest.preprocessing.motion_hz != Some(100) {
-        return mismatch("a v2 CNN reads its motion at 100 Hz and must say so".into());
+    if kind == ModelKind::CnnV2 && manifest.preprocessing.motion_hz.is_none() {
+        return mismatch("a v2 CNN must say the rate it reads its motion at".into());
     }
     match (kind, manifest.preprocessing.gate) {
         (ModelKind::CnnV2, Some(g))
@@ -574,6 +580,11 @@ pub(crate) mod tests {
     /// The v2 CNN bundle: branches, the jerk envelope and a peak gate (its expected scores are gated).
     pub fn cnn_v2_fixture_dir() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ppg_imu_cnn_v2_bundle")
+    }
+
+    /// A v2 CNN trained at 25 Hz (its manifest says so), its trace the watch's 100 Hz motion.
+    pub fn cnn_v2_25hz_fixture_dir() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ppg_imu_cnn_v2_25hz_bundle")
     }
 
     pub fn median_cnn_100hz_fixture_dir() -> std::path::PathBuf {
@@ -768,6 +779,42 @@ pub(crate) mod tests {
             refused(|m| m["preprocessing"]["motionHz"] = 100.into())
                 .contains("only a 'ppg_imu_onset' or 'ppg_imu_cnn_median' model reads its motion at a rate it names")
         );
+    }
+
+    #[test]
+    fn a_v2_cnn_reads_its_motion_at_25_50_or_100_hz_and_must_say_which() {
+        use pinch_inference::cnn_input::CnnGrid;
+        let slow = validate_bundle(&cnn_v2_25hz_fixture_dir(), None).unwrap();
+        assert_eq!(slow.manifest.preprocessing.cnn_grid(), CnnGrid::HZ_25);
+        assert_eq!(slow.manifest.input.features.len(), 250);
+        let copy = |edit: &dyn Fn(&mut serde_json::Value)| {
+            let dir = tempfile::tempdir().unwrap();
+            for entry in fs::read_dir(cnn_v2_25hz_fixture_dir()).unwrap() {
+                let entry = entry.unwrap();
+                fs::copy(entry.path(), dir.path().join(entry.file_name())).unwrap();
+            }
+            let path = dir.path().join("manifest.json");
+            let mut manifest: serde_json::Value =
+                serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            edit(&mut manifest);
+            fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+            validate_bundle(dir.path(), None)
+                .err()
+                .map(|e| e.to_string())
+        };
+        let odd = copy(&|m| m["preprocessing"]["motionHz"] = 75.into()).unwrap();
+        assert!(odd.contains("25, 50 or 100 Hz, not 75 Hz"), "{odd}");
+        // Its 250 inputs are not the 1000 a 100 Hz model reads.
+        let fast = copy(&|m| m["preprocessing"]["motionHz"] = 100.into()).unwrap();
+        assert!(fast.contains("must read the 1000 features"), "{fast}");
+        let unsaid = copy(&|m| {
+            m["preprocessing"]
+                .as_object_mut()
+                .unwrap()
+                .remove("motionHz");
+        })
+        .unwrap();
+        assert!(unsaid.contains("must say the rate"), "{unsaid}");
     }
 
     #[test]

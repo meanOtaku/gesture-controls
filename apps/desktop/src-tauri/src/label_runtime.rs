@@ -284,7 +284,7 @@ const OLD_STORE_FILES: [&str; 2] = ["network-designs.json", "fine-tune-plans.jso
 fn kept_contracts() -> Vec<model_lab_core::InputContract> {
     let mut contracts: Vec<_> = crate::label_training::TRAINED_BACKENDS
         .iter()
-        .filter_map(|backend| crate::label_training::trained_contract(backend))
+        .flat_map(|backend| crate::label_training::trained_contracts(backend))
         .collect();
     contracts.extend([
         label_inference::pinch_start_contract(),
@@ -2316,6 +2316,13 @@ mod tests {
             );
         }
         assert!(kept.contains(&label_inference::cnn_v2_contract()));
+        // A v2 CNN trained at any rate it can be trained at, not only the default.
+        for hz in crate::label_training::V2_RATES {
+            assert!(
+                kept.contains(&label_inference::cnn_v2_contract_at(hz)),
+                "a v2 CNN trained at {hz} Hz would be purged at start"
+            );
+        }
     }
 
     #[test]

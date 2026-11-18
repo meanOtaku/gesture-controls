@@ -60,7 +60,8 @@ BACKEND = "ppg-onset-trees"
 CNN_BACKEND = "ppg-imu-cnn"
 # The v2 CNN (`cnn_v2.py`): one branch per sensor, the accelerometer's jerk envelope as a tenth channel, warping and
 # noise-overlay augmentation, a peak gate, and a cut-off chosen on the no-gesture recordings
-# (docs/research/artifacts/pinch-cnn-v2-2026-11). It needs PyTorch, and reads motion at 100 Hz.
+# (docs/research/artifacts/pinch-cnn-v2-2026-11). It needs PyTorch, and reads motion at 100 Hz unless the spec names
+# 25 or 50 (`motionHz`, `cnn_input.V2_RATES`).
 CNN_V2_BACKEND = "ppg-imu-cnn-v2"
 BACKENDS = (BACKEND, CNN_BACKEND, CNN_V2_BACKEND)
 CNN_PREPROCESSING = "ppg_imu_cnn_median"
@@ -293,10 +294,9 @@ def parse_spec(raw: dict[str, Any]) -> Spec:
         if len({rid in train for rid in members}) > 1:
             raise TrainingRefused(f"the recordings of one session ({', '.join(sorted(members))}) are split between training and evaluation")
     motion_hz = raw.get("motionHz", imu_onset.MOTION_HZ)
-    if isinstance(motion_hz, bool) or motion_hz not in imu_onset.GRIDS:
-        raise TrainingRefused(f"motionHz must be one of {sorted(imu_onset.GRIDS)}, got {motion_hz!r}")
-    if backend == CNN_V2_BACKEND and motion_hz != 100:
-        raise TrainingRefused("the v2 CNN reads motion at 100 Hz")
+    rates = cnn_input.V2_RATES if backend == CNN_V2_BACKEND else tuple(sorted(imu_onset.GRIDS))
+    if isinstance(motion_hz, bool) or motion_hz not in rates:
+        raise TrainingRefused(f"motionHz must be one of {list(rates)} for this model, got {motion_hz!r}")
     decide_from_ns = raw.get("decideFromNs", {}) or {}
     if not isinstance(decide_from_ns, dict) or any(rid not in recordings or isinstance(t, bool) or not isinstance(t, int) for rid, t in decide_from_ns.items()):
         raise TrainingRefused("decideFromNs must give recordings of the spec a whole number of nanoseconds")
@@ -1173,13 +1173,13 @@ def write_bundle(spec: Spec, out: Path, model_bytes: bytes, metrics: dict[str, A
                     " -> the last 1 s (9 x 50) -> CNN (3 dilated convolutions, max and mean pooling, 2 dense) -> peak trigger")
         from . import cnn
 
-        details = {"convolutions": [c for c, _ in cnn.CONVOLUTIONS_FOR[cnn_input.grid_of(spec.motion_hz).window]],
+        details = {"convolutions": [c for c, _ in cnn.CONVOLUTIONS_FOR.get(cnn_input.grid_of(spec.motion_hz).window, ())],
                    "kernel": cnn.KERNEL, "epochs": cnn.EPOCHS}
         if spec.cnn_v2:
             from . import cnn_v2
 
-            pipeline = ("accelerometer, gyroscope, PPG and the accelerometer's jerk envelope on a 100 Hz grid -> each channel scaled by the median and"
-                        " median absolute deviation of its last 11 s, sigmoid -> the last 1 s (10 x 100) -> one branch per sensor (2 convolutions each),"
+            pipeline = (f"accelerometer, gyroscope, PPG and the accelerometer's jerk envelope on a {spec.motion_hz} Hz grid -> each channel scaled by the median and"
+                        f" median absolute deviation of its last 11 s, sigmoid -> the last 1 s (10 x {cnn_input.grid_of(spec.motion_hz).window}) -> one branch per sensor (2 convolutions each),"
                         " 2 shared convolutions, max and mean pooling of every branch and the shared maps, 2 dense -> 3 networks averaged"
                         " -> peak gate (accelerometer jerk in the last 600 ms) -> peak trigger")
             details = {"branches": [list(g) for g in cnn_v2.GROUPS], "branchConvolutions": [c for c, _ in cnn_v2.BRANCH],

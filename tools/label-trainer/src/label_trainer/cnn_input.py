@@ -98,7 +98,12 @@ GRIDS = {
     # 11 unseen recordings, trained as the app trains, this caught 6-8 more pinch outs of 127 at the same false activations
     # (`docs/research/artifacts/paper-rylo-2022/`).
     100: Grid(10_000_000, 100, 1000, 30, 50),
+    # The pulse's own rate, for the v2 CNN only: the same 1 s seen and 10 s scaled against, a quarter of the 100 Hz ticks.
+    # The moving-wrist spans round to whole ticks: 8 (0.32 s) for the RMS and 13 (0.52 s) either side.
+    25: Grid(40_000_000, 25, 250, 8, 13),
 }
+# The rates the v2 CNN can be trained at (the first CNN and the trees keep `imu_onset.GRIDS`).
+V2_RATES = (25, 50, 100)
 
 
 def grid_of(hz: int) -> Grid:
@@ -120,7 +125,7 @@ def _envelope_grid(motion_grid: np.ndarray, hz: int) -> np.ndarray:
     accel = motion_grid[:, :, 0:3]
     jerk = np.diff(accel, axis=1, prepend=accel[:, :1, :]) * hz
     size = np.linalg.norm(jerk, axis=2, keepdims=True)
-    k = max(1, round(ENVELOPE_MS * hz / 1000))
+    k = max(1, int(ENVELOPE_MS * hz / 1000 + 0.5))   # halves round up, as the runtime's f64::round (2.5 ticks at 50 Hz -> 3)
     padded = np.concatenate([np.zeros((size.shape[0], k - 1, 1)), size], axis=1)
     return np.lib.stride_tricks.sliding_window_view(padded, k, axis=1).max(axis=-1)
 

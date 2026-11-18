@@ -129,6 +129,9 @@ impl ModelKind {
         match (self, motion_hz) {
             (Self::CnnMedian, Some(hz)) => cnn_input::CnnGrid::at_hz(hz)
                 .map_or(&cnn_input::FEATURE_NAMES[..], |g| g.feature_names()),
+            // A v2 CNN at 25, 50 or 100 Hz: 10 channels of that rate's ticks.
+            (Self::CnnV2, Some(hz)) => cnn_input::CnnGrid::at_hz(hz)
+                .map_or(&cnn_input::V2_FEATURE_NAMES[..], |g| g.v2_feature_names()),
             _ => self.feature_names(),
         }
     }

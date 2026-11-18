@@ -30,7 +30,7 @@ function setup(over: { plan?: TrainPlan; environment?: TrainerEnvironment; statu
     if (command === "get_label_training_status") return over.status ?? { running: null, last: null };
     if (command === "plan_label_training") return over.plan ?? okPlan;
     if (command === "start_label_training") return "run-1";
-    if (command === "list_training_start_points") return [{ versionId: "snap-v2", name: "Snap v2", createdAt: "2026-11-15T10:00:00Z", trainedOn: ["s1", "i1"], missing: 1 }];
+    if (command === "list_training_start_points") return [{ versionId: "snap-v2", name: "Snap v2", createdAt: "2026-11-15T10:00:00Z", trainedOn: ["s1", "i1"], missing: 1, motionHz: 50 }];
     return undefined;
   });
   render(<TrainPanel desktopAvailable labels={labels} datasets={datasets} onShowPipeline={over.onShowPipeline} />);
@@ -381,6 +381,32 @@ describe("TrainPanel training plan", () => {
     // Another model kind never continues.
     fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn" } });
     await waitFor(() => expect(calls("plan_label_training").at(-1)?.[1]).not.toHaveProperty("request.startFrom"));
+  });
+
+  it("offers CNN v2 a sample rate, sends one other than 100 Hz, and keeps a continued model's rate", async () => {
+    setup();
+    choose("snap");
+    expect(screen.queryByLabelText("Sample rate")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn-v2" } });
+    const rate = await screen.findByLabelText("Sample rate");
+    expect(rate).toHaveValue("100");
+    expect(within(rate).getAllByRole("option").map((o) => o.getAttribute("value"))).toEqual(["100", "50", "25"]);
+    await waitFor(() => expect(calls("plan_label_training").at(-1)?.[1].request.method).toBe("ppg-imu-cnn-v2"));
+    expect(calls("plan_label_training").at(-1)?.[1].request).not.toHaveProperty("motionHz");
+    fireEvent.change(rate, { target: { value: "25" } });
+    expect(screen.getByText(/in 25 ticks instead of 100/)).toBeInTheDocument();
+    await waitFor(() => expect(calls("plan_label_training").at(-1)?.[1].request.motionHz).toBe(25));
+    // Continuing from a model trains at its rate, and the choice is locked.
+    const startFrom = screen.getByLabelText("Start from");
+    await within(startFrom).findByRole("option", { name: "Continue training Snap v2" });
+    fireEvent.change(startFrom, { target: { value: "snap-v2" } });
+    expect(screen.getByLabelText("Sample rate")).toHaveValue("50");
+    expect(screen.getByLabelText("Sample rate")).toBeDisabled();
+    await waitFor(() => expect(calls("plan_label_training").at(-1)?.[1].request.motionHz).toBe(50));
+    // Another model never sends a rate.
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "ppg-imu-cnn" } });
+    await waitFor(() => expect(calls("plan_label_training").at(-1)?.[1].request.method).toBe("ppg-imu-cnn"));
+    expect(calls("plan_label_training").at(-1)?.[1].request).not.toHaveProperty("motionHz");
   });
 
   it("learns several ticked gestures in one CNN v2, switching to it, with no role for them, and never continues one", async () => {

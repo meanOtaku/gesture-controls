@@ -148,7 +148,21 @@ export interface TrainRequest {
   startFrom?: string;
   /** CNN v2 only: the other gestures one network learns with `label` (a multi-gesture model). */
   gestures?: string[];
+  /** CNN v2 only: the rate its grid reads at, one of `V2_RATES`; absent trains at the watch's 100 Hz. */
+  motionHz?: number;
 }
+
+/** The rates a CNN v2 can be trained at (`V2_RATES` in `label_training.rs`), the default first. */
+export const V2_RATES = [100, 50, 25] as const;
+export type V2Rate = (typeof V2_RATES)[number];
+export const V2_DEFAULT_RATE: V2Rate = 100;
+
+/** How the rate is put in the Train panel. */
+export const V2_RATE_LABEL: Record<V2Rate, string> = {
+  100: "100 Hz — the watch's full motion rate (default)",
+  50: "50 Hz — half the ticks",
+  25: "25 Hz — the pulse's own rate",
+};
 
 /** How one gesture's model of a multi-gesture run came out (`GestureOutcome` in `label_training.rs`). */
 export interface GestureOutcome {
@@ -179,6 +193,8 @@ export interface StartPoint {
   trainedOn: string[];
   /** How many of the recordings it trained on are no longer here. */
   missing: number;
+  /** The rate it reads at (Hz): a model continuing from it trains at the same. */
+  motionHz: number;
 }
 
 /** Mirrors `StageRequest` in `label_training.rs`: one step of a training plan. */
@@ -379,6 +395,8 @@ export function buildRequest(input: {
   startFrom?: string;
   /** Only for CNN v2: the other gestures to learn in the same model. */
   gestures?: string[];
+  /** Only for CNN v2: the rate to train at; the default (100 Hz) is not sent. */
+  motionHz?: number;
 }): TrainRequest {
   const role = (label: string): OtherRole => input.roles[label] ?? "negative";
   return {
@@ -393,6 +411,7 @@ export function buildRequest(input: {
     ...(input.method === CNN_METHOD && input.stages?.length ? { stages: input.stages } : {}),
     ...(input.method === CNN_V2_METHOD && input.gestures?.length ? { gestures: [...input.gestures] } : {}),
     ...(input.method === CNN_V2_METHOD && input.startFrom && !input.gestures?.length ? { startFrom: input.startFrom } : {}),
+    ...(input.method === CNN_V2_METHOD && input.motionHz !== undefined && input.motionHz !== V2_DEFAULT_RATE ? { motionHz: input.motionHz } : {}),
   };
 }
 

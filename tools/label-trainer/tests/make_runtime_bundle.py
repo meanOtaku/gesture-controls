@@ -27,14 +27,17 @@ FIXTURES = Path(__file__).resolve().parents[3] / "crates/label-inference/tests/f
 V2_FIXTURE_GATE = 10.0
 
 
-def write(name: str, motion: bool, backend: str = lt.BACKEND, motion_hz: int | None = None) -> None:
+def write(name: str, motion: bool, backend: str = lt.BACKEND, motion_hz: int | None = None, data_hz: int | None = None) -> None:
+    """`motion_hz` is the rate the model reads; `data_hz` the rate of the recorded motion (the watch's 100 Hz for a model
+    that reads 25), `motion_hz` when not named."""
+    data_hz = data_hz or motion_hz or 50
     out = FIXTURES / name
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         lt.MIN_NEGATIVE_SECONDS, lt.MAX_FALSE_ACTIVATIONS_PER_HOUR, lt.MIN_GESTURE_RECALL = 0.0, float("inf"), 0.0
         lt.MIN_BALANCED_ACCURACY, lt.MAX_FALSE_ACTIVATION_RATE = 0.0, 1.0
         # Gestures 5 s apart leave quiet time between them, so the model learns that quiet is not a start.
-        raw = spec_for(tmp, seconds=60.0, every_s=5.0, motion=motion, motion_hz=motion_hz or 50)
+        raw = spec_for(tmp, seconds=60.0, every_s=5.0, motion=motion, motion_hz=data_hz)
         raw["backend"] = backend
         if motion_hz:
             raw["motionHz"] = motion_hz
@@ -48,7 +51,7 @@ def write(name: str, motion: bool, backend: str = lt.BACKEND, motion_hz: int | N
             shutil.copy(tmp / "run" / "bundle" / file, out / file)
         data = (out / model_file).read_bytes()
         trace = load_recording(write_pulse_recording(tmp, "live", seed=99, seconds=24.0, gestures_until_s=15.0, motion=motion,
-                                                     motion_hz=motion_hz or 50))
+                                                     motion_hz=data_hz))
         ts, values = lt.pulse_of(trace)
         x = lt.inputs(lt.parse_spec(raw), trace, ts)
         ok = np.isfinite(x).all(axis=1)
@@ -109,6 +112,8 @@ def main() -> None:
     write("ppg_imu_cnn_median_100hz_bundle", motion=True, backend=lt.CNN_BACKEND, motion_hz=100)
     # The v2 CNN: branches, the jerk envelope and the peak gate (its expected scores are gated, as the runtime's are).
     write("ppg_imu_cnn_v2_bundle", motion=True, backend=lt.CNN_V2_BACKEND, motion_hz=100)
+    # A v2 CNN trained at 25 Hz, fed the watch's 100 Hz motion as in use.
+    write("ppg_imu_cnn_v2_25hz_bundle", motion=True, backend=lt.CNN_V2_BACKEND, motion_hz=25, data_hz=100)
     write_multi_gesture()
 
 
@@ -117,6 +122,8 @@ if __name__ == "__main__":
         write("ppg_imu_cnn_median_100hz_bundle", motion=True, backend=lt.CNN_BACKEND, motion_hz=100)
     elif sys.argv[1:] == ["multi-gesture"]:
         write_multi_gesture()
+    elif sys.argv[1:] == ["cnn-v2-25"]:
+        write("ppg_imu_cnn_v2_25hz_bundle", motion=True, backend=lt.CNN_V2_BACKEND, motion_hz=25, data_hz=100)
     elif sys.argv[1:] == ["cnn-v2"]:
         write("ppg_imu_cnn_v2_bundle", motion=True, backend=lt.CNN_V2_BACKEND, motion_hz=100)
     else:

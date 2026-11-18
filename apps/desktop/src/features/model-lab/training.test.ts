@@ -37,6 +37,13 @@ describe("the v2 CNN", () => {
 });
 
 describe("buildRequest", () => {
+  it("sends a CNN v2's rate only when it is not the default, and never another model's", () => {
+    const base = { label: "snap", datasetIds: ["a"], others: [], roles: {} };
+    expect(buildRequest({ ...base, method: CNN_V2_METHOD, motionHz: 25 }).motionHz).toBe(25);
+    expect(buildRequest({ ...base, method: CNN_V2_METHOD, motionHz: 100 })).not.toHaveProperty("motionHz");
+    expect(buildRequest({ ...base, method: CNN_METHOD, motionHz: 25 })).not.toHaveProperty("motionHz");
+  });
+
   it("makes every other label a negative unless it was set aside", () => {
     const request = buildRequest({ label: "snap", datasetIds: ["a", "b"], others: ["idle", "walking"], roles: { walking: "exclude" } });
     expect(request).toEqual({ label: "snap", datasetIds: ["a", "b"], negatives: ["idle"], excludes: ["walking"] });

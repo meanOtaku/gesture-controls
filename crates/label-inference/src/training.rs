@@ -76,7 +76,12 @@ pub fn cnn_contract_100() -> InputContract {
 /// What the v2 CNN pinch-start model reads: the same 11 s on the 100 Hz grid, with the accelerometer's jerk envelope as a
 /// tenth channel (1,000 inputs; see [`ModelKind::CnnV2`]).
 pub fn cnn_v2_contract() -> InputContract {
-    ModelKind::CnnV2.contract_at(Some(100))
+    cnn_v2_contract_at(100)
+}
+
+/// What a v2 CNN trained at `hz` (25, 50 or 100) reads: the same spans, 10 channels of that rate's ticks.
+pub fn cnn_v2_contract_at(hz: u32) -> InputContract {
+    ModelKind::CnnV2.contract_at(Some(hz))
 }
 
 /// What the earlier PPG-only pinch-start model reads (see [`ModelKind::PpgOnly`]); its versions and runs are kept.

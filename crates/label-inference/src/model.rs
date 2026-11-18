@@ -315,8 +315,9 @@ impl LoadedModel {
 pub(crate) mod tests {
     use super::*;
     use crate::bundle::tests::{
-        cnn_fixture_dir, cnn_v2_fixture_dir, fixture_dir, median_cnn_100hz_fixture_dir,
-        median_cnn_fixture_dir, motion_100hz_fixture_dir, motion_fixture_dir,
+        cnn_fixture_dir, cnn_v2_25hz_fixture_dir, cnn_v2_fixture_dir, fixture_dir,
+        median_cnn_100hz_fixture_dir, median_cnn_fixture_dir, motion_100hz_fixture_dir,
+        motion_fixture_dir,
     };
     use crate::bundle::validate_bundle;
     use model_lab_core::{ModelOrigin, ProjectId};
@@ -390,6 +391,18 @@ pub(crate) mod tests {
     /// The v2 CNN fixture's trace: its gated scores, as [`expected_motion`].
     pub fn expected_cnn_v2() -> (Vec<PpgSample>, Vec<MotionSample>, Vec<Option<f64>>) {
         expected_in(&cnn_v2_fixture_dir())
+    }
+
+    /// The 25 Hz v2 CNN fixture model, approved and active.
+    pub fn loaded_cnn_v2_25hz() -> LoadedModel {
+        let bundle = validate_bundle(&cnn_v2_25hz_fixture_dir(), None).unwrap();
+        let version = active_version(&bundle);
+        LoadedModel::load(bundle, &version).unwrap()
+    }
+
+    /// The 25 Hz v2 CNN fixture's trace: its gated scores, as [`expected_motion`].
+    pub fn expected_cnn_v2_25hz() -> (Vec<PpgSample>, Vec<MotionSample>, Vec<Option<f64>>) {
+        expected_in(&cnn_v2_25hz_fixture_dir())
     }
 
     /// The CNN fixture model, approved and active.

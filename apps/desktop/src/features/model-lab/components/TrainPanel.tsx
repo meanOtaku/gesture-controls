@@ -12,7 +12,7 @@ import { Checkbox } from "../../../components/ui/checkbox";
 import { Label } from "../../../components/ui/label";
 import { useSessionState } from "../hooks/useSessionState";
 import { useTrainingRun } from "../hooks/useTrainingRun";
-import { CNN_METHOD, CNN_MODEL, CNN_V2_METHOD, CNN_V2_MODEL, PULSE_MODEL, TREES_METHOD, buildRequest, defaultStages, hasLabel, otherLabels, recordingsWithLabel, stagesForRequest, type OtherRole, type StageDraft, type StartPoint, type TrainMethod, type TrainPlan, type TrainerEnvironment } from "../training";
+import { CNN_METHOD, CNN_MODEL, CNN_V2_METHOD, CNN_V2_MODEL, PULSE_MODEL, TREES_METHOD, V2_DEFAULT_RATE, V2_RATES, V2_RATE_LABEL, buildRequest, defaultStages, hasLabel, otherLabels, recordingsWithLabel, stagesForRequest, type OtherRole, type StageDraft, type StartPoint, type TrainMethod, type TrainPlan, type TrainerEnvironment } from "../training";
 import { inTreeOrder } from "../../labels/gestures";
 import { GestureMultiSelect } from "./GestureMultiSelect";
 import { TrainingPlanEditor } from "./TrainingPlanEditor";
@@ -55,6 +55,8 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
   const [startPoints, setStartPoints] = useState<StartPoint[]>([]);
   // CNN v2: the other gestures one network learns with the target (a multi-gesture model).
   const [alsoGestures, setAlsoGestures] = useSessionState<string[]>("train.gestures", []);
+  // CNN v2: the rate its grid reads the motion and pulse at.
+  const [v2Rate, setV2Rate] = useSessionState<number>("train.motionHz", V2_DEFAULT_RATE);
   const [plan, setPlan] = useState<TrainPlan | null>(null);
   const [environment, setEnvironment] = useState<TrainerEnvironment | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +82,10 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
   const planStages = useMemo(() => (staged && method === CNN_METHOD ? stagesForRequest(stages, selected) : undefined), [staged, method, stages, selected]);
   const startPoint = method === CNN_V2_METHOD && !multi ? startPoints.find((point) => point.versionId === startFrom) ?? null : null;
   const continuedFrom = startPoint?.versionId;
-  const request = useMemo(() => target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, research, labelOffsetMs: labelOffset, method, hardNegatives, stages: planStages, startFrom: continuedFrom, gestures: learnt }), [target, selected, others, roles, research, labelOffset, method, hardNegatives, planStages, continuedFrom, learnt]);
+  // A model continued from keeps the rate it was trained at.
+  const rate = startPoint?.motionHz ?? ((V2_RATES as readonly number[]).includes(v2Rate) ? v2Rate : V2_DEFAULT_RATE);
+  const motionHz = method === CNN_V2_METHOD ? rate : undefined;
+  const request = useMemo(() => target === "" ? null : buildRequest({ label: target, datasetIds: [...selected], others, roles, research, labelOffsetMs: labelOffset, method, hardNegatives, stages: planStages, startFrom: continuedFrom, gestures: learnt, motionHz }), [target, selected, others, roles, research, labelOffset, method, hardNegatives, planStages, continuedFrom, learnt, motionHz]);
   // What the model continued from trained on and is not chosen now: left out, it may forget what it learnt there.
   const dropped = startPoint ? startPoint.trainedOn.filter((id) => !selected.has(id)).length : 0;
   const requestKey = JSON.stringify(request);
@@ -229,6 +234,21 @@ export const TrainPanel = memo(function TrainPanel({ desktopAvailable, labels, d
               </optgroup>
             </select>
           </div>
+          {method === CNN_V2_METHOD && (
+            <div className="field">
+              <div className="field-head"><Label htmlFor={`${uid}-rate`}>Sample rate</Label></div>
+              <select id={`${uid}-rate`} className={NATIVE_SELECT} value={rate} disabled={running !== null || startPoint !== null} onChange={(event) => setV2Rate(Number(event.target.value))}>
+                {V2_RATES.map((hz) => <option key={hz} value={hz}>{V2_RATE_LABEL[hz]}</option>)}
+              </select>
+              <p className="field-hint">
+                {startPoint
+                  ? `It continues from ${startPoint.name}, so it reads at that model's ${startPoint.motionHz} Hz.`
+                  : rate === V2_DEFAULT_RATE
+                    ? "It sees the last second of motion and pulse at the watch's full 100 Hz. Its research figures are for this rate."
+                    : `It sees the same last second, scaled against the same 10 s, in ${rate} ticks instead of 100: lighter to run, but quick detail in the wrist's motion is smoothed away. Compare it with a 100 Hz model on the same recordings before relying on it.`}
+              </p>
+            </div>
+          )}
           <p className="field-hint">{(method === CNN_V2_METHOD ? CNN_V2_MODEL : method === CNN_METHOD ? CNN_MODEL : PULSE_MODEL).tagline}{method === CNN_V2_METHOD ? <> <Badge variant="outline">new</Badge></> : null}</p>
           {/* Always drawn, so the details read the same whether open or not. */}
           <details className="inline-menu">
