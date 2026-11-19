@@ -1,0 +1,52 @@
+[
+  {
+    "startMs": 6088.034766,
+    "endMs": 6728.873389,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 11006.186622,
+    "endMs": 11707.327979,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 16935.66739,
+    "endMs": 17606.9167,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 23487.592969,
+    "endMs": 24108.595166,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 30768.995557,
+    "endMs": 31399.946485,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 39311.07085,
+    "endMs": 39781.83501,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 46801.671436,
+    "endMs": 47452.397754,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 53100.979395,
+    "endMs": 53751.827784,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 59883.67507,
+    "endMs": 60671.283448,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 67132.675006,
+    "endMs": 67761.157715,
+    "label": "snap_fingers"
+  }
+]
