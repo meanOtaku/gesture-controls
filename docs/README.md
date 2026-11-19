@@ -53,6 +53,10 @@
 - [Model format and inference runtime](decisions/2026-10-model-runtime-and-format.md) (in-process, no Python at runtime; since 2026-10-19 the one model is ExtraTrees as a plain `model.trees` file, not ONNX)
 - [Wi-Fi vs BLE watch transport](decisions/2026-09-24-wifi-vs-ble-transport.md) (superseded: Bluetooth is now the default)
 
+## Roadmap
+
+- [Refinements and ideas, November 2026](roadmap-2026-11.md): 28 ways to make the project more dependable, more widely useful and stronger as a paper, each with its status, evidence and a first step
+
 ## Release
 
 - [Release-readiness acceptance checklist](release-readiness.md): the real-device gate
