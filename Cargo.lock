@@ -104,7 +104,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "automation"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -848,7 +848,7 @@ dependencies = [
 
 [[package]]
 name = "drone-link"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "jpeg-decoder",
  "thiserror 2.0.21",
@@ -1476,7 +1476,7 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "head-tracking"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "serde_json",
@@ -1799,7 +1799,7 @@ dependencies = [
 
 [[package]]
 name = "interaction-engine"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "nalgebra",
  "serde",
@@ -1977,7 +1977,7 @@ dependencies = [
 
 [[package]]
 name = "label-inference"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "model-lab-core",
  "pinch-inference",
@@ -2177,7 +2177,7 @@ dependencies = [
 
 [[package]]
 name = "model-lab-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2236,7 +2236,7 @@ dependencies = [
 
 [[package]]
 name = "native-head-tracking"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cc",
  "head-tracking",
@@ -2709,7 +2709,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pinch-inference"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3539,7 +3539,7 @@ dependencies = [
 
 [[package]]
 name = "spatial-gesture-desktop"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "automation",
  "chrono",
@@ -3570,7 +3570,7 @@ dependencies = [
 
 [[package]]
 name = "spatial-protocol"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3693,7 +3693,7 @@ dependencies = [
 
 [[package]]
 name = "system-control"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "thiserror 2.0.21",
  "windows 0.61.3",
@@ -4629,7 +4629,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "volume-control"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "command-group",
  "libc",
@@ -4762,7 +4762,7 @@ dependencies = [
 
 [[package]]
 name = "watch-bridge"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "axum",
