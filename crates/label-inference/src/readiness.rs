@@ -22,6 +22,34 @@ pub const MOVING_RMS_NS: u64 = 300_000_000;
 pub const READY_CALM_MS: u64 = 1_000;
 /// Calm for less than this is still moving, as the user sees it.
 pub const MOVING_NOW_MS: u64 = 300;
+/// With [`MotionWarning::IgnoreShortJolts`], fast turning counts as the wrist moving only if it lasts longer than this.
+/// A finger snap or a tap is one jolt: 95% of 268 snaps stayed above [`MOVING_GYRO`] for 0.4 s or less, and a pinch made
+/// 0.25 s after one is caught as often as with no snap (`docs/research/artifacts/snap-readiness-2026-11`).
+pub const SHORT_JOLT_MS: u64 = 400;
+
+/// What the readiness light counts as the wrist moving (a setting). It changes only what is shown: never the models'
+/// inputs, which leave fast turning out of their scaling by the same rule whatever this is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MotionWarning {
+    /// Any fast turning, however short (a snap included).
+    #[default]
+    AnyFastTurn,
+    /// Fast turning that lasts longer than [`SHORT_JOLT_MS`]: arm movement, not a snap or a tap.
+    IgnoreShortJolts,
+    /// Never: the light only says whether the streams can be scored.
+    Off,
+}
+
+impl MotionWarning {
+    /// How long fast turning must last to count, or `None` when it never does.
+    pub fn min_moving_ns(self) -> Option<u64> {
+        match self {
+            Self::AnyFastTurn => Some(0),
+            Self::IgnoreShortJolts => Some(SHORT_JOLT_MS * 1_000_000),
+            Self::Off => None,
+        }
+    }
+}
 
 /// Why a model cannot score at all.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -93,6 +121,12 @@ impl Readiness {
 /// order: since the last moment the RMS over the [`MOVING_RMS_NS`] ending at a sample was above [`MOVING_GYRO`]. At least
 /// `horizon_ns` when nothing in the samples was moving.
 pub fn calm_ns(samples: &[(u64, [f64; 3])], horizon_ns: u64) -> u64 {
+    calm_ns_ignoring(samples, horizon_ns, 0)
+}
+
+/// [`calm_ns`], counting only fast turning that lasted longer than `min_moving_ns` (from the first to the last sample of
+/// a run whose RMS is above [`MOVING_GYRO`]); with 0, any.
+pub fn calm_ns_ignoring(samples: &[(u64, [f64; 3])], horizon_ns: u64, min_moving_ns: u64) -> u64 {
     let Some(&(now, _)) = samples.last() else {
         return horizon_ns;
     };
@@ -103,16 +137,30 @@ pub fn calm_ns(samples: &[(u64, [f64; 3])], horizon_ns: u64) -> u64 {
     }
     let mut begin = 0;
     let mut last_moving = None;
+    // The run of moving samples under way: when it began and its latest sample.
+    let mut run: Option<(u64, u64)> = None;
+    let counts = |(first, last): (u64, u64)| last.saturating_sub(first) >= min_moving_ns;
     for (end, &(at, _)) in samples.iter().enumerate() {
         while samples[begin].0 + MOVING_RMS_NS < at {
             begin += 1;
         }
         let count = (end + 1 - begin) as f64;
         if (total[end + 1] - total[begin]) / count > MOVING_GYRO * MOVING_GYRO {
-            last_moving = Some(at);
+            run = Some((run.map_or(at, |(first, _)| first), at));
+        } else if let Some(ended) = run.take()
+            && counts(ended)
+        {
+            last_moving = Some(ended.1);
         }
     }
-    last_moving.map_or(horizon_ns.max(now - samples[0].0), |at| now - at)
+    if let Some(open) = run
+        && counts(open)
+    {
+        last_moving = Some(open.1);
+    }
+    last_moving.map_or(horizon_ns.max(now.saturating_sub(samples[0].0)), |at| {
+        now - at
+    })
 }
 
 /// From how long the wrist has been calm, whether a motion model is ready (it can score: the caller checked).
@@ -159,6 +207,40 @@ mod tests {
         let calm = calm_ns(&trace(2_000, 3_000), 0) / MS;
         assert!((700..=760).contains(&calm), "{calm}");
         assert_eq!(calm_ns(&trace(0, 3_000), 5_000 * MS) / MS, 5_000);
+    }
+
+    /// Turning at 3 rad/s from `at_ms` for `lasting_ms`, calm around it.
+    fn jolt(at_ms: u64, lasting_ms: u64, end_ms: u64) -> Vec<(u64, [f64; 3])> {
+        (0..=end_ms / 10)
+            .map(|k| {
+                let t = k * 10;
+                let turning = t >= at_ms && t < at_ms + lasting_ms;
+                (
+                    t * MS,
+                    if turning {
+                        [3.0, 0.0, 0.0]
+                    } else {
+                        [0.02, 0.01, 0.0]
+                    },
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_jolt_as_short_as_a_snap_counts_only_when_every_fast_turn_does() {
+        // A 0.1 s jolt at 1 s keeps the 0.3 s RMS above 1 rad/s for about 0.3 s, as a snap does.
+        let snap = jolt(1_000, 100, 1_600);
+        let any = calm_ns_ignoring(&snap, 0, 0) / MS;
+        assert!(any < MOVING_NOW_MS, "{any}");
+        assert_eq!(calm_ns_ignoring(&snap, 0, 0), calm_ns(&snap, 0));
+        let ignoring = calm_ns_ignoring(&snap, 2_000 * MS, SHORT_JOLT_MS * MS) / MS;
+        assert_eq!(ignoring, 2_000, "a snap is not the wrist moving");
+        // Arm movement, a second of it, still is.
+        let arm = jolt(500, 1_000, 1_800);
+        assert!(calm_ns_ignoring(&arm, 2_000 * MS, SHORT_JOLT_MS * MS) / MS < MOVING_NOW_MS);
+        assert_eq!(MotionWarning::default(), MotionWarning::AnyFastTurn);
+        assert_eq!(MotionWarning::Off.min_moving_ns(), None);
     }
 
     #[test]

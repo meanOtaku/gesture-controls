@@ -35,6 +35,7 @@ const settings: AppSettings = {
   watchTransport: "bluetooth",
   steadyStartsOnly: false,
   buzzWhenReady: false,
+  readinessMotion: "anyFastTurn",
 };
 
 describe("Settings page layout", () => {

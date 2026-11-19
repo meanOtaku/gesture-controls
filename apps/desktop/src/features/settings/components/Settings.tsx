@@ -114,6 +114,8 @@ export function Settings({
               onToggle={() => onUpdate({ ...current, steadyStartsOnly: !current.steadyStartsOnly })}
               buzzWhenReady={current.buzzWhenReady}
               onToggleBuzz={() => onUpdate({ ...current, buzzWhenReady: !current.buzzWhenReady })}
+              readinessMotion={current.readinessMotion}
+              onReadinessMotionChange={(readinessMotion) => onUpdate({ ...current, readinessMotion })}
             />
             <SensitivitySection />
           </SettingsGroup>

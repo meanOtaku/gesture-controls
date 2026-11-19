@@ -1365,6 +1365,16 @@ impl LabelRuntimeHost {
         }
     }
 
+    /// What the readiness light counts as the wrist moving, for the active models and the one being compared.
+    pub fn set_motion_warning(&self, warning: label_inference::readiness::MotionWarning) {
+        relock(&self.runtime, "model runtime").set_motion_warning(warning);
+        if let Ok(mut slot) = self.shadow.lock()
+            && let Some(shadow) = slot.as_mut()
+        {
+            shadow.runtime.set_motion_warning(warning);
+        }
+    }
+
     /// Whether the hand is still right now, or that the watch is off the wrist.
     pub fn hand_steadiness(&self) -> HandSteadinessView {
         let runtime = relock(&self.runtime, "model runtime");
@@ -1424,6 +1434,7 @@ impl LabelRuntimeHost {
             self.steady_starts
                 .load(std::sync::atomic::Ordering::Relaxed),
         );
+        runtime.set_motion_warning(relock(&self.runtime, "model runtime").motion_warning());
         runtime.set_models(vec![model]);
         runtime.set_mode(RuntimeMode::Monitor);
         *self

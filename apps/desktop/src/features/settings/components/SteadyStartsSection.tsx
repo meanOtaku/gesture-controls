@@ -1,7 +1,20 @@
 import { SectionHeader } from "../../../components/app/SectionHeader";
 import { AnimatedWord } from "../../../components/app/AnimatedNumber";
 import { Card, CardContent, CardHeader } from "../../../components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 import { Switch } from "../../../components/ui/switch";
+import type { ReadinessMotion } from "../../../shared/protocol/events";
+
+/** The readiness light's choices for what counts as the wrist moving, the default first. */
+export const READINESS_MOTION_CHOICES: { value: ReadinessMotion; label: string; detail: string }[] = [
+  { value: "anyFastTurn", label: "Any fast turn", detail: "Warns after any fast turn of the wrist, a finger snap included." },
+  {
+    value: "ignoreShortJolts",
+    label: "Ignore snaps and taps",
+    detail: "Warns only when the wrist turns fast for longer than 0.4 s. A snap or a tap is shorter, and a pinch right after one is caught as well as with no snap.",
+  },
+  { value: "off", label: "Never", detail: "Never warns about motion; the light only shows whether the watch's signal can be read." },
+];
 
 type SteadyStartsSectionProps = {
   enabled: boolean;
@@ -9,10 +22,21 @@ type SteadyStartsSectionProps = {
   /** The watch buzzes when the models can catch a gesture again after the wrist moved (or a stream dropped). */
   buzzWhenReady: boolean;
   onToggleBuzz: () => void;
+  /** What the readiness light counts as the wrist moving. */
+  readinessMotion: ReadinessMotion;
+  onReadinessMotionChange: (motion: ReadinessMotion) => void;
 };
 
 /** The switch for only starting a trained model's gesture from a still hand. */
-export function SteadyStartsSection({ enabled, onToggle, buzzWhenReady, onToggleBuzz }: SteadyStartsSectionProps) {
+export function SteadyStartsSection({
+  enabled,
+  onToggle,
+  buzzWhenReady,
+  onToggleBuzz,
+  readinessMotion,
+  onReadinessMotionChange,
+}: SteadyStartsSectionProps) {
+  const motionChoice = READINESS_MOTION_CHOICES.find((choice) => choice.value === readinessMotion) ?? READINESS_MOTION_CHOICES[0];
   return (
     <Card role="region" aria-label="Still hand">
       <CardHeader>
@@ -44,6 +68,31 @@ export function SteadyStartsSection({ enabled, onToggle, buzzWhenReady, onToggle
           </span>
           <span className="text-xs text-muted-foreground"><AnimatedWord>{buzzWhenReady ? "On" : "Off"}</AnimatedWord></span>
           <Switch aria-label={`Buzz when ready after moving ${buzzWhenReady ? "on" : "off"}`} checked={buzzWhenReady} onCheckedChange={onToggleBuzz} />
+        </div>
+        <div className="vector-row mt-2 flex items-center justify-between gap-3">
+          <span className="flex flex-col">
+            <span className="label">Warn that the wrist is moving</span>
+            <small className="text-xs text-muted-foreground">
+              What the sidebar's readiness light counts as moving. {motionChoice.detail} Detection itself is the same whatever you choose.
+            </small>
+          </span>
+          <Select
+            value={readinessMotion}
+            onValueChange={(value) => {
+              if (value) onReadinessMotionChange(value as ReadinessMotion);
+            }}
+          >
+            <SelectTrigger aria-label="Warn that the wrist is moving" className="w-48 shrink-0">
+              <SelectValue>{motionChoice.label}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {READINESS_MOTION_CHOICES.map((choice) => (
+                <SelectItem key={choice.value} value={choice.value}>
+                  {choice.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </CardContent>
     </Card>

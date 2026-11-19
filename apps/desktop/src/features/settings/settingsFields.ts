@@ -32,6 +32,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   watchTransport: "bluetooth",
   steadyStartsOnly: false,
   buzzWhenReady: false,
+  readinessMotion: "anyFastTurn",
 };
 
 export type NumericSettingKey =

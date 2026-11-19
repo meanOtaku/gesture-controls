@@ -355,7 +355,12 @@ export interface AppSettings {
   steadyStartsOnly: boolean;
   /** A short buzz on the watch when the models can catch a gesture again after a wait. */
   buzzWhenReady: boolean;
+  /** What the readiness light counts as the wrist moving. Any fast turn by default; it never changes what the models see. */
+  readinessMotion: ReadinessMotion;
 }
+
+/** Mirrors `settings::ReadinessMotion`: any fast turn (a snap included), only turning longer than a snap, or never. */
+export type ReadinessMotion = "anyFastTurn" | "ignoreShortJolts" | "off";
 
 /** Mirrors `watch_bridge::WatchTransport`. */
 export type WatchTransport = "bluetooth" | "wifi";

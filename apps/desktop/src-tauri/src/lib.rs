@@ -367,6 +367,9 @@ pub fn run() {
                 handle
                     .state::<label_runtime::LabelRuntimeHost>()
                     .set_steadiness_gate(settings.steady_starts_only);
+                handle
+                    .state::<label_runtime::LabelRuntimeHost>()
+                    .set_motion_warning(settings.readiness_motion.into());
             }
             label_registry::prune_legacy_builtins(&handle);
             label_runtime::spawn_timer(handle.clone());

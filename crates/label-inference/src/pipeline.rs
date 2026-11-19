@@ -357,6 +357,16 @@ impl LabelPipeline {
     /// Whether `model` can catch a gesture now (see [`crate::readiness`]): it has its streams, its whole history without a
     /// gap, and (if it reads motion) the wrist has been calm long enough.
     pub fn readiness(&self, model: &LoadedModel, now_ns: u64) -> crate::readiness::Readiness {
+        self.readiness_warning(model, now_ns, crate::readiness::MotionWarning::default())
+    }
+
+    /// [`Self::readiness`], with `warning` deciding what counts as the wrist moving (the setting).
+    pub fn readiness_warning(
+        &self,
+        model: &LoadedModel,
+        now_ns: u64,
+        warning: crate::readiness::MotionWarning,
+    ) -> crate::readiness::Readiness {
         use crate::inputs::ModelKind;
         use crate::readiness::{NoSignal, Readiness, from_calm};
         let no = |why, ready_in_ns: Option<u64>| Readiness::NoSignal {
@@ -424,8 +434,9 @@ impl LabelPipeline {
             }
             let motion_gap_ns = pinch_inference::imu_onset::MAX_GAP_MS * NS_PER_MS;
             let mut previous: Option<u64> = None;
-            let horizon =
-                crate::readiness::MOVING_RMS_NS + crate::readiness::READY_CALM_MS * NS_PER_MS;
+            // Far enough back to see how long the last fast turning lasted, when only longer ones count.
+            let horizon = crate::readiness::MOVING_RMS_NS
+                + (crate::readiness::READY_CALM_MS + crate::readiness::SHORT_JOLT_MS) * NS_PER_MS;
             for m in self
                 .motion
                 .iter()
@@ -449,9 +460,13 @@ impl LabelPipeline {
         if !reads_motion {
             return Readiness::Ready;
         }
-        from_calm(crate::readiness::calm_ns(
+        let Some(min_moving_ns) = warning.min_moving_ns() else {
+            return Readiness::Ready;
+        };
+        from_calm(crate::readiness::calm_ns_ignoring(
             &gyro,
             crate::readiness::READY_CALM_MS * NS_PER_MS,
+            min_moving_ns,
         ))
     }
 

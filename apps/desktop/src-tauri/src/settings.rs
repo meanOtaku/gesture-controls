@@ -135,6 +135,33 @@ pub struct AppSettings {
     /// for when the screen is not in view. Off by default.
     #[serde(default)]
     pub buzz_when_ready: bool,
+    /// What the readiness light counts as the wrist moving. Any fast turn by default (as before the setting existed); it
+    /// never changes what the models see.
+    #[serde(default)]
+    pub readiness_motion: ReadinessMotion,
+}
+
+/// What the readiness light counts as the wrist moving (`label_inference::readiness::MotionWarning`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ReadinessMotion {
+    /// Any fast turn of the wrist, a finger snap included.
+    #[default]
+    AnyFastTurn,
+    /// Only fast turning that lasts longer than a snap or a tap (0.4 s): arm movement.
+    IgnoreShortJolts,
+    /// Never: the light only says whether the watch's signal can be scored.
+    Off,
+}
+
+impl From<ReadinessMotion> for label_inference::readiness::MotionWarning {
+    fn from(motion: ReadinessMotion) -> Self {
+        match motion {
+            ReadinessMotion::AnyFastTurn => Self::AnyFastTurn,
+            ReadinessMotion::IgnoreShortJolts => Self::IgnoreShortJolts,
+            ReadinessMotion::Off => Self::Off,
+        }
+    }
 }
 
 impl Default for AppSettings {
@@ -172,6 +199,7 @@ impl Default for AppSettings {
             watch_transport: WatchTransport::default(),
             steady_starts_only: false,
             buzz_when_ready: false,
+            readiness_motion: ReadinessMotion::default(),
         }
     }
 }
@@ -613,6 +641,8 @@ pub fn update_settings(
         .apply_settings(&app, &applied);
     app.state::<crate::label_runtime::LabelRuntimeHost>()
         .set_steadiness_gate(applied.steady_starts_only);
+    app.state::<crate::label_runtime::LabelRuntimeHost>()
+        .set_motion_warning(applied.readiness_motion.into());
     if let Some(server) = app.try_state::<std::sync::Arc<WatchBridgeServer>>() {
         apply_watch_settings(&server, &applied);
     }
@@ -641,6 +671,8 @@ pub fn reset_settings(
         .apply_settings(&app, &applied);
     app.state::<crate::label_runtime::LabelRuntimeHost>()
         .set_steadiness_gate(applied.steady_starts_only);
+    app.state::<crate::label_runtime::LabelRuntimeHost>()
+        .set_motion_warning(applied.readiness_motion.into());
     if let Some(server) = app.try_state::<std::sync::Arc<WatchBridgeServer>>() {
         apply_watch_settings(&server, &applied);
     }
@@ -805,6 +837,26 @@ mod tests {
         assert_eq!(settings.watch_transport, WatchTransport::Bluetooth);
         // A settings file from before the still-hand rule existed leaves it off.
         assert!(!settings.steady_starts_only);
+        // And one from before the readiness setting keeps warning on any fast turn, as it did.
+        assert_eq!(settings.readiness_motion, ReadinessMotion::AnyFastTurn);
+    }
+
+    #[test]
+    fn the_readiness_motion_choice_round_trips_by_the_names_the_window_sends() {
+        for (motion, name) in [
+            (ReadinessMotion::AnyFastTurn, "anyFastTurn"),
+            (ReadinessMotion::IgnoreShortJolts, "ignoreShortJolts"),
+            (ReadinessMotion::Off, "off"),
+        ] {
+            let json = serde_json::to_value(AppSettings {
+                readiness_motion: motion,
+                ..Default::default()
+            })
+            .expect("serializable");
+            assert_eq!(json["readinessMotion"], name);
+            let restored: AppSettings = serde_json::from_value(json).expect("deserializable");
+            assert_eq!(restored.readiness_motion, motion);
+        }
     }
 
     #[test]

@@ -134,6 +134,8 @@ pub struct LabelRuntime {
     /// Whether a start needs the hand to have been still before it (`steadiness`). Off by default; the app follows its
     /// `steadyStartsOnly` setting (`label_runtime.rs`).
     steady_starts: bool,
+    /// What the readiness light counts as the wrist moving; the app follows its `readinessMotion` setting.
+    motion_warning: crate::readiness::MotionWarning,
     /// The watch said it is off the wrist (its off-body detector): nothing is scored until it says it is worn again.
     off_wrist: bool,
 }
@@ -150,6 +152,7 @@ impl Default for LabelRuntime {
             warned_at_ns: 0,
             steadiness: Steadiness::default(),
             steady_starts: false,
+            motion_warning: crate::readiness::MotionWarning::default(),
             off_wrist: false,
         }
     }
@@ -193,6 +196,17 @@ impl LabelRuntime {
     /// Requires (or stops requiring) the hand to have been still before a detection may start.
     pub fn set_steadiness_gate(&mut self, on: bool) {
         self.steady_starts = on;
+    }
+
+    /// What the readiness light counts as the wrist moving (see [`crate::readiness::MotionWarning`]). Scoring and the
+    /// models' inputs are the same whatever it is.
+    pub fn set_motion_warning(&mut self, warning: crate::readiness::MotionWarning) {
+        self.motion_warning = warning;
+    }
+
+    /// What the readiness light counts as the wrist moving.
+    pub fn motion_warning(&self) -> crate::readiness::MotionWarning {
+        self.motion_warning
     }
 
     /// Whether a start needs the hand to have been still before it.
@@ -240,7 +254,13 @@ impl LabelRuntime {
         }
         self.models
             .iter()
-            .map(|(label, model)| (label.clone(), self.pipeline.readiness(model, now_ns)))
+            .map(|(label, model)| {
+                (
+                    label.clone(),
+                    self.pipeline
+                        .readiness_warning(model, now_ns, self.motion_warning),
+                )
+            })
             .collect()
     }
 
