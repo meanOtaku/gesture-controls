@@ -209,7 +209,7 @@ fn gap_free(ts: impl Iterator<Item = u64>, decision_ns: u64, g: CnnGrid) -> bool
         if let Some(before) = previous
             && at > from
             && at <= decision_ns
-            && at - before > limit
+            && at.saturating_sub(before) > limit
         {
             return false;
         }
@@ -497,6 +497,23 @@ fn scaled_inputs(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_sample_out_of_time_order_is_not_a_gap_and_does_not_panic() {
+        let ms = 1_000_000;
+        let decision = 20_000 * ms;
+        // 40 ms apart, but the fourth lands before the third (a clock estimate that improved).
+        let ts = [
+            19_880 * ms,
+            19_920 * ms,
+            19_960 * ms,
+            19_950 * ms,
+            19_990 * ms,
+        ];
+        assert!(gap_free(ts.iter().copied(), decision, CnnGrid::HZ_100));
+        let gap = [19_000 * ms, 19_960 * ms];
+        assert!(!gap_free(gap.iter().copied(), decision, CnnGrid::HZ_100));
+    }
 
     #[derive(serde::Deserialize)]
     struct Case {

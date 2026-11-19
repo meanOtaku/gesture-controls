@@ -581,8 +581,11 @@ impl LabelPipeline {
         };
         // The CNN reads the pulse on the watch's clock, as the motion is (the trainer's recordings share one clock).
         let cnn_scaling = model.kind.cnn_scaling();
+        // In time order, as a recording's rows are: when the clock estimate improves, a batch can land a little before
+        // the end of the one before it, and the inputs look samples up by time.
         let pulse_on_watch: Vec<Sample> = if cnn_scaling.is_some() {
-            self.ppg
+            let mut on_watch: Vec<Sample> = self
+                .ppg
                 .iter()
                 .filter_map(|s| {
                     s.watch_ns.map(|ts_ns| Sample {
@@ -592,7 +595,9 @@ impl LabelPipeline {
                         ir: s.ir,
                     })
                 })
-                .collect()
+                .collect();
+            on_watch.sort_by_key(|s| s.ts_ns);
+            on_watch
         } else {
             Vec::new()
         };
@@ -992,6 +997,54 @@ pub(crate) mod tests {
         let model = loaded_median_cnn_100hz();
         assert_eq!(model.cnn_grid, pinch_inference::cnn_input::CnnGrid::HZ_100);
         scores_the_live_streams(&model, expected_median_cnn_100hz());
+    }
+
+    #[test]
+    fn pulse_samples_put_back_in_time_by_a_better_clock_estimate_are_scored_without_a_panic() {
+        // The first pulse batches are stamped as sent 120 ms after their sample, the rest at once (they still arrive in
+        // order): once the estimate of the pulse sensor's clock
+        // improves, the next samples land on the watch's clock before the last ones placed. The inputs must take them in
+        // time order, as a recording has them (this panicked in the gap check, and looked samples up out of order).
+        let model = loaded_cnn_v2();
+        let (trace, motion, _) = expected_cnn_v2();
+        let mut p = LabelPipeline::default();
+        p.configure(&[&model]);
+        let origin = trace[0].ts_ns;
+        let received = |ts: u64, delay_ms: u64| ts - origin + 10_000_000_000 + delay_ms * NS_PER_MS;
+        let half = trace.len() / 2;
+        let wait = |i: usize| if i < half { 120 * NS_PER_MS } else { 0 };
+        let mut arrivals: Vec<(u64, bool, usize)> = (0..trace.len())
+            .map(|i| (received(trace[i].ts_ns, 5), true, i))
+            .collect();
+        arrivals.extend((0..motion.len()).map(|j| (received(motion[j].ts_ns, 60), false, j)));
+        arrivals.sort();
+        let mut later = 0;
+        let mut went_back = false;
+        let mut last_placed = 0;
+        for (at, pulse, i) in arrivals {
+            if pulse {
+                let mut b = batch(&trace, i, i + 1);
+                b.timestamp_ns = trace[i].ts_ns + wait(i);
+                b.timestamps_ns = vec![trace[i].ts_ns - SDK_BEHIND_NS];
+                p.observe_ppg(&b, at).unwrap();
+                let placed = p.ppg.back().and_then(|s| s.watch_ns).unwrap();
+                went_back |= placed < last_placed;
+                last_placed = placed;
+            } else {
+                p.observe_orientation(&motion_sample(&motion[i], i as u64), at)
+                    .unwrap();
+            }
+            let (scores, _) = p.evaluate(&[&model], at);
+            later += scores
+                .iter()
+                .filter(|score| score.timestamp_ns > trace[half].ts_ns - SDK_BEHIND_NS)
+                .count();
+        }
+        assert!(went_back, "the test must put a sample back in time");
+        assert!(
+            later > 100,
+            "scoring went on after the estimate improved: {later}"
+        );
     }
 
     #[test]

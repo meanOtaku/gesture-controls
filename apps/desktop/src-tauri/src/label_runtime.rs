@@ -24,7 +24,7 @@ use model_lab_core::{
 use serde::Serialize;
 use spatial_protocol::{WatchOrientationSample, WatchPpgBatchSample};
 use tauri::{AppHandle, Emitter, Manager, State};
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use crate::automation::AutomationRuntime;
 use crate::model_lab::MODEL_LAB_DIR_NAME;
@@ -1259,8 +1259,14 @@ impl LabelRuntimeHost {
         }
     }
 
+    /// Runs one step of the model runtime and passes on what it says. A step that panics is contained here: it would
+    /// otherwise end the task that called it (the watch's event loop, the timer), and nothing would reach the models again
+    /// until a restart. The runtime is failed instead (every detection ended, its buffers started afresh), and goes on.
     fn with_runtime(&self, app: &AppHandle, step: impl FnOnce(&mut LabelRuntime) -> RuntimeOutput) {
-        let output = step(&mut relock(&self.runtime, "model runtime"));
+        let output = {
+            let mut runtime = relock(&self.runtime, "model runtime");
+            contained(&mut runtime, step)
+        };
         self.dispatch(app, output);
     }
 
@@ -1317,29 +1323,26 @@ impl LabelRuntimeHost {
     /// Whether each running model can catch a gesture now, or that the watch is off the wrist. None while the runtime is
     /// off or has no models.
     pub fn readiness(&self, now_ns: u64) -> Vec<ReadinessView> {
-        self.runtime
-            .lock()
-            .map(|runtime| {
-                let off_wrist = runtime.is_off_wrist();
-                runtime
-                    .readiness(now_ns)
-                    .into_iter()
-                    .map(|(label, readiness)| ReadinessView {
-                        label: label.to_string(),
-                        state: if off_wrist {
-                            "offWrist".into()
-                        } else {
-                            readiness.name().into()
-                        },
-                        ready_in_ms: if off_wrist {
-                            None
-                        } else {
-                            readiness.ready_in_ms()
-                        },
-                    })
-                    .collect()
+        // Recovered, not given up on, if a panic left the lock poisoned: an empty answer hides the light.
+        let runtime = relock(&self.runtime, "model runtime");
+        let off_wrist = runtime.is_off_wrist();
+        runtime
+            .readiness(now_ns)
+            .into_iter()
+            .map(|(label, readiness)| ReadinessView {
+                label: label.to_string(),
+                state: if off_wrist {
+                    "offWrist".into()
+                } else {
+                    readiness.name().into()
+                },
+                ready_in_ms: if off_wrist {
+                    None
+                } else {
+                    readiness.ready_in_ms()
+                },
             })
-            .unwrap_or_default()
+            .collect()
     }
 
     /// Requires (or stops requiring) the hand to have been still before a gesture starts, for the active models and the
@@ -1347,9 +1350,7 @@ impl LabelRuntimeHost {
     pub fn set_steadiness_gate(&self, on: bool) {
         self.steady_starts
             .store(on, std::sync::atomic::Ordering::Relaxed);
-        if let Ok(mut runtime) = self.runtime.lock() {
-            runtime.set_steadiness_gate(on);
-        }
+        relock(&self.runtime, "model runtime").set_steadiness_gate(on);
         if let Ok(mut slot) = self.shadow.lock()
             && let Some(shadow) = slot.as_mut()
         {
@@ -1359,21 +1360,17 @@ impl LabelRuntimeHost {
 
     /// Whether the hand is still right now, or that the watch is off the wrist.
     pub fn hand_steadiness(&self) -> HandSteadinessView {
-        self.runtime
-            .lock()
-            .map(|runtime| {
-                if runtime.is_off_wrist() {
-                    HandSteadinessView {
-                        state: "offWrist".into(),
-                        accel_spread: None,
-                        turning: None,
-                        tilt_change_deg: None,
-                    }
-                } else {
-                    runtime.hand_steadiness().into()
-                }
-            })
-            .unwrap_or_else(|_| label_inference::steadiness::Verdict::Unknown.into())
+        let runtime = relock(&self.runtime, "model runtime");
+        if runtime.is_off_wrist() {
+            HandSteadinessView {
+                state: "offWrist".into(),
+                accel_spread: None,
+                turning: None,
+                tilt_change_deg: None,
+            }
+        } else {
+            runtime.hand_steadiness().into()
+        }
     }
 
     /// The watch's off-body detector said it was put on or taken off: off the wrist, every detection is released and the
@@ -1386,14 +1383,11 @@ impl LabelRuntimeHost {
     /// Feeds the model being compared (if there is one) and tells the display what it detected. Nothing here touches the
     /// recipes or the registry, and nothing runs while the model runtime is Off.
     fn with_shadow(&self, app: &AppHandle, step: impl FnOnce(&mut LabelRuntime) -> RuntimeOutput) {
-        let off = self
-            .runtime
-            .lock()
-            .map_or(true, |runtime| runtime.mode() == RuntimeMode::Off);
+        let off = relock(&self.runtime, "model runtime").mode() == RuntimeMode::Off;
         let report = match self.shadow.lock() {
             Ok(mut slot) => match slot.as_mut() {
                 Some(shadow) if !off => {
-                    let output = step(&mut shadow.runtime);
+                    let output = contained(&mut shadow.runtime, step);
                     shadow_report(&shadow.model_id, &shadow.label, &output)
                 }
                 _ => None,
@@ -1525,6 +1519,23 @@ impl LabelRuntimeHost {
 /// Locks `mutex`, carrying on if a panic left it poisoned: its value is still whole (every change to it is a single
 /// step), and refusing it from then on left the runtime silent, its mode unknown to the page, until a restart. The
 /// panic itself is in the log (`init_logging`'s hook).
+/// `step` on `runtime`, or, if it panics, the runtime failed: every detection ended and its buffers started afresh, so a
+/// fault in one model step cannot end the task that feeds the models.
+fn contained(
+    runtime: &mut LabelRuntime,
+    step: impl FnOnce(&mut LabelRuntime) -> RuntimeOutput,
+) -> RuntimeOutput {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| step(runtime))) {
+        Ok(output) => output,
+        Err(_) => {
+            error!(
+                "a model runtime step panicked; ending every detection and starting its buffers afresh"
+            );
+            runtime.fail("a model runtime step failed")
+        }
+    }
+}
+
 fn relock<'a, T>(mutex: &'a Mutex<T>, what: &str) -> std::sync::MutexGuard<'a, T> {
     match mutex.lock() {
         Ok(guard) => guard,
@@ -2127,6 +2138,19 @@ pub(crate) fn combine_plan(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_runtime_step_that_panics_fails_the_runtime_instead_of_ending_its_caller() {
+        let mut runtime = label_inference::LabelRuntime::default();
+        let output = super::contained(&mut runtime, |_| panic!("a model step went wrong"));
+        assert!(
+            output.reset_interactions,
+            "a contained panic ends every detection"
+        );
+        // The runtime is still usable: the next step runs as usual.
+        let next = super::contained(&mut runtime, |runtime| runtime.tick(1));
+        assert!(!next.reset_interactions);
+    }
+
     #[test]
     fn a_new_threshold_keeps_the_release_as_far_below_it() {
         let old = model_lab_core::Thresholds {
