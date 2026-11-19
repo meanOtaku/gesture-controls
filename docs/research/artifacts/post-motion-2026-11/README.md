@@ -1,18 +1,30 @@
-# Training on pinches made right after arm motion, 18 November 2026
+# Training on pinches made right after arm motion, 18–19 November 2026
 
-**Result:** this training closes most of the short blind spot that is left after arm motion.
+**Result, over three seeds (17, 18, 19):** this training helps right after long motion, by less than the first seed
+suggested, and costs a few pinches on ordinary recordings.
 
-- After 14 s of motion ending 0.25 s before the pinch, it catches 42 of 50 held-out pinches against 35 for the current
-  model. It catches 40 when held to the current model's cut-off.
-- After 10 s ending 0.25 s before, it catches 46 against 41.
-- It catches about one pinch fewer elsewhere, including 46 against 47 with no motion.
-- On the ordinary held-out recordings it is no worse at the same threshold. At 0.995 it catches 66 of 89 pinch-ins at
-  2.0 false activations an hour, against 62 at 4.1.
-- But its own training chose a lower cut-off (0.85 against 0.9), where it fires 12.2 times an hour against 8.1.
+Compared seed by seed with the retrained current model (`base`), both held to the current model's cut-off of 0.9:
 
-All of this is one seed per variant and 0.49 h of held-out no-gesture time, where one false activation is 2 an hour.
-So the false-activation differences are within noise, and the gain right after motion needs more seeds before it is
-trusted.
+| Splice test, held-out pinch-ins caught of 50 | base 17 / 18 / 19 | post 17 / 18 / 19 | mean gain |
+|---|---|---|---|
+| no motion | 47 / 46 / 46 | 46 / 47 / 46 | 0 |
+| 14 s of motion, ending 0.25 s before | 35 / 32 / 32 | 40 / 33 / 39 | +4.3 |
+| 14 s, 0.5 s before | 42 / 39 / 40 | 45 / 40 / 41 | +1.7 |
+| 10 s, 0.25 s before | 41 / 42 / 43 | 45 / 44 / 45 | +2.7 |
+| 6 s, 0.25 s before | 44 / 40 / 41 | 46 / 45 / 46 | +4.0 |
+| 1 s or more before, any length | 45–49 | 45–48 | about 0 |
+
+- The gain right after motion shows in every seed, but seed 18 gains only 1 in the hardest case.
+- On the 17 ordinary held-out recordings at 0.9, it catches 67 / 74 / 67 of 89 pinch-ins against 68 / 76 / 75, and
+  fires 8.1 / 10.1 / 6.1 times an hour against 8.1 / 20.3 / 8.1. So it catches about 4 fewer on average and fires a
+  little less.
+- Seeds differ by as much as the variants do: base 17 and 18 catch 68 and 76 on the same recordings.
+- Its own training chose cut-offs of 0.85, 0.98 and 0.85. Seeds 19 of both variants were judged not deployable on
+  their own held-out false activations (8 and 10 an hour against at most 5).
+- `base-17` scores identically to the application's model, `app-current`.
+
+0.49 h of held-out no-gesture time means one false activation is 2 an hour, so the false-activation differences are
+within noise.
 
 ## Setup
 
@@ -25,7 +37,7 @@ See `experiment.py`.
   190 spliced starts and about 20,000 decisions.
 - The splice test uses held-out motion only.
 
-## Splice test (held-out pinch-ins caught, each model at its own cut-off)
+## Splice test, seed 17 only (held-out pinch-ins caught, each model at its own cut-off)
 
 | Motion, ending before the pinch | Current model | Post-motion training |
 |---|---|---|
@@ -40,6 +52,6 @@ See `experiment.py`.
 
 ## Next
 
-- Run seeds 18 and 19 for both variants: `experiment.py train base 18`, and so on.
-- If the gain holds, make it a trainer option. Never replace the active model; train a new Model Lab version
-  alongside it.
+- The gain is real but small, and pays for itself only for someone who often pinches within half a second of long
+  motion. If it is wanted, make it an opt-in trainer option. Never replace the active model; train a new Model Lab
+  version alongside it.

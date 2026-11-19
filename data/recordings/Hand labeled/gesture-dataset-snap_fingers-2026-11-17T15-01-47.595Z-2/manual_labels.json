@@ -1,0 +1,102 @@
+[
+  {
+    "startMs": 5782.836914,
+    "endMs": 6293.945312,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 11846.701758,
+    "endMs": 12417.655127,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 17037.406103,
+    "endMs": 17678.427832,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 25073.722021,
+    "endMs": 25693.886106,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 32921.478042,
+    "endMs": 33511.51875,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 38612.47785,
+    "endMs": 39351.933887,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 44620.47785,
+    "endMs": 45365.575244,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 52829.464502,
+    "endMs": 53502.477978,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 58049.618311,
+    "endMs": 58690.792627,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 64364.632986,
+    "endMs": 65083.309717,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 69460.934228,
+    "endMs": 70222.37832,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 77014.767236,
+    "endMs": 77815.845215,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 83603.259766,
+    "endMs": 84355.875482,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 89560.809814,
+    "endMs": 90261.066162,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 97427.400586,
+    "endMs": 98130.875546,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 104255.34248,
+    "endMs": 104936.098096,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 110705.080029,
+    "endMs": 111476.106641,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 118525.026318,
+    "endMs": 119225.404736,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 126113.152637,
+    "endMs": 126823.632373,
+    "label": "snap_fingers"
+  },
+  {
+    "startMs": 131259.057178,
+    "endMs": 132116.303002,
+    "label": "snap_fingers"
+  }
+]

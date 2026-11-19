@@ -254,7 +254,7 @@ def evaluate() -> None:
 
 
 def report(results: dict) -> None:
-    lines = ["# Training on pinches made right after arm motion", "", "See `experiment.py`. One seed per variant unless named.", ""]
+    lines = ["# Training on pinches made right after arm motion", "", "See `experiment.py`. Seeds 17, 18 and 19 for each variant.", ""]
     names = sorted(results)
     lines += ["## Splice test: held-out pinch-in starts caught after spliced held-out motion", "",
               "Each model at its own pinch-in cut-off; then each at the base model's cut-off.", ""]
