@@ -460,7 +460,9 @@ impl WatchRuntime {
                 state.connected = true;
                 state.sensor_status.insert(sample.sensor, sample.enabled);
             }
-            WatchEvent::InvalidMessage { .. } => return Ok(()),
+            WatchEvent::InvalidMessage { .. } | WatchEvent::OutOfOrderMessage { .. } => {
+                return Ok(());
+            }
         }
         let now = Instant::now();
         let mut batch = self

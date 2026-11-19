@@ -348,6 +348,16 @@ impl LabelRuntime {
         self.release(events)
     }
 
+    /// A watch message was refused but the streams are intact (a late or repeated message, ignored): end every detection,
+    /// as any refused input does, but keep the buffered telemetry, so the models score again at once instead of waiting a
+    /// whole window to refill.
+    pub fn release_all(&mut self, detail: &str) -> RuntimeOutput {
+        let events = self
+            .hub
+            .clear_all(&ClearReason::Rejected(detail.to_string()));
+        self.release(events)
+    }
+
     /// The watch went away.
     pub fn watch_lost(&mut self) -> RuntimeOutput {
         self.steadiness.reset();
@@ -1099,6 +1109,27 @@ mod tests {
             );
         }
         assert!(rt.is_active(&pinch()));
+    }
+
+    #[test]
+    fn a_refused_message_releases_detections_but_keeps_the_window_so_scoring_goes_on() {
+        let t = trace(0);
+        let mut rt = runtime(RuntimeMode::Live);
+        let at = until_active(&mut rt, &t);
+        let out = rt.release_all("an out-of-order watch message");
+        assert!(out.reset_interactions);
+        assert!(matches!(
+            out.actionable.as_slice(),
+            [DetectionEvent::Falling { reason: ClearReason::Rejected(why), .. }] if why.contains("out-of-order")
+        ));
+        assert!(!rt.is_active(&pinch()));
+        // The very next sample is scored: the buffered history was kept.
+        assert!(!drive(&mut rt, &t, at + 1, at + 2)[0].scores.is_empty());
+        // `fail` instead drops the history, so the next sample cannot be scored.
+        let mut failed = runtime(RuntimeMode::Live);
+        let at = until_active(&mut failed, &t);
+        failed.fail("the runtime failed");
+        assert!(drive(&mut failed, &t, at + 1, at + 2)[0].scores.is_empty());
     }
 
     #[test]

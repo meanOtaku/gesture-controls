@@ -66,7 +66,7 @@ interface WatchTransportLink {
 
     /**
      * Sends one serialized envelope. `false` means it was dropped. A `control` message (a state change the desktop must
-     * not miss) goes ahead of waiting telemetry and is never dropped to keep the stream live.
+     * not miss) is never dropped to keep the stream live; it still goes in order, behind waiting telemetry.
      */
     fun send(message: String, control: Boolean = false): Boolean
 

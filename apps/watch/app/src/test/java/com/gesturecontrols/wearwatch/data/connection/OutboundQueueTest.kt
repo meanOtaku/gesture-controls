@@ -61,7 +61,7 @@ class OutboundQueueTest {
     }
 
     @Test
-    fun `a control message goes ahead of waiting telemetry and is never dropped`() {
+    fun `a control message keeps its place in line and is never dropped`() {
         val queue = OutboundQueue(4)
         queue.add(message(1, 2))
         assertEquals(1 to 0, queue.poll()!!.let { it[0].toInt() to it[1].toInt() })
@@ -71,6 +71,18 @@ class OutboundQueueTest {
         // A flood of telemetry: the old batches give way, the control messages and the one being sent stay.
         repeat(5) { queue.add(message(3 + it, 2)) }
         assertEquals(listOf(1 to 1, 9 to 0, 8 to 0, 7 to 0, 7 to 1), drain(queue))
+    }
+
+    @Test
+    fun `messages leave in the order they were made, so their sequence numbers only rise`() {
+        // The desktop refuses a message numbered below one it has; a control message must not overtake older telemetry.
+        val queue = OutboundQueue(10)
+        queue.add(message(1, 1))
+        queue.add(message(2, 1))
+        queue.add(message(3, 1), control = true)
+        queue.add(message(4, 1))
+        val sent = drain(queue).map { it.first }
+        assertEquals(listOf(1, 2, 3, 4), sent)
     }
 
     @Test

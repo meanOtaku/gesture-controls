@@ -1460,6 +1460,11 @@ impl LabelRuntimeHost {
         self.with_runtime(app, |runtime| runtime.fail(detail));
     }
 
+    /// Ends every detection but keeps the buffered telemetry (see `LabelRuntime::release_all`).
+    pub fn release_all(&self, app: &AppHandle, detail: &str) {
+        self.with_runtime(app, |runtime| runtime.release_all(detail));
+    }
+
     /// Records an output and tells the UI. Releases always get through; a start only does in Live.
     fn dispatch(&self, app: &AppHandle, output: RuntimeOutput) {
         if let Some(recorder) = app.try_state::<crate::miss_recorder::MissRecorder>() {

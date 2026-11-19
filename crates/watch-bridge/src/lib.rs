@@ -121,6 +121,12 @@ pub enum WatchEvent {
     InvalidMessage {
         reason: String,
     },
+    /// A message numbered at or below one already received: a duplicate or a late one. It was ignored; the stream
+    /// itself is intact, so a consumer should end what the message might have changed without discarding what it has.
+    OutOfOrderMessage {
+        sequence: u64,
+        previous: u64,
+    },
 }
 
 /// A desktop-initiated command to start or stop a bounded on-demand medical
@@ -1530,11 +1536,9 @@ fn handle_inbound(
             previous, "ignoring out-of-order or duplicate watch sequence"
         );
         shared.link.out_of_order_message();
-        let _ = shared.events.send(WatchEvent::InvalidMessage {
-            reason: format!(
-                "out-of-order or duplicate sequence {} (previous {previous})",
-                envelope.sequence
-            ),
+        let _ = shared.events.send(WatchEvent::OutOfOrderMessage {
+            sequence: envelope.sequence,
+            previous,
         });
         return None;
     }
@@ -2271,8 +2275,10 @@ mod tests {
         );
         assert_eq!(last_sequence, Some(5));
         match receiver.try_recv().unwrap() {
-            WatchEvent::InvalidMessage { reason } => assert!(reason.contains("out-of-order")),
-            other => panic!("expected InvalidMessage, got {other:?}"),
+            WatchEvent::OutOfOrderMessage { sequence, previous } => {
+                assert_eq!((sequence, previous), (5, 5))
+            }
+            other => panic!("expected OutOfOrderMessage, got {other:?}"),
         }
     }
 

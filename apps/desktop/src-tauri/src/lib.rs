@@ -502,6 +502,18 @@ pub fn run() {
                                     watch_handle.state::<drone::DroneRuntime>().release();
                                     watch_handle.state::<automation::AutomationRuntime>().cancel(&watch_handle);
                                 }
+                                WatchEvent::OutOfOrderMessage { sequence, previous } => {
+                                    // A late or repeated message was ignored; the streams are intact. End any grab, as
+                                    // refused input always does, but keep the models' buffered telemetry, so they do
+                                    // not go blind for a whole window.
+                                    warn!(sequence, previous, "ignoring an out-of-order watch message; ending any interaction");
+                                    miss_recorder::note(&watch_handle, "watch", format!("out-of-order message {sequence} after {previous}"));
+                                    watch_handle
+                                        .state::<label_runtime::LabelRuntimeHost>()
+                                        .release_all(&watch_handle, "an out-of-order watch message");
+                                    watch_handle.state::<drone::DroneRuntime>().release();
+                                    watch_handle.state::<automation::AutomationRuntime>().cancel(&watch_handle);
+                                }
                                 WatchEvent::WearStateUpdated(sample) if sample.worn => {
                                     if last_worn.replace(true) != Some(true) {
                                         info!("watch on the wrist");

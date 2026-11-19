@@ -9,9 +9,10 @@ package com.gesturecontrols.wearwatch.data.connection
  * being sent is never cut short (the desktop would get half an envelope), and the newest is always kept.
  *
  * A control message (the watch put on or taken off, a button press, a sensor turned on or off) is small and rare but its
- * loss is not: the desktop would keep the old state until the next change. So [add] with `control` queues it ahead of
- * the waiting telemetry (after the message being sent and earlier control messages, keeping their order) and never
- * drops it.
+ * loss is not: the desktop would keep the old state until the next change. So a message added with `control` is never
+ * dropped. It still waits its turn: every message carries a sequence number from one counter, and the desktop refuses
+ * one numbered below a message it already has, so a control message sent ahead of older telemetry would get that
+ * telemetry refused (and the desktop's model runtime reset). Dropping older telemetry keeps its wait short.
  */
 class OutboundQueue(private val maxQueuedFragments: Int) {
     private class Message(val fragments: ArrayDeque<ByteArray>, val control: Boolean)
@@ -27,19 +28,12 @@ class OutboundQueue(private val maxQueuedFragments: Int) {
     fun isEmpty(): Boolean = messages.isEmpty()
 
     /**
-     * Queues one message; returns how many older, unsent messages were dropped to make room. A `control` message goes
-     * ahead of the waiting telemetry and is never dropped.
+     * Queues one message, last, in the order it was made; returns how many older, unsent messages were dropped to make
+     * room. A `control` message is never dropped.
      */
     fun add(fragments: List<ByteArray>, control: Boolean = false): Int {
         if (fragments.isEmpty()) return 0
-        val message = Message(ArrayDeque(fragments), control)
-        if (control) {
-            var at = if (firstStarted) 1 else 0
-            while (at < messages.size && messages[at].control) at++
-            messages.add(at, message)
-        } else {
-            messages.addLast(message)
-        }
+        messages.addLast(Message(ArrayDeque(fragments), control))
         queued += fragments.size
         var dropped = 0
         while (queued > maxQueuedFragments) {
