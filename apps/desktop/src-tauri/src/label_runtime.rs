@@ -1326,8 +1326,15 @@ impl LabelRuntimeHost {
         // Recovered, not given up on, if a panic left the lock poisoned: an empty answer hides the light.
         let runtime = relock(&self.runtime, "model runtime");
         let off_wrist = runtime.is_off_wrist();
-        runtime
-            .readiness(now_ns)
+        // Asked from the window (on the main thread, where a panic aborts the whole app) and from the timer: a fault in
+        // it is logged and shows as no light, never more.
+        let found =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| runtime.readiness(now_ns)))
+                .unwrap_or_else(|_| {
+                    error!("the readiness check panicked; showing no readiness this time");
+                    Vec::new()
+                });
+        found
             .into_iter()
             .map(|(label, readiness)| ReadinessView {
                 label: label.to_string(),

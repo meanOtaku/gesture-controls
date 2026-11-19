@@ -406,8 +406,9 @@ impl LabelPipeline {
             .map(|s| s.at_ns)
             .filter(|&at| at + pulse_ns > now_ns)
         {
+            // Placed by a clock estimate that can improve, a sample can land a little before the one before it: no gap.
             if let Some(before) = previous
-                && at - before > pulse_gap_ns
+                && at.saturating_sub(before) > pulse_gap_ns
             {
                 later(NoSignal::Gap, at + pulse_ns - now_ns);
             }
@@ -417,8 +418,9 @@ impl LabelPipeline {
         if reads_motion {
             let newest = self.motion.back().expect("not empty").sample.ts_ns;
             let oldest = self.motion.front().expect("not empty").sample.ts_ns;
-            if newest - oldest < motion_ns {
-                later(NoSignal::WarmingUp, motion_ns - (newest - oldest));
+            let span = newest.saturating_sub(oldest);
+            if span < motion_ns {
+                later(NoSignal::WarmingUp, motion_ns - span);
             }
             let motion_gap_ns = pinch_inference::imu_onset::MAX_GAP_MS * NS_PER_MS;
             let mut previous: Option<u64> = None;
@@ -431,7 +433,7 @@ impl LabelPipeline {
             {
                 let at = m.sample.ts_ns;
                 if let Some(before) = previous
-                    && at - before > motion_gap_ns
+                    && at.saturating_sub(before) > motion_gap_ns
                 {
                     later(NoSignal::Gap, at + motion_ns - newest);
                 }
@@ -1000,50 +1002,60 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn pulse_samples_put_back_in_time_by_a_better_clock_estimate_are_scored_without_a_panic() {
-        // The first pulse batches are stamped as sent 120 ms after their sample, the rest at once (they still arrive in
-        // order): once the estimate of the pulse sensor's clock
-        // improves, the next samples land on the watch's clock before the last ones placed. The inputs must take them in
-        // time order, as a recording has them (this panicked in the gap check, and looked samples up out of order).
+    fn pulse_samples_put_back_in_time_by_a_better_clock_estimate_are_scored_and_judged_without_a_panic()
+     {
+        // Pulse samples come four to a batch. The first half of the batches reach the desktop (and are stamped as sent)
+        // 120 ms late, the rest at once; they still arrive in order. When the batches speed up, the clock estimates
+        // improve and a batch's first samples land before the last ones placed, on the receive clock and on the watch's.
+        // The inputs must take them in time order, as a recording has them, and the readiness light must not trip over
+        // them (both panicked on subtracting a later time from an earlier one).
         let model = loaded_cnn_v2();
         let (trace, motion, _) = expected_cnn_v2();
         let mut p = LabelPipeline::default();
         p.configure(&[&model]);
         let origin = trace[0].ts_ns;
         let received = |ts: u64, delay_ms: u64| ts - origin + 10_000_000_000 + delay_ms * NS_PER_MS;
-        let half = trace.len() / 2;
-        let wait = |i: usize| if i < half { 120 * NS_PER_MS } else { 0 };
-        let mut arrivals: Vec<(u64, bool, usize)> = (0..trace.len())
-            .map(|i| (received(trace[i].ts_ns, 5), true, i))
+        let batches = trace.len() / 4;
+        let half = batches / 2;
+        let wait = |k: usize| if k < half { 120 * NS_PER_MS } else { 0 };
+        let mut arrivals: Vec<(u64, bool, usize)> = (0..batches)
+            .map(|k| (received(trace[4 * k + 3].ts_ns, 5) + wait(k), true, k))
             .collect();
         arrivals.extend((0..motion.len()).map(|j| (received(motion[j].ts_ns, 60), false, j)));
         arrivals.sort();
-        let mut later = 0;
-        let mut went_back = false;
-        let mut last_placed = 0;
-        for (at, pulse, i) in arrivals {
+        let (mut later, mut back_on_receive, mut back_on_watch) = (0, false, false);
+        let (mut last_at, mut last_watch) = (0, 0);
+        for (at, pulse, k) in arrivals {
             if pulse {
-                let mut b = batch(&trace, i, i + 1);
-                b.timestamp_ns = trace[i].ts_ns + wait(i);
-                b.timestamps_ns = vec![trace[i].ts_ns - SDK_BEHIND_NS];
+                let mut b = batch(&trace, 4 * k, 4 * k + 4);
+                b.timestamp_ns = trace[4 * k + 3].ts_ns + wait(k);
+                b.timestamps_ns = (4 * k..4 * k + 4)
+                    .map(|i| trace[i].ts_ns - SDK_BEHIND_NS)
+                    .collect();
                 p.observe_ppg(&b, at).unwrap();
-                let placed = p.ppg.back().and_then(|s| s.watch_ns).unwrap();
-                went_back |= placed < last_placed;
-                last_placed = placed;
+                let first = &p.ppg[p.ppg.len() - 4];
+                back_on_receive |= first.at_ns < last_at;
+                back_on_watch |= first.watch_ns.unwrap() < last_watch;
+                let newest = p.ppg.back().unwrap();
+                (last_at, last_watch) = (newest.at_ns, newest.watch_ns.unwrap());
             } else {
-                p.observe_orientation(&motion_sample(&motion[i], i as u64), at)
+                p.observe_orientation(&motion_sample(&motion[k], k as u64), at)
                     .unwrap();
             }
+            let _ = p.readiness(&model, at);
             let (scores, _) = p.evaluate(&[&model], at);
             later += scores
                 .iter()
-                .filter(|score| score.timestamp_ns > trace[half].ts_ns - SDK_BEHIND_NS)
+                .filter(|score| score.timestamp_ns > trace[4 * half].ts_ns - SDK_BEHIND_NS)
                 .count();
         }
-        assert!(went_back, "the test must put a sample back in time");
+        assert!(
+            back_on_receive && back_on_watch,
+            "the test must put samples back in time on both clocks"
+        );
         assert!(
             later > 100,
-            "scoring went on after the estimate improved: {later}"
+            "scoring went on after the estimates improved: {later}"
         );
     }
 
