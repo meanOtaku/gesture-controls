@@ -125,6 +125,8 @@ pub struct HandSteadinessView {
     pub accel_spread: Option<f64>,
     pub turning: Option<f64>,
     pub tilt_change_deg: Option<f64>,
+    /// Settings → Still hand is on, so a moving hand really does hold a gesture back. Off, this is only a measure.
+    pub gate_on: bool,
 }
 
 impl From<label_inference::steadiness::Verdict> for HandSteadinessView {
@@ -140,6 +142,7 @@ impl From<label_inference::steadiness::Verdict> for HandSteadinessView {
             accel_spread: measures.map(|m| m.accel_spread),
             turning: measures.map(|m| m.turning),
             tilt_change_deg: measures.map(|m| m.tilt_change_deg),
+            gate_on: false,
         }
     }
 }
@@ -426,6 +429,8 @@ pub struct LabelModelView {
     pub deployable: bool,
     /// It did not pass the checks for going live: it can be activated, but it only ever reports.
     pub monitor_only: bool,
+    /// When the user let this monitor-only model act in Live anyway; `None` while it only reports.
+    pub live_override: Option<String>,
     pub imported: bool,
     pub model_sha256: Option<String>,
     pub created_at: String,
@@ -658,7 +663,7 @@ pub struct LabelRuntimeHost {
     state: Mutex<HostState>,
     started_at: Instant,
     /// The hand's state last sent to the UI, so it is only sent when it changes.
-    steadiness_shown: Mutex<Option<String>>,
+    steadiness_shown: Mutex<Option<(String, bool)>>,
     /// The models' readiness last sent to the UI, and the wait the ready buzz ends.
     readiness: Mutex<ReadinessTracker>,
     /// Whether a gesture may only start from a still hand (the `steadyStartsOnly` setting).
@@ -964,6 +969,18 @@ impl LabelRuntimeHost {
         self.change_registry(app, |r| r.transition(&id, to, &now))
     }
 
+    /// Lets a monitor-only model act in Live anyway, or takes that back. The running models reload, so it applies at once.
+    pub fn set_live_override(
+        &self,
+        app: &AppHandle,
+        id: &str,
+        allowed: bool,
+    ) -> Result<(), String> {
+        let id = ModelVersionId::new(id).map_err(|e| e.to_string())?;
+        let now = Self::now_rfc3339();
+        self.change_registry(app, |r| r.set_live_override(&id, allowed, &now))
+    }
+
     /// Makes an approved model the label's active one. The model is loaded and checked first: a model that cannot run
     /// is never made active, so activating cannot silently leave a label without one.
     pub fn activate_model(&self, app: &AppHandle, id: &str) -> Result<(), String> {
@@ -1205,6 +1222,7 @@ impl LabelRuntimeHost {
                     state: v.state,
                     deployable: v.deployable,
                     monitor_only: v.monitor_only,
+                    live_override: v.live_override.clone(),
                     imported: matches!(v.origin, model_lab_core::ModelOrigin::Imported),
                     model_sha256: v.model_sha256.clone(),
                     created_at: v.created_at.clone(),
@@ -1288,9 +1306,9 @@ impl LabelRuntimeHost {
         self.with_shadow(app, |runtime| runtime.tick(now));
         let view = self.hand_steadiness();
         if let Ok(mut shown) = self.steadiness_shown.lock()
-            && shown.as_deref() != Some(view.state.as_str())
+            && shown.as_ref() != Some(&(view.state.clone(), view.gate_on))
         {
-            *shown = Some(view.state.clone());
+            *shown = Some((view.state.clone(), view.gate_on));
             let _ = app.emit(HAND_STEADINESS_EVENT, view);
         }
         let views = self.readiness(now);
@@ -1378,15 +1396,20 @@ impl LabelRuntimeHost {
     /// Whether the hand is still right now, or that the watch is off the wrist.
     pub fn hand_steadiness(&self) -> HandSteadinessView {
         let runtime = relock(&self.runtime, "model runtime");
+        let gate_on = runtime.steadiness_gate();
         if runtime.is_off_wrist() {
             HandSteadinessView {
                 state: "offWrist".into(),
                 accel_spread: None,
                 turning: None,
                 tilt_change_deg: None,
+                gate_on,
             }
         } else {
-            runtime.hand_steadiness().into()
+            HandSteadinessView {
+                gate_on,
+                ..runtime.hand_steadiness().into()
+            }
         }
     }
 
@@ -2002,6 +2025,17 @@ pub fn rename_label_model(
 fn default_release(old: &model_lab_core::Thresholds, activation: f64) -> f64 {
     let gap = (old.activation - old.release).max(0.0);
     ((activation - gap) * 100.0).round().max(1.0) / 100.0
+}
+
+/// Lets a monitor-only model act in Live anyway, or takes it back (`LabelRuntimeHost::set_live_override`).
+#[tauri::command]
+pub fn set_label_model_live_override(
+    app: AppHandle,
+    host: State<'_, LabelRuntimeHost>,
+    id: String,
+    allowed: bool,
+) -> Result<(), String> {
+    host.set_live_override(&app, &id, allowed)
 }
 
 /// Changes a model's thresholds (`LabelRuntimeHost::set_model_threshold`).

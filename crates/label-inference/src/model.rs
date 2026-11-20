@@ -214,7 +214,8 @@ impl LoadedModel {
             thresholds: version.thresholds,
             quality: version.quality,
             model_sha256: bundle.model_sha256.clone(),
-            monitor_only: !version.deployable,
+            // A monitor-only model only reports, unless the user let it act anyway.
+            monitor_only: !version.may_act(),
             input_names: bundle.manifest.input.features.clone(),
             training_range: bundle.manifest.input.training_range.clone(),
             decision_delay_ms: bundle
@@ -716,6 +717,15 @@ pub(crate) mod tests {
                 v.monitor_only = true;
             }),
             Ok(true)
+        );
+        // Unless the user let it act anyway.
+        assert_eq!(
+            load(&|v| {
+                v.deployable = false;
+                v.monitor_only = true;
+                v.live_override = Some("2026-11-20T08:00:00Z".into());
+            }),
+            Ok(false)
         );
         assert!(matches!(
             load(&|v| v.label = LabelId::new("swipe_left").unwrap()),

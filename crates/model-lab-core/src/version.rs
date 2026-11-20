@@ -133,6 +133,10 @@ pub struct ModelVersion {
     /// runs in Monitor (it reports what it detects and never acts). False for a deployable model.
     #[serde(default)]
     pub monitor_only: bool,
+    /// When the user let this monitor-only model act in Live anyway, knowing it failed the checks for going live
+    /// (`Registry::set_live_override`). `None`: it only reports, as monitor-only models do.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub live_override: Option<String>,
     /// SHA-256 of the model file. Required for a deployable model.
     pub model_sha256: Option<String>,
     /// The model's directory, relative to the model-lab directory.
@@ -204,6 +208,7 @@ impl ModelVersion {
             state: LifecycleState::Draft,
             deployable,
             monitor_only: false,
+            live_override: None,
             model_sha256,
             artifact_dir,
             input,
@@ -234,6 +239,11 @@ impl ModelVersion {
         }
         self.monitor_only = true;
         Ok(self)
+    }
+
+    /// Whether it may start recipes in Live: it passed the checks for going live, or the user let it act anyway.
+    pub fn may_act(&self) -> bool {
+        self.deployable || (self.monitor_only && self.live_override.is_some())
     }
 
     /// Whether its model file may be loaded and run: a deployable model, or a monitor-only one.

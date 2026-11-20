@@ -6,6 +6,7 @@
 //! plain [`Signals`] and produces plain [`Output`]s, so the same engine can run in the foreground app today and
 //! in a background host later.
 
+mod anchor;
 mod conflicts;
 mod device;
 mod flick;
@@ -21,12 +22,17 @@ mod swipe;
 mod tap;
 mod wiggle;
 
+pub use anchor::ScreenAnchor;
 pub use conflicts::{Conflict, blocked_recipes, find_conflicts};
 pub use device::{Device, DeviceKind, Output};
 pub use hammer::{HammerConfig, HammerDetector};
 pub use heuristics::HeuristicGestures;
 pub use pitch::{PitchConfig, PitchDetector, PitchDirection};
-pub use pointer::{PointerConfig, PointerEvent, PointerInputs, PointerTracker};
+pub use pointer::{
+    HeadAim, HeadRange, LIFT_TILT_DEGREES, MAX_HEAD_RANGE_DEGREES, MIN_HEAD_RANGE_DEGREES,
+    PointerConfig, PointerEvent, PointerInputs, PointerMode, PointerSource, PointerTracker,
+    TOUCH_TILT_DEGREES,
+};
 pub use recipe::{
     Action, Axis, Hold, MAX_APP_NAME_CHARS, MAX_APPS, MAX_KEYS_CHARS, MAX_POINTER_LOOKBACK_MS,
     MAX_POINTER_PIXELS_PER_DEGREE, MAX_STAGES, ModelHold, Recipe, RecipeError, Stage,

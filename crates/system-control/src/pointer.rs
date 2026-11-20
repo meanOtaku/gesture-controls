@@ -12,6 +12,10 @@ pub trait PointerController: Send + Sync {
         self.button(true)?;
         self.button(false)
     }
+    /// The width and height, in the pixels [`Self::move_by`] counts, of the screen the pointer is on, when known.
+    fn screen_size(&self) -> Option<(f64, f64)> {
+        None
+    }
 }
 
 /// The most one call may move, so a glitch cannot throw the pointer across the screen.
@@ -153,6 +157,14 @@ mod macos {
     pub struct MacOsPointer;
 
     impl PointerController for MacOsPointer {
+        fn screen_size(&self) -> Option<(f64, f64)> {
+            let display = location().ok().and_then(display_at);
+            // SAFETY: plain queries.
+            let bounds = unsafe { CGDisplayBounds(display.unwrap_or_else(|| CGMainDisplayID())) };
+            (bounds.size.width > 0.0 && bounds.size.height > 0.0)
+                .then_some((bounds.size.width, bounds.size.height))
+        }
+
         fn move_by(&self, dx: i32, dy: i32, dragging: bool) -> Result<(), ControlError> {
             if dx == 0 && dy == 0 {
                 return Ok(());

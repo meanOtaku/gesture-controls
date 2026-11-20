@@ -8,7 +8,10 @@ import { Label } from "../../../components/ui/label";
 import { Switch } from "../../../components/ui/switch";
 import type { NumberSpec } from "../../../shared/forms/numberField";
 import { useNumberDrafts } from "../../../shared/forms/useNumberDrafts";
-import type { CalibrationLocation, ModelHold, Recipe, RecipeAction } from "../../../shared/protocol/events";
+import { formatNumber } from "../../../shared/forms/numberField";
+import { HeadRangeCalibration } from "./HeadRangeCalibration";
+import { WristRangeCalibration } from "./WristRangeCalibration";
+import type { CalibrationLocation, ModelHold, PointerMode, PointerSource, Recipe, RecipeAction, ScreenAnchor } from "../../../shared/protocol/events";
 import {
   ACTIONS,
   AXES,
@@ -19,6 +22,7 @@ import {
   POINTER_SPEED_SPEC,
   MAX_RECIPE_NAME_CHARS,
   MAX_STAGES,
+  actionInfo,
   buildDevice,
   chainProblem,
   defaultNumbers,
@@ -30,12 +34,20 @@ import {
   isPointer,
   isTrigger,
   pointerLabelsProblem,
+  HEAD_RANGE_ACROSS_SPEC,
+  HEAD_RANGE_UP_SPEC,
+  POINTER_MODES,
+  POINTER_SOURCES,
   pointerStage,
   shortcutProblem,
   appsProblem,
   parseApps,
   leadingStages,
   nameProblem,
+  SCREEN_ANCHORS,
+  anchorLabel,
+  lookedAtAnchor,
+  showsOverlay,
   type Axis,
   type DeviceKind,
   type HoldKind,
@@ -76,24 +88,39 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
   const [keys, setKeys] = useState(recipe.keys ?? "");
   const [keysTouched, setKeysTouched] = useState(false);
   const [appsText, setAppsText] = useState((recipe.apps ?? []).join(", "));
+  // "" is where the recipe is looked at.
+  const [overlayAt, setOverlayAt] = useState<ScreenAnchor | "">(recipe.overlayAt ?? "");
   const initialPointer = useMemo(() => pointerStage(recipe), [recipe]);
   const [pressLabel, setPressLabel] = useState(initialPointer.pressLabel);
   const [holdLabel, setHoldLabel] = useState(initialPointer.holdLabel);
   const [releaseLabel, setReleaseLabel] = useState(initialPointer.releaseLabel);
+  // A pointer step saved before the choice existed moved the pointer like a mouse.
+  const [pointerMode, setPointerMode] = useState<PointerMode>(initialPointer.mode ?? "mouse");
+  const [pointerSource, setPointerSource] = useState<PointerSource>(initialPointer.source ?? "watch");
+  const [reverseAcross, setReverseAcross] = useState(initialPointer.reverseAcross ?? false);
+  const [reverseUp, setReverseUp] = useState(initialPointer.reverseUp ?? false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const initialNumbers = useMemo(() => deviceNumbers(recipe.device, recipe.action), [recipe.device, recipe.action]);
   const specs = useMemo(() => {
     const device = deviceSpecs(kind, action);
-    return { deadZone: DEAD_ZONE_SPEC, a: device.a, b: device.b ?? UNUSED_SPEC, speed: POINTER_SPEED_SPEC, lookback: POINTER_LOOKBACK_SPEC };
+    return { deadZone: DEAD_ZONE_SPEC, a: device.a, b: device.b ?? UNUSED_SPEC, speed: POINTER_SPEED_SPEC, lookback: POINTER_LOOKBACK_SPEC, rangeAcross: HEAD_RANGE_ACROSS_SPEC, rangeUp: HEAD_RANGE_UP_SPEC };
   }, [kind, action]);
   // Switching device or what it controls resets its two numbers to the defaults for that pair, because the same
   // number means something different in points, percent and pixels. The dead zone is the recipe's own.
   const numbers = kind === initialKind && action === initialAction ? initialNumbers : defaultNumbers(kind, action);
   const committed = useMemo(
-    () => ({ deadZone: initialDrive.deadZoneDegrees, a: numbers.a, b: numbers.b, speed: initialPointer.pixelsPerDegree, lookback: initialPointer.lookbackMs }),
-    [initialDrive.deadZoneDegrees, numbers.a, numbers.b, initialPointer.pixelsPerDegree, initialPointer.lookbackMs],
+    () => ({
+      deadZone: initialDrive.deadZoneDegrees,
+      a: numbers.a,
+      b: numbers.b,
+      speed: initialPointer.pixelsPerDegree,
+      lookback: initialPointer.lookbackMs,
+      rangeAcross: initialPointer.headRange?.acrossDegrees ?? HEAD_RANGE_ACROSS_SPEC.defaultValue,
+      rangeUp: initialPointer.headRange?.upDegrees ?? HEAD_RANGE_UP_SPEC.defaultValue,
+    }),
+    [initialDrive.deadZoneDegrees, numbers.a, numbers.b, initialPointer.pixelsPerDegree, initialPointer.lookbackMs, initialPointer.headRange],
   );
   const drafts = useNumberDrafts(specs, committed);
 
@@ -115,7 +142,7 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
   const setStep = (index: number, next: LeadingStage) => setSteps((current) => current.map((s, i) => (i === index ? next : s)));
   const removeStep = (index: number) => setSteps((current) => current.filter((_, i) => i !== index));
 
-  const field = (key: "deadZone" | "a" | "b" | "speed" | "lookback") => (
+  const field = (key: "deadZone" | "a" | "b" | "speed" | "lookback" | "rangeAcross" | "rangeUp") => (
     <NumberField
       id={`${uid}-${key}`}
       spec={specs[key]}
@@ -150,14 +177,18 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
       document.getElementById(`${uid}-${result.firstInvalid}`)?.focus();
       return;
     }
-    const { deadZone, a, b, speed, lookback } = result?.values ?? {
+    const { deadZone, a, b, speed, lookback, rangeAcross, rangeUp } = result?.values ?? {
       deadZone: DEAD_ZONE_SPEC.defaultValue,
       ...defaultNumbers("rotationKnob"),
       speed: POINTER_SPEED_SPEC.defaultValue,
       lookback: POINTER_LOOKBACK_SPEC.defaultValue,
+      rangeAcross: HEAD_RANGE_ACROSS_SPEC.defaultValue,
+      rangeUp: HEAD_RANGE_UP_SPEC.defaultValue,
     };
+    // The head always goes by its range; the hand has none.
+    const headRange = pointerSource === "head" ? { headRange: { acrossDegrees: rangeAcross, upDegrees: rangeUp } } : {};
     const last = pointer
-      ? [{ kind: "pointer" as const, pixelsPerDegree: speed, pressLabel, holdLabel, releaseLabel, lookbackMs: Math.round(lookback) }]
+      ? [{ kind: "pointer" as const, pixelsPerDegree: speed, pressLabel, holdLabel, releaseLabel, lookbackMs: Math.round(lookback), mode: pointerMode, source: pointerSource, reverseAcross, reverseUp, ...headRange }]
       : trigger
         ? []
         : [{ kind: "drive" as const, axis, deadZoneDegrees: deadZone, invert }];
@@ -170,6 +201,7 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
       action,
       keys: action === "shortcut" ? keys.trim() : undefined,
       apps: apps.length > 0 ? apps : undefined,
+      overlayAt: showsOverlay(action) && overlayAt !== "" ? overlayAt : undefined,
       device: trigger || pointer ? buildDevice("rotationKnob", defaultNumbers("rotationKnob")) : buildDevice(kind, { a, b }, action),
     });
     setSaving(false);
@@ -177,6 +209,10 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
   };
 
   const showSecond = deviceSpecs(kind, action).b !== null;
+  // The device's numbers as typed, for showing and calibrating the wrist range; null while one is not a number.
+  const draftA = Number(drafts.fields.a.text);
+  const draftB = showSecond ? Number(drafts.fields.b.text) : 0;
+  const draftNumbers = drafts.fields.a.text.trim() !== "" && Number.isFinite(draftA) && Number.isFinite(draftB) ? { a: draftA, b: draftB } : null;
 
   return (
     <form noValidate aria-label={recipe.id === "" ? "New recipe" : `Edit ${recipe.name}`} className="recipe-editor" onSubmit={submit}>
@@ -464,10 +500,55 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
 
       {pointer && (
         <fieldset className="recipe-steps">
-          <legend>Then point with your hand</legend>
-          <p className="field-hint">Point your forearm left and right to move the pointer across, and raise or lower your hand to move it up and down; rolling the wrist does not move it. Which way is up depends on Settings → Watch orientation (which wrist, and which side the crown is on).</p>
+          <legend>Then point</legend>
+          <div className="field">
+            <div className="field-head"><span id={`${uid}-pointer-source`} className="field-label">Moved by</span></div>
+            <SegmentedControl
+              labelledBy={`${uid}-pointer-source`}
+              value={pointerSource}
+              onValueChange={setPointerSource}
+              options={POINTER_SOURCES.map((source) => ({ value: source.value, label: source.label }))}
+            />
+            <p className="field-hint">{POINTER_SOURCES.find((source) => source.value === pointerSource)?.detail}</p>
+          </div>
+          {pointerSource === "watch" && (
+            <div className="field">
+              <div className="field-head"><span id={`${uid}-pointer-mode`} className="field-label">Moves like</span></div>
+              <SegmentedControl
+                labelledBy={`${uid}-pointer-mode`}
+                value={pointerMode}
+                onValueChange={setPointerMode}
+                options={POINTER_MODES.map((mode) => ({ value: mode.value, label: mode.label }))}
+              />
+              <p className="field-hint">{POINTER_MODES.find((mode) => mode.value === pointerMode)?.detail}</p>
+            </div>
+          )}
           <div className="recipe-row">
-            {field("speed")}
+            <label className="recipe-switch">
+              <Switch checked={reverseAcross} onCheckedChange={setReverseAcross} />
+              <span>Reverse left and right</span>
+            </label>
+            <label className="recipe-switch">
+              <Switch checked={reverseUp} onCheckedChange={setReverseUp} />
+              <span>Reverse up and down</span>
+            </label>
+          </div>
+          {pointerSource === "head" && (
+            <>
+              <div className="recipe-row">
+                {field("rangeAcross")}
+                {field("rangeUp")}
+              </div>
+              <HeadRangeCalibration
+                onCalibrated={({ across, up }) => {
+                  drafts.setText("rangeAcross", formatNumber(Math.round(across)));
+                  drafts.setText("rangeUp", formatNumber(Math.round(up)));
+                }}
+              />
+            </>
+          )}
+          <div className="recipe-row">
+            {pointerSource === "watch" && field("speed")}
             {field("lookback")}
           </div>
           <div className="recipe-row">
@@ -526,6 +607,38 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
           {field("a")}
           {showSecond && field("b")}
         </div>
+        {!trigger && !pointer && (
+          <WristRangeCalibration
+            axis={axis}
+            kind={kind}
+            scale={actionInfo(action).scale}
+            numbers={draftNumbers}
+            onCalibrated={({ a, b }) => {
+              drafts.setText("a", formatNumber(a));
+              if (showSecond) drafts.setText("b", formatNumber(b));
+            }}
+          />
+        )}
+        {showsOverlay(action) && (
+          <div className="field">
+            <div className="field-head"><Label htmlFor={`${uid}-overlay-at`}>Show it on screen at</Label></div>
+            <select
+              id={`${uid}-overlay-at`}
+              className={NATIVE_SELECT}
+              value={overlayAt}
+              onChange={(event) => setOverlayAt(event.target.value as ScreenAnchor | "")}
+            >
+              <option value="">Where you look ({anchorLabel(lookedAtAnchor(steps))})</option>
+              {SCREEN_ANCHORS.map((anchor) => (
+                <option key={anchor.value} value={anchor.value}>{anchor.label}</option>
+              ))}
+            </select>
+            <p className="field-hint">
+              Where the knob or slider appears while this recipe runs. "Where you look" follows the location in its first step,
+              read from its name (top left, bottom edge, center…), and is the top right when it names no place.
+            </p>
+          </div>
+        )}
       </fieldset>
 
         </>

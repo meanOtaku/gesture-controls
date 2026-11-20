@@ -177,6 +177,20 @@ pub enum Stage {
         hold_label: String,
         release_label: String,
         lookback_ms: u32,
+        /// Whether the hand always moves the pointer (a mouse) or only while the palm faces down (a trackpad).
+        #[serde(default)]
+        mode: crate::PointerMode,
+        /// Whether the watch (where the forearm points) or the headphones (where the head faces) move the pointer.
+        #[serde(default)]
+        source: crate::PointerSource,
+        /// Flip left and right, or up and down.
+        #[serde(default)]
+        reverse_across: bool,
+        #[serde(default)]
+        reverse_up: bool,
+        /// Following the head, how far it turns to cross the screen; without one it moves at `pixels_per_degree`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        head_range: Option<crate::HeadRange>,
     },
     /// The wrist rotating about an axis, measured from where the hold began. Always the last stage; it
     /// supplies the continuous value. Movement inside `dead_zone_degrees` of the start is ignored, and
@@ -217,6 +231,10 @@ pub struct Recipe {
     /// different apps.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub apps: Vec<String>,
+    /// Where the overlay of a volume or brightness recipe is shown; `None` is where its look-at location is (see
+    /// [`Recipe::overlay_anchor`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overlay_at: Option<crate::ScreenAnchor>,
 }
 
 pub const MAX_KEYS_CHARS: usize = 40;
@@ -392,8 +410,11 @@ pub fn validate_recipe(recipe: &Recipe) -> Result<(), RecipeError> {
             hold_label,
             release_label,
             lookback_ms,
+            head_range,
+            ..
         } = last
-            && !(pixels_per_degree.is_finite()
+            && !(head_range.is_none_or(|range| range.is_valid())
+                && pixels_per_degree.is_finite()
                 && *pixels_per_degree > 0.0
                 && *pixels_per_degree <= MAX_POINTER_PIXELS_PER_DEGREE
                 && *lookback_ms <= MAX_POINTER_LOOKBACK_MS

@@ -1,5 +1,5 @@
 import type { NumberSpec } from "../../shared/forms/numberField";
-import type { CalibrationLocation, HeuristicGesture, Recipe, RecipeAction, RecipeStage } from "../../shared/protocol/events";
+import type { CalibrationLocation, HeuristicGesture, PointerMode, PointerSource, Recipe, RecipeAction, RecipeStage, ScreenAnchor } from "../../shared/protocol/events";
 
 export const MAX_RECIPE_NAME_CHARS = 40;
 export const MAX_STAGES = 6;
@@ -40,6 +40,16 @@ export const POINTER_SPEED_SPEC: NumberSpec = {
   description: "How far the pointer moves for each degree you move your hand at a steady pace. Slow movement moves it less, for precision; fast movement more",
 };
 
+export const HEAD_RANGE_ACROSS_SPEC: NumberSpec = {
+  label: "Head range across", unit: "°", min: 5, max: 180, step: 1, defaultValue: 40,
+  description: "How far you turn your head, left to right, to take the pointer from one side of the screen to the other",
+};
+
+export const HEAD_RANGE_UP_SPEC: NumberSpec = {
+  label: "Head range up and down", unit: "°", min: 5, max: 180, step: 1, defaultValue: 25,
+  description: "How far you look up and down to take the pointer from the top of the screen to the bottom",
+};
+
 export const POINTER_LOOKBACK_SPEC: NumberSpec = {
   label: "Click look-back", unit: "ms", min: 0, max: 1500, step: 50, defaultValue: 400,
   description: "When a pinch is detected, the pointer goes back to where it was this long before, so the click lands where you were pointing and not where the pinch nudged it. About the model's delay; 0 switches it off",
@@ -55,8 +65,25 @@ export function pointerStage(recipe: Recipe): PointerStage {
     holdLabel: "pinch_hold",
     releaseLabel: "pinch_out",
     lookbackMs: POINTER_LOOKBACK_SPEC.defaultValue,
+    mode: "trackpad",
   };
 }
+
+/** What can move the pointer, for the recipe editor. */
+export const POINTER_SOURCES: ReadonlyArray<{ value: PointerSource; label: string; detail: string }> = [
+  { value: "watch", label: "Hand", detail: "Point your forearm left and right to move the pointer across, and raise or lower your hand to move it up and down; rolling the wrist does not move it. Which way is up depends on Settings → Watch orientation (which wrist, and which side the crown is on)." },
+  { value: "head", label: "Head", detail: "Turn your head left and right to move the pointer across, and look up and down to move it up and down. It needs the headphones connected; the watch still switches pointer mode on and off and clicks with a pinch. Set how far you turn your head to cross the screen below, or calibrate it; if the pointer goes the wrong way, reverse that direction." },
+];
+
+/** The ways the hand can move the pointer, for the recipe editor. */
+export const POINTER_MODES: ReadonlyArray<{ value: PointerMode; label: string; detail: string }> = [
+  {
+    value: "trackpad",
+    label: "Trackpad",
+    detail: "Moves the pointer only with your palm facing down. Turn the palm to the side to lift, move your arm back or rest it, and turn it down again to carry on.",
+  },
+  { value: "mouse", label: "Mouse", detail: "Your hand always moves the pointer while pointer mode is on." },
+];
 
 /** The model labels a step needs. */
 export function stageLabels(stage: RecipeStage): string[] {
@@ -276,7 +303,7 @@ function stageLabel(stage: RecipeStage, locationName: (id: string) => string, ge
     case "drive":
       return `${AXES.find((axis) => axis.value === stage.axis)?.label ?? stage.axis} wrist`;
     case "pointer":
-      return `Hand moves the pointer (${stage.pressLabel} then ${stage.releaseLabel} clicks, ${stage.holdLabel} drags)`;
+      return `${stage.source === "head" ? "Head" : "Hand"} moves the pointer (${stage.pressLabel} then ${stage.releaseLabel} clicks, ${stage.holdLabel} drags)`;
   }
 }
 
@@ -436,4 +463,52 @@ export function pinchVolumeRecipe(locations: CalibrationLocation[]): Recipe {
       { kind: "drive", axis: "roll", deadZoneDegrees: 1, invert: false },
     ],
   };
+}
+
+/** The nine places a recipe's overlay can be shown, in reading order. */
+export const SCREEN_ANCHORS: { value: ScreenAnchor; label: string }[] = [
+  { value: "topLeft", label: "Top left" },
+  { value: "top", label: "Top" },
+  { value: "topRight", label: "Top right" },
+  { value: "left", label: "Left" },
+  { value: "center", label: "Center" },
+  { value: "right", label: "Right" },
+  { value: "bottomLeft", label: "Bottom left" },
+  { value: "bottom", label: "Bottom" },
+  { value: "bottomRight", label: "Bottom right" },
+];
+
+/** Whether this action shows a knob or slider on screen while it runs. */
+export function showsOverlay(action: RecipeAction): boolean {
+  return action === "volume" || action === "brightness";
+}
+
+/**
+ * The screen position a location's id names, as the app reads it (`automation::ScreenAnchor::for_location`): `topLeft`,
+ * `bottom_right`, `leftEdge`, `center`. `null` when it names none, or names both top and bottom (or left and right).
+ */
+export function anchorForLocation(id: string): ScreenAnchor | null {
+  const words = id.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase().split(/[^a-z]+/).filter(Boolean);
+  const has = (word: string) => words.includes(word);
+  const middle = has("center") || has("centre") || has("middle");
+  if ((has("top") && has("bottom")) || (has("left") && has("right"))) return null;
+  const row = has("top") ? 0 : has("bottom") ? 2 : null;
+  const column = has("left") ? 0 : has("right") ? 2 : null;
+  if (row === null && column === null && !middle) return null;
+  return SCREEN_ANCHORS[(row ?? 1) * 3 + (column ?? 1)].value;
+}
+
+/** Where the recipe with these steps shows its overlay when it names no place itself: where it is looked at, else the top right. */
+export function lookedAtAnchor(stages: RecipeStage[]): ScreenAnchor {
+  for (const stage of stages) {
+    if (stage.kind === "headAt") {
+      const anchor = anchorForLocation(stage.location);
+      if (anchor !== null) return anchor;
+    }
+  }
+  return "topRight";
+}
+
+export function anchorLabel(anchor: ScreenAnchor): string {
+  return SCREEN_ANCHORS.find((a) => a.value === anchor)?.label ?? anchor;
 }

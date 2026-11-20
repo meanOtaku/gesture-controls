@@ -510,6 +510,42 @@ pub fn top_right_overlay_position(
     Some((clamp_i64_to_i32(x), clamp_i64_to_i32(y)))
 }
 
+/// Where a window goes to sit at `(across, down)` of the work area, each 0 (left or top edge), 0.5 (middle) or 1 (right
+/// or bottom edge), kept `logical_margin` in from the edges it sits against. A window larger than the work area keeps
+/// its top-left corner on it. Physical pixels throughout, like [`top_right_overlay_position`].
+pub fn anchored_overlay_position(
+    work_area_origin: (i32, i32),
+    work_area_size: (u32, u32),
+    logical_window_size: (f64, f64),
+    destination_scale_factor: f64,
+    logical_margin: f64,
+    (across, down): (f64, f64),
+) -> Option<(i32, i32)> {
+    if !destination_scale_factor.is_finite()
+        || destination_scale_factor <= 0.0
+        || !(0.0..=1.0).contains(&across)
+        || !(0.0..=1.0).contains(&down)
+        || !logical_margin.is_finite()
+        || logical_margin < 0.0
+    {
+        return None;
+    }
+    let window_width = rounded_nonnegative_i64(logical_window_size.0 * destination_scale_factor)?;
+    let window_height = rounded_nonnegative_i64(logical_window_size.1 * destination_scale_factor)?;
+    let margin = rounded_nonnegative_i64(logical_margin * destination_scale_factor)?;
+    let place = |origin: i32, size: u32, window: i64, fraction: f64| -> Option<i64> {
+        let origin = i64::from(origin);
+        let size = i64::from(size);
+        // The room the window can move in, inside the margins; none when it does not fit.
+        let room = (size - window - 2 * margin).max(0);
+        let offset = (room as f64 * fraction).round() as i64;
+        origin.checked_add(margin.min(size))?.checked_add(offset)
+    };
+    let x = place(work_area_origin.0, work_area_size.0, window_width, across)?;
+    let y = place(work_area_origin.1, work_area_size.1, window_height, down)?;
+    Some((clamp_i64_to_i32(x), clamp_i64_to_i32(y)))
+}
+
 fn rounded_nonnegative_i64(value: f64) -> Option<i64> {
     if !value.is_finite() || !(0.0..=i64::MAX as f64).contains(&value) {
         return None;

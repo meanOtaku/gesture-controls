@@ -58,6 +58,8 @@ pub enum RegistryError {
     },
     #[error("the label '{0}' has no active model")]
     NothingActive(LabelId),
+    #[error("'{0}' passed the checks for going live, so it needs no permission to act")]
+    NotMonitorOnly(ModelVersionId),
     #[error("the label '{0}' has no previous model to roll back to")]
     NothingToRollBackTo(LabelId),
     #[error("an active model cannot be archived or moved; deactivate or replace it first")]
@@ -498,6 +500,22 @@ impl Registry {
             return Err(RegistryError::BadName);
         }
         self.version_mut(id)?.name = name.map(String::from);
+        Ok(())
+    }
+
+    /// Lets a monitor-only model act in Live anyway (`allowed`), recording when, or takes that back. Only a monitor-only
+    /// model can be let act: a deployable one already may. Taking it back is always allowed.
+    pub fn set_live_override(
+        &mut self,
+        id: &ModelVersionId,
+        allowed: bool,
+        at: &str,
+    ) -> Result<(), RegistryError> {
+        let version = self.version_mut(id)?;
+        if allowed && !version.monitor_only {
+            return Err(RegistryError::NotMonitorOnly(id.clone()));
+        }
+        version.live_override = allowed.then(|| at.to_string());
         Ok(())
     }
 
@@ -1157,6 +1175,27 @@ pub(crate) mod tests {
         r.activate(&mid("m1"), T).unwrap();
         assert!(r.versions[&mid("m1")].monitor_only && !r.versions[&mid("m1")].deployable);
         assert!(r.validate().is_ok());
+        assert!(!r.versions[&mid("m1")].may_act());
+
+        // The user may let it act anyway, which is recorded, and take that back.
+        r.set_live_override(&mid("m1"), true, T).unwrap();
+        assert_eq!(r.versions[&mid("m1")].live_override.as_deref(), Some(T));
+        assert!(r.versions[&mid("m1")].may_act());
+        assert!(r.validate().is_ok());
+        r.set_live_override(&mid("m1"), false, T).unwrap();
+        assert!(!r.versions[&mid("m1")].may_act());
+    }
+
+    #[test]
+    fn a_deployable_model_needs_no_permission_to_act() {
+        let mut r = two_label_registry();
+        assert!(r.versions[&mid("a1")].may_act());
+        assert_eq!(
+            r.set_live_override(&mid("a1"), true, T),
+            Err(RegistryError::NotMonitorOnly(mid("a1")))
+        );
+        // Taking back what was never given is harmless.
+        assert_eq!(r.set_live_override(&mid("a1"), false, T), Ok(()));
     }
 
     #[test]

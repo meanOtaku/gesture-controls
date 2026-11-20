@@ -248,6 +248,9 @@ fn handle_head_event(handle: &AppHandle, event: HeadPoseEvent) {
             if let Err(error) = handle.state::<CalibrationRuntime>().disconnect(handle) {
                 warn!(%error, "failed to suspend head calibration");
             }
+            handle
+                .state::<crate::automation::AutomationRuntime>()
+                .set_head_aim(handle, None);
             let _ = handle.emit(CONNECTION_EVENT, false);
         }
         HeadPoseEvent::Pose(pose) => {
@@ -257,6 +260,18 @@ fn handle_head_event(handle: &AppHandle, event: HeadPoseEvent) {
             {
                 warn!(%error, "failed to evaluate head calibration");
             }
+            // At the full incoming rate, not the throttled rate the screens see: a pointer that follows the head
+            // moves with every sample.
+            handle
+                .state::<crate::automation::AutomationRuntime>()
+                .set_head_aim(
+                    handle,
+                    Some(automation::HeadAim {
+                        yaw_deg: pose.yaw_deg,
+                        pitch_deg: pose.pitch_deg,
+                        timestamp_ns: pose.timestamp_ns,
+                    }),
+                );
             if handle.state::<SettingsRuntime>().accept_headphones_pose()
                 && let Err(error) = handle.emit(POSE_EVENT, pose)
             {

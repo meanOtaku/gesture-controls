@@ -63,8 +63,9 @@ function HandSteadinessBadge({ desktopAvailable }: { desktopAvailable: boolean }
     };
   }, [desktopAvailable]);
   if (!desktopAvailable) return null;
-  const { text, variant } = describeSteadiness(steadiness);
-  return <Badge variant={variant} aria-live="polite">{text}</Badge>;
+  const shown = describeSteadiness(steadiness);
+  if (!shown) return null;
+  return <Badge variant={shown.variant} aria-live="polite">{shown.text}</Badge>;
 }
 
 /** What the models have been doing this session: detections, releases, and anything that held one off. */

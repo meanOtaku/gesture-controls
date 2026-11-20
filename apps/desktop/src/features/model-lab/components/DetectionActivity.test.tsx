@@ -112,6 +112,16 @@ describe("DetectionActivity", () => {
     expect(screen.getByText("Watch off wrist")).toBeInTheDocument();
   });
 
+  it("says nothing about a moving hand while Settings → Still hand is off, since nothing is held back by it", () => {
+    render(<DetectionActivity desktopAvailable />);
+    act(() => steadinessHandler?.({ payload: { state: "moving", accelSpread: 1.2, turning: 0.9, tiltChangeDeg: 14, gateOn: false } }));
+    expect(screen.queryByText("Hand moving")).not.toBeInTheDocument();
+    act(() => steadinessHandler?.({ payload: { state: "offWrist", accelSpread: null, turning: null, tiltChangeDeg: null, gateOn: false } }));
+    expect(screen.getByText("Watch off wrist")).toBeInTheDocument();
+    act(() => steadinessHandler?.({ payload: { state: "moving", accelSpread: 1.2, turning: 0.9, tiltChangeDeg: 14, gateOn: true } }));
+    expect(screen.getByText("Hand moving")).toBeInTheDocument();
+  });
+
   it("says a gesture was not started because the hand was moving, rather than that a window was skipped", () => {
     render(<DetectionActivity desktopAvailable />);
     act(() => handler?.({ payload: { events: [], conflicts: [], rejections: ["pinch: the hand was not still before the gesture: turning (0.90 rad/s, at most 0.5)", "pinch: PPG has a 300 ms gap"] } }));

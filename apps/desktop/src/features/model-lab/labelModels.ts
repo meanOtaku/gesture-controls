@@ -12,6 +12,8 @@ export interface LabelModel {
   deployable: boolean;
   /** It did not pass the checks for going live: it can be approved and activated, but it only ever reports (Monitor). */
   monitorOnly?: boolean;
+  /** When the user let this monitor-only model act in Live anyway; absent or null while it only reports. */
+  liveOverride?: string | null;
   imported: boolean;
   modelSha256: string | null;
   createdAt: string;
@@ -241,13 +243,19 @@ export interface HandSteadiness {
   accelSpread: number | null;
   turning: number | null;
   tiltChangeDeg: number | null;
+  /** Settings → Still hand is on, so a moving hand holds a gesture back. Off, nothing is held back by it. */
+  gateOn?: boolean;
 }
 
-/** The badge for the hand's state: a gesture may only start while the hand was still just before it. */
-export function describeSteadiness(steadiness: HandSteadiness | null): { text: string; variant: "default" | "secondary" | "outline" } {
+/**
+ * The badge for the hand's state, or null when there is nothing to say: with Settings → Still hand off, a moving hand
+ * holds nothing back, so only the watch being off the wrist is shown.
+ */
+export function describeSteadiness(steadiness: HandSteadiness | null): { text: string; variant: "default" | "secondary" | "outline" } | null {
+  if (steadiness?.state === "offWrist") return { text: "Watch off wrist", variant: "outline" };
+  if (steadiness && steadiness.gateOn === false) return null;
   if (steadiness?.state === "still") return { text: "Hand still", variant: "default" };
   if (steadiness?.state === "moving") return { text: "Hand moving", variant: "secondary" };
-  if (steadiness?.state === "offWrist") return { text: "Watch off wrist", variant: "outline" };
   return { text: "No motion data", variant: "outline" };
 }
 

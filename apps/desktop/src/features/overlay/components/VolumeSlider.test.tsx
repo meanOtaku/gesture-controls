@@ -16,6 +16,16 @@ it("shows the volume as a slider that fills, in either orientation", () => {
   expect(screen.getByText("Grabbed · Turn wrist")).toBeInTheDocument();
 });
 
+it("shows brightness, and a dash when it cannot be read", () => {
+  const { container, rerender } = render(<VolumeSlider volume={70} label="Brightness" orientation="vertical" />);
+  expect(screen.getByRole("meter", { name: "Current brightness" })).toHaveAttribute("aria-valuenow", "70");
+  expect(screen.getByText("Brightness")).toBeInTheDocument();
+  rerender(<VolumeSlider volume={null} label="Brightness" orientation="vertical" />);
+  expect(screen.getByText("–")).toBeInTheDocument();
+  expect(screen.getByRole("meter")).not.toHaveAttribute("aria-valuenow");
+  expect(container.querySelector(".volume-slider__fill")).toHaveStyle({ "--volume-progress": "0" });
+});
+
 it("surfaces a native volume error", () => {
   render(<VolumeSlider volume={50} orientation="vertical" nativeVolumeError="no output device" />);
   expect(screen.getByRole("alert")).toHaveTextContent("no output device");

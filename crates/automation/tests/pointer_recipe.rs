@@ -14,6 +14,11 @@ fn pointer_stage() -> Stage {
         hold_label: "pinch_hold".into(),
         release_label: "pinch_out".into(),
         lookback_ms: 400,
+        mode: PointerMode::Mouse,
+        source: PointerSource::Watch,
+        reverse_across: false,
+        reverse_up: false,
+        head_range: None,
     }
 }
 
@@ -33,6 +38,7 @@ fn snap_pointer() -> Recipe {
         action: Action::Pointer,
         keys: None,
         apps: Vec::new(),
+        overlay_at: None,
     }
 }
 
@@ -146,6 +152,11 @@ fn the_pointer_recipe_is_valid_and_its_step_belongs_to_it_alone() {
         hold_label: "pinch".into(),
         release_label: "pinch".into(),
         lookback_ms: 400,
+        mode: PointerMode::Mouse,
+        source: PointerSource::Watch,
+        reverse_across: false,
+        reverse_up: false,
+        head_range: None,
     };
     assert_eq!(
         validate_recipe(&same_labels),
@@ -223,6 +234,24 @@ fn losing_the_watch_or_a_reset_never_leaves_the_button_down() {
 }
 
 #[test]
+fn pointer_mode_comes_back_on_long_after_it_last_went_off() {
+    let mut runner = RecipeRunner::new(snap_pointer());
+    step(&mut runner, 0, 0.0, &snap());
+    step(&mut runner, 700, -3.0, &Labels::none());
+    step(&mut runner, 800, -6.0, &Labels::none());
+    step(&mut runner, 1000, -6.0, &snap());
+    step(&mut runner, 1700, -6.0, &Labels::none());
+    assert_eq!(runner.phase(), RunnerPhase::Idle);
+    // A minute later, longer than pointer mode's idle time, a snap still switches it on.
+    let later = 60_000 + POINTER_IDLE_NS / MS;
+    step(&mut runner, later, -6.0, &Labels::none());
+    step(&mut runner, later + 10, -6.0, &snap());
+    assert_eq!(runner.phase(), RunnerPhase::Driving);
+    let events = step(&mut runner, later + 20, -8.0, &snap());
+    assert!(moved_right(&events) > 0.0, "{events:?}");
+}
+
+#[test]
 fn pointer_mode_left_alone_switches_itself_off() {
     let mut runner = RecipeRunner::new(snap_pointer());
     step(&mut runner, 0, 0.0, &snap());
@@ -235,4 +264,118 @@ fn pointer_mode_left_alone_switches_itself_off() {
         &Labels::none(),
     );
     assert_eq!(runner.phase(), RunnerPhase::Idle);
+}
+
+#[test]
+fn a_pointer_step_saved_before_trackpad_mode_still_moves_like_a_mouse() {
+    let older = serde_json::json!({
+        "kind": "pointer", "pixelsPerDegree": 25.0, "pressLabel": "pinch_in", "holdLabel": "pinch_hold",
+        "releaseLabel": "pinch_out", "lookbackMs": 400
+    });
+    let stage: Stage = serde_json::from_value(older.clone()).unwrap();
+    assert!(matches!(
+        stage,
+        Stage::Pointer {
+            mode: PointerMode::Mouse,
+            ..
+        }
+    ));
+    let mut trackpad = older;
+    trackpad["mode"] = "trackpad".into();
+    let stage: Stage = serde_json::from_value(trackpad).unwrap();
+    assert!(matches!(
+        stage,
+        Stage::Pointer {
+            mode: PointerMode::Trackpad,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn with_the_head_as_the_source_a_snap_switches_it_on_the_head_moves_the_pointer_and_the_arm_does_not()
+ {
+    let mut recipe = snap_pointer();
+    if let Some(Stage::Pointer { source, .. }) = recipe.stages.last_mut() {
+        *source = PointerSource::Head;
+    }
+    assert_eq!(validate_recipe(&recipe), Ok(()));
+    let mut runner = RecipeRunner::new(recipe);
+    let head = |at_ms: u64, yaw: f64| HeadAim {
+        yaw_deg: yaw,
+        pitch_deg: 0.0,
+        timestamp_ns: 50_000_000_000 + at_ms * MS,
+    };
+    let drive =
+        |runner: &mut RecipeRunner, at_ms: u64, arm: f64, aim: Option<HeadAim>, labels: &Labels| {
+            runner.update(&Signals {
+                orientation: Some(heading(arm)),
+                now_ns: Some(at_ms * MS),
+                model_edges: Some(&labels.edges),
+                models_held: Some(&labels.held),
+                models_pulsed: Some(&labels.pulsed),
+                head_aim: aim,
+                ..Signals::default()
+            });
+            runner.take_pointer_events()
+        };
+    drive(&mut runner, 0, 0.0, Some(head(0, 0.0)), &snap());
+    // The arm swings right while the head turns right too: only the head counts.
+    let mut events = Vec::new();
+    for n in 1..=150u64 {
+        let f = (n.min(50) as f64) / 50.0;
+        events.extend(drive(
+            &mut runner,
+            n * 10,
+            40.0 * f,
+            Some(head(n * 10, -10.0 * f)),
+            &Labels::none(),
+        ));
+    }
+    let across = moved_right(&events);
+    assert!(across > 50.0, "{across}");
+    // The headphones going away ends pointer mode.
+    drive(&mut runner, 1600, 0.0, None, &Labels::none());
+    assert_eq!(runner.phase(), RunnerPhase::Idle);
+    assert!(
+        drive(
+            &mut runner,
+            1610,
+            0.0,
+            Some(head(1610, -20.0)),
+            &Labels::none()
+        )
+        .is_empty()
+    );
+}
+
+#[test]
+fn a_pointer_step_saved_before_the_head_source_still_follows_the_watch() {
+    let older = serde_json::json!({
+        "kind": "pointer", "pixelsPerDegree": 25.0, "pressLabel": "pinch_in", "holdLabel": "pinch_hold",
+        "releaseLabel": "pinch_out", "lookbackMs": 400, "mode": "trackpad"
+    });
+    let stage: Stage = serde_json::from_value(older.clone()).unwrap();
+    assert!(matches!(
+        stage,
+        Stage::Pointer {
+            source: PointerSource::Watch,
+            reverse_across: false,
+            reverse_up: false,
+            ..
+        }
+    ));
+    let mut head = older;
+    head["source"] = "head".into();
+    head["reverseAcross"] = true.into();
+    let stage: Stage = serde_json::from_value(head).unwrap();
+    assert!(matches!(
+        stage,
+        Stage::Pointer {
+            source: PointerSource::Head,
+            reverse_across: true,
+            reverse_up: false,
+            ..
+        }
+    ));
 }

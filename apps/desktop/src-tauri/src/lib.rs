@@ -252,6 +252,7 @@ pub fn run() {
             label_runtime::activate_label_model,
             label_runtime::delete_label_model,
             label_runtime::rename_label_model,
+            label_runtime::set_label_model_live_override,
             label_runtime::deactivate_label_model,
             label_runtime::rollback_label_model,
             label_runtime::set_label_runtime_mode,

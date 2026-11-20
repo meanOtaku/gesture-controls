@@ -10,6 +10,7 @@ fn recipe(id: &str, stages: Vec<Stage>, device: Device) -> Recipe {
         action: Action::Volume,
         keys: None,
         apps: Vec::new(),
+        overlay_at: None,
     }
 }
 
@@ -723,6 +724,7 @@ fn model_recipe(action: Action, label: &str, hold: ModelHold, stages: Vec<Stage>
         action,
         keys: None,
         apps: Vec::new(),
+        overlay_at: None,
         ..recipe("m", stages, Device::default_for(DeviceKind::RotationKnob))
     }
 }
@@ -823,6 +825,7 @@ fn camera_recipe(action: Action, gesture: &str, hold: ModelHold) -> Recipe {
         action,
         keys: None,
         apps: Vec::new(),
+        overlay_at: None,
         ..recipe(
             "c",
             vec![Stage::Camera {

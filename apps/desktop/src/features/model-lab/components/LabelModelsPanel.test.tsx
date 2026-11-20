@@ -269,6 +269,40 @@ describe("LabelModelsPanel", () => {
     await waitFor(() => expect(calls("activate_label_model").map(([, args]) => args)).toEqual([{ id: "pinch_in-8f79" }]));
   });
 
+  it("renames a multi-gesture model from its own card", async () => {
+    const multi: LabelModel = { ...draft, id: "pinch_in-6e31", label: "pinch_in", state: "active", active: true, deployable: false, monitorOnly: true, imported: false,
+      outputs: ["pinch_in", "pinch_hold", "pinch_out", "snap_fingers"].map((label) => ({ label, activation: 0.9, release: 0.8, active: true, evaluation: null })) };
+    setup([multi]);
+    const card = await screen.findByRole("listitem", { name: "pinch_in-6e31 model" });
+    fireEvent.click(within(card).getByRole("button", { name: "Rename pinch_in-6e31" }));
+    const box = within(card).getByRole("textbox", { name: "Name for pinch_in-6e31" });
+    fireEvent.change(box, { target: { value: "Pinch and snap" } });
+    fireEvent.submit(box);
+    await waitFor(() => expect(calls("rename_label_model")).toEqual([["rename_label_model", { id: "pinch_in-6e31", name: "Pinch and snap" }]]));
+  });
+
+  it("lets a monitor-only model act in Live only after a warning, and takes it back", async () => {
+    const outputs = ["pinch_in", "snap_fingers"].map((label) => ({ label, activation: 0.9, release: 0.8, active: true, evaluation: null }));
+    const multi: LabelModel = { ...draft, id: "pinch_in-6e31", label: "pinch_in", state: "active", active: true, deployable: false, monitorOnly: true, imported: false, outputs };
+    setup([multi]);
+    const card = await screen.findByRole("listitem", { name: "pinch_in-6e31 model" });
+    expect(within(card).getByText("Monitor only")).toBeInTheDocument();
+    fireEvent.click(within(card).getByRole("button", { name: "Let pinch_in-6e31 act in Live anyway" }));
+    expect(within(card).getByRole("alert")).toHaveTextContent(/more than 5 times an hour/);
+    fireEvent.click(within(card).getByRole("button", { name: "Keep monitor only" }));
+    expect(calls("set_label_model_live_override")).toEqual([]);
+    fireEvent.click(within(card).getByRole("button", { name: "Let pinch_in-6e31 act in Live anyway" }));
+    fireEvent.click(within(card).getByRole("button", { name: "Let it act in Live" }));
+    await waitFor(() => expect(calls("set_label_model_live_override")).toEqual([["set_label_model_live_override", { id: "pinch_in-6e31", allowed: true }]]));
+    cleanup();
+
+    setup([{ ...multi, liveOverride: "2026-11-20T08:00:00Z" }]);
+    const granted = await screen.findByRole("listitem", { name: "pinch_in-6e31 model" });
+    expect(within(granted).getByText("Acts in Live anyway")).toBeInTheDocument();
+    fireEvent.click(within(granted).getByRole("button", { name: "Back to monitor only pinch_in-6e31" }));
+    await waitFor(() => expect(calls("set_label_model_live_override").at(-1)).toEqual(["set_label_model_live_override", { id: "pinch_in-6e31", allowed: false }]));
+  });
+
   it("says which multi-gesture model detects a label when that is its active model", async () => {
     const multi: LabelModel = { ...draft, id: "pinch_in-8f79", label: "pinch_in", state: "active", active: true,
       outputs: [{ label: "pinch_in", activation: 0.9, release: 0.8, active: true, evaluation: null }, { label: "pinch_out", activation: 0.95, release: 0.85, active: true, evaluation: null }] };

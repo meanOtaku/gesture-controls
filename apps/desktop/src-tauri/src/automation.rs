@@ -12,12 +12,12 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use automation::{
-    Action, Axis, Conflict, CrownSide, Device, DeviceKind, HammerConfig, HammerDetector,
+    Action, Axis, Conflict, CrownSide, Device, DeviceKind, HammerConfig, HammerDetector, HeadAim,
     HeuristicGestures, Hold, ModelHold, PitchConfig, PitchDetector, PitchDirection, PointerEvent,
-    Recipe, RecipeRunner, RollConfig, RollDetector, RollDirection, RunnerPhase, ShakeAxis,
-    ShakeConfig, ShakeDetector, Signals, Stage, SwipeConfig, SwipeDetector, SwipeDirection,
-    TapConfig, TapDetector, TapKind, WiggleConfig, WiggleDetector, Wrist, blocked_recipes,
-    find_conflicts, validate_recipe,
+    PointerSource, Recipe, RecipeRunner, RollConfig, RollDetector, RollDirection, RunnerPhase,
+    ScreenAnchor, ShakeAxis, ShakeConfig, ShakeDetector, Signals, Stage, SwipeConfig,
+    SwipeDetector, SwipeDirection, TapConfig, TapDetector, TapKind, WiggleConfig, WiggleDetector,
+    Wrist, blocked_recipes, find_conflicts, validate_recipe,
 };
 use interaction_engine::quaternion_angular_distance;
 use serde::Serialize;
@@ -26,7 +26,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tracing::warn;
 
 use crate::actuators::Actuators;
-use crate::overlay::{OverlayRuntime, VolumeRuntime};
+use crate::overlay::{OverlayControl, OverlayRuntime, VolumeRuntime};
 use crate::settings::{AppSettings, SettingsRuntime};
 
 pub const AUTOMATION_STATE_EVENT: &str = "automation-state";
@@ -133,8 +133,12 @@ pub enum OverlayWanted {
 pub struct Effects {
     /// Set only when the overlay needs to change.
     pub overlay: Option<OverlayWanted>,
-    /// Set only when the overlay should draw a different device: the device of the volume recipe it is showing.
+    /// Set only when the overlay should draw a different device: the device of the recipe it is showing.
     pub overlay_device: Option<DeviceKind>,
+    /// Set only when the overlay should move: to where the recipe it is showing puts it.
+    pub overlay_anchor: Option<ScreenAnchor>,
+    /// What the overlay shows the level of; meaningful whenever `overlay` is set.
+    pub overlay_control: OverlayControl,
     /// Changes to apply, each an action and a fraction of its full range.
     pub deltas: Vec<(Action, f64)>,
     /// A shake was recognised on this sample (whether or not any recipe uses it), for the Settings tuning aid.
@@ -317,6 +321,7 @@ pub fn default_recipes() -> Vec<Recipe> {
         action: Action::Volume,
         keys: None,
         apps: Vec::new(),
+        overlay_at: None,
     };
     vec![
         recipe(
@@ -367,6 +372,8 @@ pub struct Engine {
     driving: bool,
     tuning: Tuning,
     head: Option<String>,
+    /// Where the head faces, from the latest headphone sample, for a pointer that follows the head.
+    head_aim: Option<HeadAim>,
     /// The app in front, as far as the host knows. A recipe for some apps only runs while one of them is.
     front_app: Option<String>,
     stem: bool,
@@ -396,8 +403,12 @@ pub struct Engine {
     last_accepted: Option<Orientation>,
     blocked: BTreeSet<String>,
     overlay: OverlayWanted,
-    /// The device the overlay draws: the one of the volume recipe it shows.
+    /// The device the overlay draws: the one of the recipe it shows.
     overlay_device: DeviceKind,
+    /// What the overlay shows: volume, or brightness when no volume recipe wants it.
+    overlay_control: OverlayControl,
+    /// Where on the screen the overlay is: that of the recipe it shows.
+    overlay_anchor: ScreenAnchor,
     /// Model labels detected now and cleared to act.
     models_held: BTreeSet<String>,
     model_edges: BTreeSet<String>,
@@ -428,6 +439,7 @@ impl Engine {
             driving: false,
             tuning,
             head: None,
+            head_aim: None,
             front_app: None,
             stem: false,
             orientation: None,
@@ -454,6 +466,8 @@ impl Engine {
             blocked: BTreeSet::new(),
             overlay: OverlayWanted::Hidden,
             overlay_device: DeviceKind::RotationKnob,
+            overlay_control: OverlayControl::Volume,
+            overlay_anchor: ScreenAnchor::default(),
             models_held: BTreeSet::new(),
             model_edges: BTreeSet::new(),
             model_pulses: BTreeMap::new(),
@@ -711,6 +725,27 @@ impl Engine {
             .any(|recipe| recipe.enabled && !recipe.apps.is_empty())
     }
 
+    /// The latest headphone sample (`None` once they are gone). It only steps the recipes while a pointer that
+    /// follows the head is on, so the headphones' stream costs nothing otherwise.
+    pub fn set_head_aim(&mut self, aim: Option<HeadAim>) -> Effects {
+        self.head_aim = aim;
+        let following = self.runners.iter().any(|runner| {
+            runner.phase() == RunnerPhase::Driving
+                && matches!(
+                    runner.recipe().stages.last(),
+                    Some(Stage::Pointer {
+                        source: PointerSource::Head,
+                        ..
+                    })
+                )
+        });
+        if following {
+            self.step()
+        } else {
+            Effects::default()
+        }
+    }
+
     pub fn set_stem(&mut self, held: bool) -> Effects {
         self.stem = held;
         self.step()
@@ -933,9 +968,19 @@ impl Engine {
             now_ns: self.orientation.as_ref().map(|latest| latest.timestamp_ns),
             orientation: self.orientation.as_ref().map(|o| o.quaternion),
             hand_sign: self.tuning.hand_sign(),
+            head_aim: self.head_aim,
         };
-        let mut wanted = OverlayWanted::Hidden;
-        let mut wanted_device = self.overlay_device;
+        // What each control's recipes want on screen, and the device of the recipe that wants it most.
+        let mut volume = (
+            OverlayWanted::Hidden,
+            self.overlay_device,
+            self.overlay_anchor,
+        );
+        let mut brightness = (
+            OverlayWanted::Hidden,
+            self.overlay_device,
+            self.overlay_anchor,
+        );
         let mut effects = Effects::default();
         let mut driving = false;
         for (index, (recipe, runner)) in self.recipes.iter().zip(&mut self.runners).enumerate() {
@@ -987,10 +1032,15 @@ impl Engine {
                 effects.ended.push(recipe.action);
             }
             self.previous_phases[index] = phase;
-            // The volume knob on screen is only for recipes that control volume.
-            if recipe.action == Action::Volume {
-                // The overlay draws the device of the recipe it shows: the one driving, else the one armed.
-                let shows = match (wanted, phase) {
+            // The overlay is for recipes that turn the volume or the brightness.
+            let slot = match recipe.action {
+                Action::Volume => Some(&mut volume),
+                Action::Brightness => Some(&mut brightness),
+                _ => None,
+            };
+            if let Some((wanted, device, anchor)) = slot {
+                // It draws the device of the recipe it shows: the one driving, else the one armed.
+                let shows = match (*wanted, phase) {
                     (OverlayWanted::Driving, _) => false,
                     (_, RunnerPhase::Driving) => true,
                     (OverlayWanted::Armed, _) => false,
@@ -998,9 +1048,10 @@ impl Engine {
                     _ => false,
                 };
                 if shows {
-                    wanted_device = recipe.device.kind();
+                    *device = recipe.device.kind();
+                    *anchor = recipe.overlay_anchor();
                 }
-                wanted = match (wanted, phase) {
+                *wanted = match (*wanted, phase) {
                     (_, RunnerPhase::Driving) | (OverlayWanted::Driving, _) => {
                         OverlayWanted::Driving
                     }
@@ -1011,14 +1062,36 @@ impl Engine {
         }
         self.model_edges.clear();
         self.driving = driving;
+        // One thing on screen at a time: volume first, else brightness.
+        let (control, (wanted, wanted_device, wanted_anchor)) = if volume.0 != OverlayWanted::Hidden
+        {
+            (OverlayControl::Volume, volume)
+        } else if brightness.0 != OverlayWanted::Hidden {
+            (OverlayControl::Brightness, brightness)
+        } else {
+            (
+                self.overlay_control,
+                (
+                    OverlayWanted::Hidden,
+                    self.overlay_device,
+                    self.overlay_anchor,
+                ),
+            )
+        };
+        if wanted_anchor != self.overlay_anchor {
+            self.overlay_anchor = wanted_anchor;
+            effects.overlay_anchor = Some(wanted_anchor);
+        }
         if wanted_device != self.overlay_device {
             self.overlay_device = wanted_device;
             effects.overlay_device = Some(wanted_device);
         }
-        if wanted != self.overlay {
+        if wanted != self.overlay || control != self.overlay_control {
             self.overlay = wanted;
+            self.overlay_control = control;
             effects.overlay = Some(wanted);
         }
+        effects.overlay_control = control;
         effects
     }
 
@@ -1273,6 +1346,11 @@ impl AutomationRuntime {
         self.with_engine(app, |engine| engine.set_head(location));
     }
 
+    /// A headphone sample, or `None` when the headphones disconnect; see [`Engine::set_head_aim`].
+    pub fn set_head_aim(&self, app: &AppHandle, aim: Option<HeadAim>) {
+        self.with_engine(app, |engine| engine.set_head_aim(aim));
+    }
+
     pub fn set_stem(&self, app: &AppHandle, held: bool) {
         self.with_engine(app, |engine| engine.set_stem(held));
     }
@@ -1480,12 +1558,24 @@ fn apply_effects(app: &AppHandle, effects: &Effects, max_points_per_second: f64)
     if let Some(device) = effects.overlay_device {
         overlay.set_device(app, device);
     }
+    if let Some(anchor) = effects.overlay_anchor {
+        overlay.set_anchor(app, anchor);
+    }
     if let Some(wanted) = effects.overlay {
         crate::miss_recorder::note(app, "recipe", format!("{wanted:?}"));
-        let result = match wanted {
-            OverlayWanted::Hidden => overlay.release(app),
-            OverlayWanted::Armed => overlay.show_armed(app, &volume),
-            OverlayWanted::Driving => overlay.begin_recipe_interaction(app, &volume),
+        let result = match (wanted, effects.overlay_control) {
+            (OverlayWanted::Hidden, _) => overlay.release(app),
+            (OverlayWanted::Armed, OverlayControl::Volume) => overlay.show_armed(app, &volume),
+            (OverlayWanted::Driving, OverlayControl::Volume) => {
+                overlay.begin_recipe_interaction(app, &volume)
+            }
+            (shown, OverlayControl::Brightness) => {
+                let shown = overlay.show_brightness(app, shown == OverlayWanted::Driving);
+                app.state::<AutomationRuntime>()
+                    .actuators
+                    .read_brightness(app);
+                shown
+            }
         };
         if let Err(error) = result {
             warn!(%error, ?wanted, "failed to update the volume overlay for a recipe");
@@ -1543,6 +1633,14 @@ fn apply_effects(app: &AppHandle, effects: &Effects, max_points_per_second: f64)
     for keys in &effects.shortcuts {
         crate::miss_recorder::note(app, "recipe", format!("pressed {keys}"));
         actuators.shortcut(app, keys.clone());
+    }
+    for event in &effects.pointer {
+        if !matches!(
+            event,
+            PointerEvent::Move { .. } | PointerEvent::MoveScreen { .. }
+        ) {
+            crate::miss_recorder::note(app, "pointer", format!("{event:?}"));
+        }
     }
     // Before the endings below, so pointer mode's last moves and clicks come before its reset.
     actuators.pointer(app, effects.pointer.clone());
@@ -1844,6 +1942,7 @@ mod tests {
             action,
             keys: None,
             apps: Vec::new(),
+            overlay_at: None,
             stages: vec![
                 Stage::Hold {
                     hold: Hold::StemButton,
@@ -1875,6 +1974,54 @@ mod tests {
         let ended = engine.set_stem(false);
         assert_eq!(ended.ended, vec![Action::Scroll]);
         assert_eq!(ended.overlay, None);
+    }
+
+    #[test]
+    fn a_brightness_recipe_shows_its_slider_and_a_volume_recipe_takes_the_screen_first() {
+        let mut fader = driving(Action::Brightness);
+        fader.device = Device::default_for(DeviceKind::VerticalFader);
+        let mut engine = Engine::new(vec![fader], Tuning::default());
+        engine.observe_orientation(about_x(0.0), ts(1), None);
+        let grabbed = engine.set_stem(true);
+        assert_eq!(grabbed.overlay, Some(OverlayWanted::Driving));
+        assert_eq!(grabbed.overlay_control, OverlayControl::Brightness);
+        assert_eq!(grabbed.overlay_device, Some(DeviceKind::VerticalFader));
+        let released = engine.set_stem(false);
+        assert_eq!(released.overlay, Some(OverlayWanted::Hidden));
+
+        // Both on the same gesture: the volume is shown, with its own device.
+        let mut fader = driving(Action::Brightness);
+        fader.device = Device::default_for(DeviceKind::VerticalFader);
+        let mut engine = Engine::new(vec![fader, driving(Action::Volume)], Tuning::default());
+        engine.observe_orientation(about_x(0.0), ts(1), None);
+        let both = engine.set_stem(true);
+        assert_eq!(both.overlay, Some(OverlayWanted::Driving));
+        assert_eq!(both.overlay_control, OverlayControl::Volume);
+        assert_eq!(engine.overlay_device, DeviceKind::RotationKnob);
+    }
+
+    #[test]
+    fn the_overlay_goes_where_its_recipe_is_looked_at_unless_the_recipe_says_otherwise() {
+        let looked_at = |location: &str, overlay_at: Option<ScreenAnchor>| {
+            let mut recipe = driving(Action::Brightness);
+            recipe.stages.insert(
+                0,
+                Stage::HeadAt {
+                    location: location.into(),
+                },
+            );
+            recipe.overlay_at = overlay_at;
+            let mut engine = Engine::new(vec![recipe], Tuning::default());
+            engine.observe_orientation(about_x(0.0), ts(1), None);
+            engine.set_head(Some(location.into()))
+        };
+        let armed = looked_at("topLeft", None);
+        assert_eq!(armed.overlay, Some(OverlayWanted::Armed));
+        assert_eq!(armed.overlay_anchor, Some(ScreenAnchor::TopLeft));
+        let chosen = looked_at("topLeft", Some(ScreenAnchor::BottomRight));
+        assert_eq!(chosen.overlay_anchor, Some(ScreenAnchor::BottomRight));
+        // A location whose name says nothing about the screen, and no choice: the top right, as always.
+        assert_eq!(looked_at("desk", None).overlay_anchor, None);
     }
 
     #[test]
@@ -1915,6 +2062,7 @@ mod tests {
             action,
             keys: None,
             apps: Vec::new(),
+            overlay_at: None,
             stages: vec![Stage::Hold { hold }],
             device: Device::default_for(DeviceKind::RotationKnob),
         }
@@ -2008,6 +2156,7 @@ mod tests {
                 action: Action::NextTrack,
                 keys: None,
                 apps: Vec::new(),
+                overlay_at: None,
                 stages: vec![Stage::Hold { hold: Hold::Shake }],
                 device: Device::default_for(DeviceKind::RotationKnob),
             }],
@@ -2030,6 +2179,7 @@ mod tests {
             action: Action::PlayPause,
             keys: None,
             apps: Vec::new(),
+            overlay_at: None,
             stages: vec![
                 Stage::HeadAt {
                     location: "topRight".into(),
@@ -2058,6 +2208,7 @@ mod tests {
             action: Action::NextTrack,
             keys: None,
             apps: Vec::new(),
+            overlay_at: None,
             stages: vec![Stage::Hold { hold: Hold::Shake }],
             device: Device::default_for(DeviceKind::RotationKnob),
         };
@@ -2135,6 +2286,7 @@ mod tests {
             action,
             keys: None,
             apps: Vec::new(),
+            overlay_at: None,
             stages: vec![Stage::Hold { hold }],
             device: Device::default_for(DeviceKind::RotationKnob),
         }
@@ -2506,6 +2658,46 @@ mod tests {
     }
 
     #[test]
+    fn with_the_head_as_the_source_headphone_samples_move_the_pointer_only_while_it_is_on() {
+        let mut recipe = model_recipe("snap_fingers", ModelHold::OneShot, Action::Pointer);
+        recipe.stages.push(Stage::Pointer {
+            pixels_per_degree: 10.0,
+            press_label: "pinch_in".into(),
+            hold_label: "pinch_hold".into(),
+            release_label: "pinch_out".into(),
+            lookback_ms: 400,
+            mode: automation::PointerMode::Mouse,
+            source: PointerSource::Head,
+            reverse_across: false,
+            reverse_up: false,
+            head_range: None,
+        });
+        let mut engine = Engine::new(vec![recipe], Tuning::default());
+        let loaded = set(&["snap_fingers", "pinch_in", "pinch_hold", "pinch_out"]);
+        let aim = |n: u64| HeadAim {
+            yaw_deg: -(n as f64) * 0.2,
+            pitch_deg: 0.0,
+            timestamp_ns: 80_000_000_000 + n * 10 * MS,
+        };
+        engine.observe_orientation(heading(0.0), 0, None);
+        // Before the snap, the head moves nothing.
+        assert!(engine.set_head_aim(Some(aim(0))).pointer.is_empty());
+        engine.set_models(loaded, set(&[]), &["snap_fingers".to_string()], &[], 0);
+        let mut right = 0.0;
+        for n in 1..=100u64 {
+            for event in engine.set_head_aim(Some(aim(n))).pointer {
+                if let PointerEvent::Move { dx, .. } = event {
+                    right += dx;
+                }
+            }
+        }
+        assert!(right > 100.0, "{right}");
+        // The headphones going away ends it.
+        engine.set_head_aim(None);
+        assert!(engine.set_head_aim(Some(aim(200))).pointer.is_empty());
+    }
+
+    #[test]
     fn a_snap_switches_pointer_mode_on_the_hand_moves_the_pointer_a_pinch_clicks_and_losing_the_watch_lets_go()
      {
         let mut recipe = model_recipe("snap_fingers", ModelHold::OneShot, Action::Pointer);
@@ -2515,6 +2707,11 @@ mod tests {
             hold_label: "pinch_hold".into(),
             release_label: "pinch_out".into(),
             lookback_ms: 400,
+            mode: automation::PointerMode::Mouse,
+            source: automation::PointerSource::Watch,
+            reverse_across: false,
+            reverse_up: false,
+            head_range: None,
         });
         assert_eq!(validate_recipe(&recipe), Ok(()));
         let mut engine = Engine::new(vec![recipe], Tuning::default());
@@ -3036,6 +3233,7 @@ mod tests {
             action: Action::PlayPause,
             keys: None,
             apps: vec!["Safari".into()],
+            overlay_at: None,
         };
         let mut engine = Engine::new(vec![recipe], Tuning::default());
         assert!(engine.needs_front_app());

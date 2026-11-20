@@ -66,6 +66,7 @@ export function LabelModelsPanel({
   const error = actionError ?? loadError;
   const setError = setActionError;
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const [confirmingOverride, setConfirmingOverride] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
   const [archivedOpen, setArchivedOpen] = useState<Set<string>>(new Set());
   const [justImported, setJustImported] = useState<string | null>(null);
@@ -141,9 +142,9 @@ export function LabelModelsPanel({
     </Button>
   );
 
-  /** The model's name (or rename box), id, badges and a line about where it came from. */
-  const identity = (model: LabelModel) => (
-    <div className="flex min-w-0 flex-col gap-1">
+  /** The model's name, or the box to rename it while it is being renamed. */
+  const nameOrRename = (model: LabelModel) => (
+    <>
       {renaming?.id === model.id ? (
         <form className="model-rename" onSubmit={(event) => { event.preventDefault(); saveName(model, renaming.draft); }}>
           <Input
@@ -162,11 +163,18 @@ export function LabelModelsPanel({
       ) : (
         <strong className="text-sm">{modelName(model)}</strong>
       )}
+    </>
+  );
+
+  /** The model's name (or rename box), id, badges and a line about where it came from. */
+  const identity = (model: LabelModel) => (
+    <div className="flex min-w-0 flex-col gap-1">
+      {nameOrRename(model)}
       <span className="flex flex-wrap items-center gap-2 text-sm">
         {model.name && <small className="text-muted-foreground">{model.id}</small>}
         {!model.active && <Badge variant="secondary">{STATE_LABEL[model.state]}</Badge>}
         {model.imported && <Badge variant="outline">Imported</Badge>}
-        {model.monitorOnly && <Badge variant="outline">Monitor only</Badge>}
+        {model.monitorOnly && (model.liveOverride ? <Badge variant="destructive">Acts in Live anyway</Badge> : <Badge variant="outline">Monitor only</Badge>)}
         {(model.gestures?.length ?? 0) > 1 && <Badge variant="outline" title="One network learnt these gestures together; each has a model of its own, in its label's list">Multi-gesture</Badge>}
         {justImported === model.id && <Badge>New</Badge>}
       </span>
@@ -177,7 +185,7 @@ export function LabelModelsPanel({
       )}
       <small className="text-xs text-muted-foreground">
         Added {formatTime(model.createdAt)}
-        {model.monitorOnly ? ". It did not pass the checks for going live: when active it scores and shows what it detects, but never starts a recipe, even in Live." : ""}
+        {monitorNote(model)}
       </small>
     </div>
   );
@@ -240,6 +248,49 @@ export function LabelModelsPanel({
           }))}
         />
       </div>
+    );
+  };
+
+  /** What a monitor-only model may do, after the line saying when it was added. */
+  const monitorNote = (model: LabelModel) =>
+    !model.monitorOnly ? "" : model.liveOverride
+      ? `. It did not pass the checks for going live, but you let it act in Live anyway (${formatTime(model.liveOverride)}): recipes using it may act when you did not mean them to.`
+      : ". It did not pass the checks for going live: when active it scores and shows what it detects, but never starts a recipe, even in Live.";
+
+  /** For a monitor-only model: let it act in Live anyway, after a confirmation that says what that risks, or take it back. */
+  const liveOverrideControls = (model: LabelModel) => {
+    if (!model.monitorOnly) return null;
+    const key = `${model.id}:override`;
+    const set = (allowed: boolean) => {
+      setConfirmingOverride(null);
+      void attempt(key, allowed ? "Let it act in Live" : "Back to monitor only",
+        () => invoke("set_label_model_live_override", { id: model.id, allowed }),
+        allowed ? `${modelName(model)} may now start recipes in Live.` : `${modelName(model)} only reports again.`);
+    };
+    if (model.liveOverride) {
+      return (
+        <Button type="button" variant="ghost" size="sm" aria-label={`Back to monitor only ${model.id}`} disabled={isPending(key)} onClick={() => set(false)}>
+          Back to monitor only
+        </Button>
+      );
+    }
+    if (confirmingOverride === model.id) {
+      return (
+        <div className="flex flex-col gap-2" role="group" aria-label={`Let ${model.id} act in Live`}>
+          <p className="field-error" role="alert">
+            It failed the checks for going live: on its held-out recordings it fired more than 5 times an hour with no gesture under way. Recipes that use it will act on those too: clicks, volume or brightness changes you did not make. You can take this back at any time.
+          </p>
+          <span className="flex flex-wrap gap-2">
+            <Button type="button" variant="destructive" size="sm" disabled={isPending(key)} onClick={() => set(true)}>Let it act in Live</Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setConfirmingOverride(null)}>Keep monitor only</Button>
+          </span>
+        </div>
+      );
+    }
+    return (
+      <Button type="button" variant="ghost" size="sm" aria-label={`Let ${model.id} act in Live anyway`} disabled={!desktopAvailable || isPending(key)} onClick={() => setConfirmingOverride(model.id)}>
+        Let it act in Live…
+      </Button>
     );
   };
 
@@ -348,7 +399,7 @@ export function LabelModelsPanel({
                             Roll back
                           </Button>
                         </div>
-                        {actionBar(active, [])}
+                        {actionBar(active, [], liveOverrideControls(active))}
                       </li>
                     )}
                     {others.length > 0 && active && <li className="model-rows-heading text-xs text-muted-foreground" aria-hidden="true">Other versions</li>}
@@ -362,7 +413,7 @@ export function LabelModelsPanel({
                           <div className="recipe-item-actions">
                             {next && actionButton(model, next, "outline", swap ? "Swap in" : next.label)}
                           </div>
-                          {actionBar(model, secondary)}
+                          {actionBar(model, secondary, liveOverrideControls(model))}
                         </li>
                       );
                     })}
@@ -415,16 +466,16 @@ export function LabelModelsPanel({
                   <li key={model.id} className="flex flex-col gap-3 rounded-md border p-3" aria-label={`${name} model`}>
                     <div className="flex flex-wrap items-start gap-3">
                       <div className="flex min-w-0 flex-1 flex-col gap-1">
-                        <strong className="text-sm">{name}</strong>
+                        {nameOrRename(model)}
                         <span className="flex flex-wrap items-center gap-2 text-sm">
                           {model.name && <small className="text-muted-foreground">{model.id}</small>}
                           <Badge variant="outline">Multi-gesture: {outputs.map((output) => output.label).join(" · ")}</Badge>
                           {model.active ? <Badge>Active</Badge> : <Badge variant="secondary">{STATE_LABEL[model.state]}</Badge>}
-                          {model.monitorOnly && <Badge variant="outline">Monitor only</Badge>}
+                          {model.monitorOnly && (model.liveOverride ? <Badge variant="destructive">Acts in Live anyway</Badge> : <Badge variant="outline">Monitor only</Badge>)}
                         </span>
                         <small className="text-xs text-muted-foreground">
                           Added {formatTime(model.createdAt)}
-                          {model.monitorOnly ? ". It did not pass the checks for going live: when active it scores and shows what it detects, but never starts a recipe, even in Live." : ""}
+                          {monitorNote(model)}
                         </small>
                       </div>
                       <div className="recipe-item-actions">
@@ -437,7 +488,7 @@ export function LabelModelsPanel({
                         )}
                       </div>
                     </div>
-                    {actionBar(model, secondary)}
+                    {actionBar(model, secondary, liveOverrideControls(model))}
                     <table className="coverage-grid network-outputs" aria-label={`${name} outputs`}>
                       <thead>
                         <tr><th scope="col">Output</th><th scope="col">Threshold</th><th scope="col">Held-out recall</th><th scope="col">False / hour</th></tr>

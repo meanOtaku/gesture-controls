@@ -4,7 +4,9 @@ use serde::Serialize;
 
 use crate::device::Output;
 use crate::pitch::PitchDirection;
-use crate::pointer::{PointerConfig, PointerEvent, PointerInputs, PointerTracker};
+use crate::pointer::{
+    HeadAim, PointerConfig, PointerEvent, PointerInputs, PointerSource, PointerTracker,
+};
 use crate::recipe::{Axis, Hold, ModelHold, Recipe, Stage};
 use crate::roll::RollDirection;
 use crate::shake::ShakeAxis;
@@ -51,6 +53,8 @@ pub struct Signals<'a> {
     /// Which way along the watch's 3 o'clock axis the hand is: 1 towards it, -1 away (the watch worn so 3 o'clock
     /// points at the elbow). 0, the default, counts as 1. Pointer mode needs it to tell raising the hand from lowering it.
     pub hand_sign: f64,
+    /// Where the head faces, from the latest headphone sample; `None` while the headphones are not connected.
+    pub head_aim: Option<HeadAim>,
 }
 
 /// A dial that a momentary step switched on switches itself off when it has not moved for this long, so a forgotten
@@ -150,12 +154,22 @@ impl RecipeRunner {
                 hold_label,
                 release_label,
                 lookback_ms,
+                mode,
+                source,
+                reverse_across,
+                reverse_up,
+                head_range,
             }) => Some(PointerConfig {
                 pixels_per_degree: *pixels_per_degree,
                 press_label: press_label.clone(),
                 hold_label: hold_label.clone(),
                 release_label: release_label.clone(),
                 lookback_ns: u64::from(*lookback_ms) * 1_000_000,
+                mode: *mode,
+                source: *source,
+                reverse_across: *reverse_across,
+                reverse_up: *reverse_up,
+                head_range: *head_range,
             }),
             _ => None,
         }
@@ -295,6 +309,12 @@ impl RecipeRunner {
                 .iter()
                 .all(|stage| Self::stage_holds(stage, signals));
         let orientation = signals.orientation.and_then(Self::unit);
+        // A pointer that follows the head needs the headphones as well as the watch, which still switches it and
+        // clicks: losing either lets go.
+        let follows_head = pointer
+            .as_ref()
+            .is_some_and(|config| config.source == PointerSource::Head);
+        let has_motion = orientation.is_some() && (!follows_head || signals.head_aim.is_some());
 
         let mut gates = self
             .recipe
@@ -354,11 +374,14 @@ impl RecipeRunner {
             } else {
                 TOGGLE_IDLE_NS
             };
-            let idle = matches!(
-                (signals.now_ns, self.toggle_moved_ns),
-                (Some(now), Some(moved)) if now.saturating_sub(moved) > idle_after
-            );
-            if !steady || orientation.is_none() || idle {
+            // Only a mode that is on can go idle: the last movement of an earlier session must not keep the next
+            // switch-on from taking.
+            let idle = self.toggled
+                && matches!(
+                    (signals.now_ns, self.toggle_moved_ns),
+                    (Some(now), Some(moved)) if now.saturating_sub(moved) > idle_after
+                );
+            if !steady || !has_motion || idle {
                 self.toggled = false;
             } else if fresh && !self.latched {
                 self.toggled = !self.toggled;
@@ -377,7 +400,7 @@ impl RecipeRunner {
             return None;
         }
         if let Some(config) = pointer {
-            let (true, Some(orientation)) = (chain_holds, orientation) else {
+            if !(chain_holds && has_motion) {
                 self.end_pointer();
                 self.phase = if gates_hold {
                     RunnerPhase::Armed
@@ -385,21 +408,23 @@ impl RecipeRunner {
                     RunnerPhase::Idle
                 };
                 return None;
-            };
+            }
             self.phase = RunnerPhase::Driving;
             let tracker = self
                 .pointer
                 .get_or_insert_with(|| PointerTracker::new(config));
-            let hand_sign = if signals.hand_sign < 0.0 { -1.0 } else { 1.0 };
-            let acted = tracker.update(
-                orientation,
-                hand_sign,
-                signals.now_ns,
-                PointerInputs {
-                    edges: signals.model_edges,
-                    held: signals.models_held,
-                },
-            );
+            let inputs = PointerInputs {
+                edges: signals.model_edges,
+                held: signals.models_held,
+            };
+            let acted = match (signals.head_aim, orientation) {
+                (Some(aim), _) if follows_head => tracker.update_head(aim, signals.now_ns, inputs),
+                (_, Some(orientation)) => {
+                    let hand_sign = if signals.hand_sign < 0.0 { -1.0 } else { 1.0 };
+                    tracker.update(orientation, hand_sign, signals.now_ns, inputs)
+                }
+                _ => false,
+            };
             if acted || tracker.is_pressed() {
                 self.toggle_moved_ns = signals.now_ns;
             }

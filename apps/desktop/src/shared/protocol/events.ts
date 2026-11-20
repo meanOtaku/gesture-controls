@@ -77,7 +77,7 @@ export type RecipeStage =
    * The last step of a "pointer" recipe: the hand moves the mouse pointer. A fresh `pressLabel` start freezes it (and
    * puts it back `lookbackMs` earlier); `releaseLabel` soon after clicks; `holdLabel` first presses the button for a drag.
    */
-  | { kind: "pointer"; pixelsPerDegree: number; pressLabel: string; holdLabel: string; releaseLabel: string; lookbackMs: number };
+  | { kind: "pointer"; pixelsPerDegree: number; pressLabel: string; holdLabel: string; releaseLabel: string; lookbackMs: number; mode?: PointerMode; source?: PointerSource; reverseAcross?: boolean; reverseUp?: boolean; headRange?: HeadRange };
 
 /** `held` counts while the label stays detected; `oneShot` for a moment after it is first detected (buttons only). */
 export type ModelHold = "held" | "oneShot";
@@ -93,7 +93,19 @@ export interface Recipe {
   keys?: string | null;
   /** The apps the recipe works in, by the name the system shows ("Safari"); absent or empty means everywhere. */
   apps?: string[];
+  /** Where a volume or brightness recipe's knob or slider is shown; absent means where its look-at location is. */
+  overlayAt?: ScreenAnchor | null;
 }
+
+/** One of nine places on the screen: its corners, the middle of its edges, and its centre. */
+/** As a mouse the hand always moves the pointer; as a trackpad only with the palm down, and turning it to the side lifts it. */
+export type PointerMode = "mouse" | "trackpad";
+/** What moves the pointer: where the forearm points (the watch) or where the head faces (the headphones). */
+export type PointerSource = "watch" | "head";
+/** How far the head turns to take the pointer from one edge of the screen to the other, in degrees. */
+export interface HeadRange { acrossDegrees: number; upDegrees: number }
+
+export type ScreenAnchor = "topLeft" | "top" | "topRight" | "left" | "center" | "right" | "bottomLeft" | "bottom" | "bottomRight";
 
 /** Two enabled recipes driving the same resource; both are held off until one is disabled. */
 export interface RecipeConflict {
@@ -125,6 +137,12 @@ export interface OverlayState {
   screenY: number;
   /** What to draw: the device of the volume recipe being shown. A fader is a slider; absent means the knob. */
   device?: "knob" | "horizontalFader" | "verticalFader";
+  /** What the overlay shows the level of; absent means volume. */
+  control?: "volume" | "brightness";
+  /** The display brightness in percent while showing brightness; `null` when the platform cannot read it. */
+  brightness?: number | null;
+  /** Where on the screen the overlay is; absent means the top right. */
+  anchor?: ScreenAnchor;
   /** The most recent failed native volume read/write's error text; `null` once the last native volume operation succeeded. */
   lastNativeVolumeError: string | null;
 }

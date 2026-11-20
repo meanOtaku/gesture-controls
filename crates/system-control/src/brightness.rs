@@ -7,6 +7,10 @@ pub trait BrightnessController: Send + Sync {
     fn step_percent(&self) -> f64;
     /// Moves brightness by `steps` (negative is dimmer).
     fn adjust_steps(&self, steps: i32) -> Result<(), ControlError>;
+    /// The brightness now, in percent, when this platform can read it.
+    fn level(&self) -> Option<f64> {
+        None
+    }
 }
 
 #[cfg(unix)]
@@ -139,6 +143,12 @@ fn moved_by_percent(current: f32, steps: i32) -> f32 {
 
 #[cfg(target_os = "macos")]
 impl BrightnessController for MacOsBrightness {
+    fn level(&self) -> Option<f64> {
+        self.direct
+            .and_then(|services| services.brightness())
+            .map(|value| f64::from(value) * 100.0)
+    }
+
     fn step_percent(&self) -> f64 {
         if self.direct.is_some() {
             1.0
@@ -183,6 +193,19 @@ struct LinuxBrightness;
 
 #[cfg(target_os = "linux")]
 impl BrightnessController for LinuxBrightness {
+    fn level(&self) -> Option<f64> {
+        let output = std::process::Command::new("brightnessctl")
+            .arg("-m")
+            .stdin(std::process::Stdio::null())
+            .output()
+            .ok()?;
+        output
+            .status
+            .success()
+            .then(|| brightnessctl_percent(&String::from_utf8_lossy(&output.stdout)))
+            .flatten()
+    }
+
     fn step_percent(&self) -> f64 {
         1.0
     }
@@ -243,6 +266,22 @@ impl BrightnessController for WindowsBrightness {
     }
 }
 
+/// The percentage in `brightnessctl -m`'s machine-readable line: `device,class,current,percent%,max`.
+#[cfg(any(target_os = "linux", test))]
+fn brightnessctl_percent(output: &str) -> Option<f64> {
+    let percent = output
+        .lines()
+        .next()?
+        .split(',')
+        .nth(3)?
+        .trim()
+        .strip_suffix('%')?;
+    percent
+        .parse::<f64>()
+        .ok()
+        .filter(|p| p.is_finite() && (0.0..=100.0).contains(p))
+}
+
 #[allow(dead_code)] // only the fallback on platforms without an adapter, and tests
 struct UnsupportedBrightness;
 
@@ -298,6 +337,16 @@ mod tests {
         assert!(down.contains("repeat 2 times") && down.contains("key code 145"));
         // A runaway request is capped rather than hammering the keyboard.
         assert!(macos_key_script(1000).unwrap().contains("repeat 32 times"));
+    }
+
+    #[test]
+    fn brightnessctl_reports_its_percentage() {
+        assert_eq!(
+            brightnessctl_percent("intel_backlight,backlight,9600,50%,19200\n"),
+            Some(50.0)
+        );
+        assert_eq!(brightnessctl_percent("garbage"), None);
+        assert_eq!(brightnessctl_percent(""), None);
     }
 
     #[test]

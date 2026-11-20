@@ -4,7 +4,8 @@ use std::sync::Once;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use interaction_engine::{VolumeSimulation, commit_visibility_after, top_right_overlay_position};
+use automation::ScreenAnchor;
+use interaction_engine::{VolumeSimulation, anchored_overlay_position, commit_visibility_after};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow};
 use tracing::warn;
@@ -12,7 +13,6 @@ use volume_control::{
     VolumeController, VolumeError, adjust_system_volume as adjust_native_volume,
     platform_volume_controller, set_system_volume as set_native_volume,
 };
-use watch_bridge::{HapticCommand, WatchBridgeServer};
 
 use crate::latest_write::{LatestWriteSlot, PendingWrite};
 
@@ -20,8 +20,6 @@ pub const OVERLAY_STATE_EVENT: &str = "overlay-state";
 const MAIN_WINDOW: &str = "main";
 const OVERLAY_WINDOW: &str = "overlay";
 const SCREEN_EDGE_MARGIN: f64 = 16.0;
-const WRIST_ROTATION_HAPTIC_DURATION_MS: u32 = 20;
-const WRIST_ROTATION_HAPTIC_MIN_INTERVAL: Duration = Duration::from_millis(125);
 /// Minimum spacing between native volume writes driven by wrist rotation.
 /// The Watch streams orientation at up to ~50Hz and every write is a blocking
 /// native call (a `wpctl`/`pactl` subprocess on Linux). Targets are absolute,
@@ -36,8 +34,14 @@ pub struct OverlayState {
     pub rotation_angle: f32,
     pub screen_x: f64,
     pub screen_y: f64,
-    /// What to draw: the device of the volume recipe being shown. A fader is a slider, anything else the knob.
+    /// What to draw: the device of the recipe being shown. A fader is a slider, anything else the knob.
     pub device: OverlayDevice,
+    /// What the overlay shows the level of.
+    pub control: OverlayControl,
+    /// The display brightness in percent, while showing brightness; `None` when this platform cannot read it.
+    pub brightness: Option<f32>,
+    /// Where on the screen the overlay is: where the recipe it shows is looked at, or its own choice.
+    pub anchor: ScreenAnchor,
     /// The error string from the most recent failed native volume read or
     /// write, cleared on the next successful one of either kind. `None`
     /// means the last native volume operation (if any) succeeded.
@@ -51,12 +55,24 @@ impl Default for OverlayState {
             grabbed: false,
             volume: VolumeSimulation::default().current(),
             rotation_angle: 0.0,
+            anchor: ScreenAnchor::default(),
             screen_x: 0.0,
             screen_y: 0.0,
             device: OverlayDevice::Knob,
+            control: OverlayControl::Volume,
+            brightness: None,
             last_native_volume_error: None,
         }
     }
+}
+
+/// What the overlay shows the level of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum OverlayControl {
+    #[default]
+    Volume,
+    Brightness,
 }
 
 /// The shape the overlay draws.
@@ -86,10 +102,6 @@ pub struct OverlayRuntime {
     recipe_drive: Mutex<RecipeDrive>,
     state_generation: AtomicU64,
     refresh_in_flight: AtomicBool,
-    last_wrist_rotation_haptic_at: Mutex<Option<Instant>>,
-    /// True while haptic sends are failing (e.g. no active watch connection),
-    /// so a stream of failures logs once instead of on every sample.
-    haptic_send_failing: AtomicBool,
     /// Hand-off of wrist-rotation volume targets to the writer thread; see
     /// [`crate::latest_write`] for why the write must not run on the watch event loop.
     wrist_volume_slot: Arc<LatestWriteSlot>,
@@ -202,8 +214,6 @@ impl Default for OverlayRuntime {
             recipe_drive: Mutex::new(RecipeDrive::default()),
             state_generation: AtomicU64::new(0),
             refresh_in_flight: AtomicBool::new(false),
-            last_wrist_rotation_haptic_at: Mutex::new(None),
-            haptic_send_failing: AtomicBool::new(false),
             wrist_volume_slot: Arc::new(LatestWriteSlot::default()),
             wrist_writer_started: Once::new(),
             interaction_epoch: AtomicU64::new(0),
@@ -254,8 +264,9 @@ impl OverlayRuntime {
             }
         };
         state.last_native_volume_error = None;
+        state.control = OverlayControl::Volume;
         prepare_window(app)?;
-        position_window_at_top_right(app, &window)?;
+        position_window(app, &window, state.anchor)?;
         commit_visibility_after(&mut state.visible, true, || {
             window.show().map_err(|error| error.to_string())
         })?;
@@ -318,6 +329,70 @@ impl OverlayRuntime {
         let snapshot = state.clone();
         let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
         Ok(snapshot)
+    }
+
+    /// Shows the brightness overlay, grabbed while a brightness recipe is turning it. A volume grab in progress ends:
+    /// only one thing is shown at a time. The level comes separately, from [`Self::set_brightness_level`], because
+    /// reading it may be slow and this runs on the watch's event loop.
+    pub(crate) fn show_brightness(
+        &self,
+        app: &AppHandle,
+        grabbed: bool,
+    ) -> Result<OverlayState, String> {
+        let window = app
+            .get_webview_window(OVERLAY_WINDOW)
+            .ok_or("overlay window is not configured")?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "overlay state lock was poisoned")?;
+        if state.control == OverlayControl::Volume && state.grabbed {
+            self.end_interaction();
+        }
+        state.control = OverlayControl::Brightness;
+        state.grabbed = grabbed;
+        prepare_window(app)?;
+        position_window(app, &window, state.anchor)?;
+        commit_visibility_after(&mut state.visible, true, || {
+            window.show().map_err(|error| error.to_string())
+        })?;
+        self.state_generation.fetch_add(1, Ordering::AcqRel);
+        let snapshot = state.clone();
+        let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
+        Ok(snapshot)
+    }
+
+    /// The brightness as just read, in percent; `None` when it cannot be read.
+    pub(crate) fn set_brightness_level(&self, app: &AppHandle, level: Option<f64>) {
+        let Ok(mut state) = self.state.lock() else {
+            return;
+        };
+        let level = level.map(|l| l.clamp(0.0, 100.0) as f32);
+        if state.brightness == level {
+            return;
+        }
+        state.brightness = level;
+        self.state_generation.fetch_add(1, Ordering::AcqRel);
+        let _ = app.emit(OVERLAY_STATE_EVENT, &*state);
+    }
+
+    /// Chooses where the overlay is shown, moving it there at once if it is on screen.
+    pub(crate) fn set_anchor(&self, app: &AppHandle, anchor: ScreenAnchor) {
+        let Ok(mut state) = self.state.lock() else {
+            return;
+        };
+        if state.anchor == anchor {
+            return;
+        }
+        state.anchor = anchor;
+        if state.visible
+            && let Some(window) = app.get_webview_window(OVERLAY_WINDOW)
+            && let Err(error) = position_window(app, &window, anchor)
+        {
+            warn!(%error, "failed to move the overlay");
+        }
+        self.state_generation.fetch_add(1, Ordering::AcqRel);
+        let _ = app.emit(OVERLAY_STATE_EVENT, &*state);
     }
 
     /// Chooses what the overlay draws, and tells it if that changed.
@@ -477,50 +552,10 @@ impl OverlayRuntime {
         if !state.grabbed || (job.target_percent - state.volume).abs() < f32::EPSILON {
             return;
         }
-        match self.set_absolute_system_volume(app, job.target_percent, volume_runtime) {
-            Ok(applied) => {
-                if (applied.volume - state.volume).abs() >= f32::EPSILON {
-                    self.notify_wrist_rotation_haptic(app);
-                }
-            }
-            Err(error) => warn!(%error, "failed to apply wrist rotation to volume"),
-        }
-    }
-
-    /// Best-effort haptic pulse confirming a wrist-rotation volume adjustment
-    /// was actually applied. Rate-limited so a fast orientation stream can't
-    /// spam the watch with pulses; never allowed to fail volume control.
-    fn notify_wrist_rotation_haptic(&self, app: &AppHandle) {
-        let Some(server) = app.try_state::<Arc<WatchBridgeServer>>() else {
-            return;
-        };
-        let Ok(mut last_sent) = self.last_wrist_rotation_haptic_at.lock() else {
-            return;
-        };
-        let now = Instant::now();
-        if last_sent.is_some_and(|previous| {
-            now.duration_since(previous) < WRIST_ROTATION_HAPTIC_MIN_INTERVAL
-        }) {
-            return;
-        }
-        // The rate-limit slot is only consumed by a pulse that was actually
-        // sent: a failed send (watch disconnected) must not also silence the
-        // first pulse after it reconnects.
-        match server.send_haptic_command_from(
-            HapticCommand {
-                duration_ms: WRIST_ROTATION_HAPTIC_DURATION_MS,
-            },
-            "knob",
-        ) {
-            Ok(()) => {
-                *last_sent = Some(now);
-                self.haptic_send_failing.store(false, Ordering::Release);
-            }
-            Err(error) => {
-                if first_failure(&self.haptic_send_failing) {
-                    warn!(%error, "failed to send wrist rotation haptic pulse");
-                }
-            }
+        // No vibration on the watch as the volume changes: the overlay shows the level.
+        if let Err(error) = self.set_absolute_system_volume(app, job.target_percent, volume_runtime)
+        {
+            warn!(%error, "failed to apply wrist rotation to volume");
         }
     }
 
@@ -659,12 +694,6 @@ impl OverlayRuntime {
     }
 }
 
-/// Marks a failure streak as started and reports whether this was its first
-/// failure, so a persistent failure is logged once rather than per sample.
-fn first_failure(failing: &AtomicBool) -> bool {
-    !failing.swap(true, Ordering::AcqRel)
-}
-
 /// How long the writer must still wait before its next wrist-rotation volume write: nothing
 /// before the first write, then whatever remains of
 /// [`WRIST_ROTATION_VOLUME_WRITE_MIN_INTERVAL`] since the previous one finished.
@@ -690,7 +719,11 @@ pub fn prepare_window(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn position_window_at_top_right(app: &AppHandle, window: &WebviewWindow) -> Result<(), String> {
+fn position_window(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    anchor: ScreenAnchor,
+) -> Result<(), String> {
     let main_monitor = app
         .get_webview_window(MAIN_WINDOW)
         .map(|main| main.current_monitor())
@@ -714,12 +747,13 @@ fn position_window_at_top_right(app: &AppHandle, window: &WebviewWindow) -> Resu
         .outer_size()
         .map_err(|error| error.to_string())?
         .to_logical::<f64>(current_scale_factor);
-    let (x, y) = top_right_overlay_position(
+    let (x, y) = anchored_overlay_position(
         (work_area.position.x, work_area.position.y),
         (work_area.size.width, work_area.size.height),
         (logical_window_size.width, logical_window_size.height),
         monitor.scale_factor(),
         SCREEN_EDGE_MARGIN,
+        anchor.fractions(),
     )
     .ok_or("invalid monitor or overlay geometry")?;
     window
@@ -786,18 +820,6 @@ pub async fn refresh_system_volume(app: AppHandle) -> Result<OverlayState, Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// R-M4-2: a persistent haptic failure is reported once, then again only
-    /// after a success has reset the streak.
-    #[test]
-    fn a_haptic_failure_streak_logs_only_its_first_failure() {
-        let failing = AtomicBool::new(false);
-        assert!(first_failure(&failing));
-        assert!(!first_failure(&failing));
-        assert!(!first_failure(&failing));
-        failing.store(false, Ordering::Release); // a pulse succeeded
-        assert!(first_failure(&failing));
-    }
 
     /// D-M4-3: a native volume write used to hold the overlay state lock for
     /// the adapter's whole timeout, stalling every cancellation path. The

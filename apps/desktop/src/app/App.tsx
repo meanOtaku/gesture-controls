@@ -146,8 +146,10 @@ function OverlayApp() {
     };
   }, [inTauri]);
 
+  const showsBrightness = overlay.control === "brightness";
   useEffect(() => {
-    if (!inTauri || !overlay.visible) return;
+    // The volume is re-read while it is on screen; brightness is read after each change instead.
+    if (!inTauri || !overlay.visible || showsBrightness) return;
 
     let cancelled = false;
     const refresh = () => {
@@ -163,22 +165,24 @@ function OverlayApp() {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [inTauri, overlay.visible]);
+  }, [inTauri, overlay.visible, showsBrightness]);
 
   return (
     <main className="overlay-shell">
       {overlay.device === "horizontalFader" || overlay.device === "verticalFader" ? (
         <VolumeSlider
-          volume={overlay.volume}
+          volume={showsBrightness ? (overlay.brightness ?? null) : overlay.volume}
+          label={showsBrightness ? "Brightness" : "Volume"}
           orientation={overlay.device === "verticalFader" ? "vertical" : "horizontal"}
           grabbed={overlay.grabbed}
-          nativeVolumeError={overlay.lastNativeVolumeError}
+          nativeVolumeError={showsBrightness ? null : overlay.lastNativeVolumeError}
         />
       ) : (
         <VolumeKnob
-          volume={overlay.volume}
+          volume={showsBrightness ? (overlay.brightness ?? null) : overlay.volume}
+          label={showsBrightness ? "Brightness" : "Volume"}
           grabbed={overlay.grabbed}
-          nativeVolumeError={overlay.lastNativeVolumeError}
+          nativeVolumeError={showsBrightness ? null : overlay.lastNativeVolumeError}
         />
       )}
     </main>

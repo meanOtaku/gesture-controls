@@ -45,3 +45,50 @@ fn rejects_geometry_that_would_overflow_position_arithmetic() {
         None,
     );
 }
+
+#[test]
+fn an_anchored_overlay_sits_in_its_corner_edge_or_centre_inside_the_margin() {
+    use interaction_engine::anchored_overlay_position as at;
+    let screen = ((0, 0), (1920, 1080));
+    let place = |fractions| at(screen.0, screen.1, (320.0, 200.0), 1.0, 16.0, fractions);
+    assert_eq!(place((0.0, 0.0)), Some((16, 16)));
+    assert_eq!(place((1.0, 0.0)), Some((1920 - 320 - 16, 16)));
+    assert_eq!(
+        place((0.5, 0.5)),
+        Some(((1920 - 320) / 2, (1080 - 200) / 2))
+    );
+    assert_eq!(place((1.0, 1.0)), Some((1920 - 320 - 16, 1080 - 200 - 16)));
+    // The top right matches the long-standing top-right placement.
+    assert_eq!(
+        place((1.0, 0.0)),
+        interaction_engine::top_right_overlay_position(
+            screen.0,
+            screen.1,
+            (320.0, 200.0),
+            1.0,
+            16.0
+        )
+    );
+    // A second screen to the left, at 2x: physical pixels, offset by its origin.
+    assert_eq!(
+        at(
+            (-3840, 0),
+            (3840, 2160),
+            (320.0, 200.0),
+            2.0,
+            16.0,
+            (0.0, 1.0)
+        ),
+        Some((-3840 + 32, 2160 - 400 - 32))
+    );
+    // Too big to fit: the top-left corner stays on the screen.
+    assert_eq!(
+        at((0, 0), (300, 200), (400.0, 300.0), 1.0, 16.0, (1.0, 1.0)),
+        Some((16, 16))
+    );
+    assert_eq!(place((1.5, 0.0)), None);
+    assert_eq!(
+        at(screen.0, screen.1, (320.0, 200.0), 0.0, 16.0, (0.0, 0.0)),
+        None
+    );
+}

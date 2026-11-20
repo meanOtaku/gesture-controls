@@ -48,7 +48,12 @@ enum Command {
     Shortcut(String),
     /// Pointer mode moved the pointer or changed the button.
     Pointer(Vec<PointerEvent>),
+    /// Read the brightness and tell the overlay.
+    ReadBrightness,
 }
+
+/// The screen size assumed when the platform cannot say, for moves given as fractions of the screen.
+const FALLBACK_SCREEN_SIZE: (f64, f64) = (1440.0, 900.0);
 
 /// Merges runs of moves into one, keeping every click and button change in its place, so a backlog of moves never
 /// replays one by one and a click never lands before the move that came first.
@@ -56,7 +61,11 @@ pub fn merge_pointer_events(events: impl IntoIterator<Item = PointerEvent>) -> V
     let mut merged: Vec<PointerEvent> = Vec::new();
     for event in events {
         match (merged.last_mut(), event) {
-            (Some(PointerEvent::Move { dx, dy }), PointerEvent::Move { dx: x, dy: y }) => {
+            (Some(PointerEvent::Move { dx, dy }), PointerEvent::Move { dx: x, dy: y })
+            | (
+                Some(PointerEvent::MoveScreen { dx, dy }),
+                PointerEvent::MoveScreen { dx: x, dy: y },
+            ) => {
                 *dx += x;
                 *dy += y;
             }
@@ -134,9 +143,22 @@ impl Core {
         }
     }
 
+    /// The display brightness now, in percent, when the platform can read it.
+    pub fn brightness_level(&self) -> Option<f64> {
+        self.brightness.level()
+    }
+
     /// Carries out one of pointer mode's requests. Moves carry fractions of a pixel over to the next one.
     pub fn pointer(&mut self, event: PointerEvent) -> Result<(), ControlError> {
         match event {
+            PointerEvent::MoveScreen { dx, dy } => {
+                // Fractions of the screen the pointer is on, for a head pointer with a range.
+                let (width, height) = self.pointer.screen_size().unwrap_or(FALLBACK_SCREEN_SIZE);
+                self.pointer(PointerEvent::Move {
+                    dx: dx * width,
+                    dy: dy * height,
+                })
+            }
             PointerEvent::Move { dx, dy } => {
                 let limit = MAX_POINTER_PIXELS_PER_CALL;
                 let x = self.pointer_x.take(dx, 1.0).clamp(-limit, limit);
@@ -284,6 +306,11 @@ impl Actuators {
         self.send(app, Command::Shortcut(keys));
     }
 
+    /// Reads the brightness off the watch loop (it can be slow) and shows it on the overlay.
+    pub fn read_brightness(&self, app: &AppHandle) {
+        self.send(app, Command::ReadBrightness);
+    }
+
     pub fn pointer(&self, app: &AppHandle, events: Vec<PointerEvent>) {
         if !events.is_empty() {
             self.send(app, Command::Pointer(events));
@@ -305,6 +332,7 @@ fn report(
             }
         }
         Err(error) => {
+            crate::miss_recorder::note(app, "action", format!("{action:?} failed: {error}"));
             if *failing != Some(action) {
                 *failing = Some(action);
                 warn!(%error, ?action, "failed to carry out a recipe's action");
@@ -335,6 +363,7 @@ fn run_worker(app: AppHandle, rx: std::sync::mpsc::Receiver<Command>) {
         let mut presses: Vec<Action> = Vec::new();
         let mut keys: Vec<String> = Vec::new();
         let mut pointer: Vec<PointerEvent> = Vec::new();
+        let mut read_brightness = false;
         let mut handle =
             |command: Command, core: &mut Core, pending: &mut Vec<(Action, f64)>| match command {
                 Command::Delta(action, fraction) => {
@@ -355,6 +384,7 @@ fn run_worker(app: AppHandle, rx: std::sync::mpsc::Receiver<Command>) {
                     core.reset(action);
                 }
                 Command::Pointer(events) => pointer.extend(events),
+                Command::ReadBrightness => read_brightness = true,
                 Command::Press(action) => presses.push(action),
                 Command::Shortcut(combo) => keys.push(combo),
             };
@@ -386,9 +416,14 @@ fn run_worker(app: AppHandle, rx: std::sync::mpsc::Receiver<Command>) {
         }
         for (action, fraction) in pending {
             report(&app, &mut failing, action, core.deliver(action, fraction));
+            read_brightness |= action == Action::Brightness;
             if action == Action::Scroll {
                 std::thread::sleep(SCROLL_PACING);
             }
+        }
+        if read_brightness {
+            app.state::<crate::overlay::OverlayRuntime>()
+                .set_brightness_level(&app, core.brightness_level());
         }
     }
 }
@@ -510,6 +545,30 @@ mod tests {
 
     fn moves(dx: f64, dy: f64) -> PointerEvent {
         PointerEvent::Move { dx, dy }
+    }
+
+    #[test]
+    fn a_move_by_a_fraction_of_the_screen_becomes_pixels_of_the_screen() {
+        let (mut core, log) = core(1.0);
+        core.pointer(PointerEvent::MoveScreen { dx: 0.1, dy: -0.25 })
+            .unwrap();
+        // The fake cannot say how big its screen is, so the fallback size counts.
+        assert_eq!(
+            log.lock().unwrap().pointer,
+            vec!["move 144 -225".to_string()]
+        );
+        let merged = merge_pointer_events([
+            PointerEvent::MoveScreen { dx: 0.1, dy: 0.0 },
+            PointerEvent::MoveScreen { dx: 0.1, dy: 0.1 },
+            moves(1.0, 0.0),
+        ]);
+        assert_eq!(
+            merged,
+            vec![
+                PointerEvent::MoveScreen { dx: 0.2, dy: 0.1 },
+                moves(1.0, 0.0)
+            ]
+        );
     }
 
     #[test]
