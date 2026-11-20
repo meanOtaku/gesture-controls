@@ -13,11 +13,11 @@ use std::time::{Duration, Instant};
 
 use automation::{
     Action, Axis, Conflict, CrownSide, Device, DeviceKind, HammerConfig, HammerDetector,
-    HeuristicGestures, Hold, ModelHold, PitchConfig, PitchDetector, PitchDirection, Recipe,
-    RecipeRunner, RollConfig, RollDetector, RollDirection, RunnerPhase, ShakeAxis, ShakeConfig,
-    ShakeDetector, Signals, Stage, SwipeConfig, SwipeDetector, SwipeDirection, TapConfig,
-    TapDetector, TapKind, WiggleConfig, WiggleDetector, Wrist, blocked_recipes, find_conflicts,
-    validate_recipe,
+    HeuristicGestures, Hold, ModelHold, PitchConfig, PitchDetector, PitchDirection, PointerEvent,
+    Recipe, RecipeRunner, RollConfig, RollDetector, RollDirection, RunnerPhase, ShakeAxis,
+    ShakeConfig, ShakeDetector, Signals, Stage, SwipeConfig, SwipeDetector, SwipeDirection,
+    TapConfig, TapDetector, TapKind, WiggleConfig, WiggleDetector, Wrist, blocked_recipes,
+    find_conflicts, validate_recipe,
 };
 use interaction_engine::quaternion_angular_distance;
 use serde::Serialize;
@@ -133,6 +133,8 @@ pub enum OverlayWanted {
 pub struct Effects {
     /// Set only when the overlay needs to change.
     pub overlay: Option<OverlayWanted>,
+    /// Set only when the overlay should draw a different device: the device of the volume recipe it is showing.
+    pub overlay_device: Option<DeviceKind>,
     /// Changes to apply, each an action and a fraction of its full range.
     pub deltas: Vec<(Action, f64)>,
     /// A shake was recognised on this sample (whether or not any recipe uses it), for the Settings tuning aid.
@@ -159,6 +161,8 @@ pub struct Effects {
     pub activity: Vec<RecipeActivity>,
     /// Actions whose interaction just ended, so anything still carried for them is dropped.
     pub ended: Vec<Action>,
+    /// What pointer mode asked of the mouse, in order.
+    pub pointer: Vec<PointerEvent>,
 }
 
 /// Wrist limits that apply to every recipe and so live in Settings: how fast a twist may be before it is
@@ -250,6 +254,16 @@ impl Tuning {
 
     /// The shake detector's settings: `strokes` quick strokes are `strokes - 1` changes of direction, and a longer
     /// run needs a longer window to fit in.
+    /// Which way along the watch's 3 o'clock axis the hand is. With the crown on the right as it is read, 3 o'clock is
+    /// the wearer's right: towards the hand on the left wrist, towards the elbow on the right. A crown on the left
+    /// swaps both.
+    pub fn hand_sign(&self) -> f64 {
+        match (self.wrist, self.crown) {
+            (Wrist::Left, CrownSide::Right) | (Wrist::Right, CrownSide::Left) => 1.0,
+            _ => -1.0,
+        }
+    }
+
     pub fn shake_config(&self) -> ShakeConfig {
         let reversals = self.shake_strokes.saturating_sub(1).max(1) as usize;
         ShakeConfig {
@@ -382,6 +396,8 @@ pub struct Engine {
     last_accepted: Option<Orientation>,
     blocked: BTreeSet<String>,
     overlay: OverlayWanted,
+    /// The device the overlay draws: the one of the volume recipe it shows.
+    overlay_device: DeviceKind,
     /// Model labels detected now and cleared to act.
     models_held: BTreeSet<String>,
     model_edges: BTreeSet<String>,
@@ -437,6 +453,7 @@ impl Engine {
             last_accepted: None,
             blocked: BTreeSet::new(),
             overlay: OverlayWanted::Hidden,
+            overlay_device: DeviceKind::RotationKnob,
             models_held: BTreeSet::new(),
             model_edges: BTreeSet::new(),
             model_pulses: BTreeMap::new(),
@@ -602,6 +619,12 @@ impl Engine {
                             start_label,
                             end_label,
                         } => vec![start_label, end_label],
+                        Stage::Pointer {
+                            press_label,
+                            hold_label,
+                            release_label,
+                            ..
+                        } => vec![press_label, hold_label, release_label],
                         _ => vec![],
                     })
                     .filter(|label| !loaded.contains(*label))
@@ -909,8 +932,10 @@ impl Engine {
                 .is_some_and(|latest| latest.timestamp_ns < self.hammer_until_ns),
             now_ns: self.orientation.as_ref().map(|latest| latest.timestamp_ns),
             orientation: self.orientation.as_ref().map(|o| o.quaternion),
+            hand_sign: self.tuning.hand_sign(),
         };
         let mut wanted = OverlayWanted::Hidden;
+        let mut wanted_device = self.overlay_device;
         let mut effects = Effects::default();
         let mut driving = false;
         for (index, (recipe, runner)) in self.recipes.iter().zip(&mut self.runners).enumerate() {
@@ -926,6 +951,7 @@ impl Engine {
                 // volume filter so it can settle, but never on the grab or release.
                 effects.deltas.push((Action::Volume, 0.0));
             }
+            effects.pointer.extend(runner.take_pointer_events());
             if runner.take_fired() {
                 effects.activity.push(RecipeActivity {
                     recipe: recipe.id.clone(),
@@ -963,6 +989,17 @@ impl Engine {
             self.previous_phases[index] = phase;
             // The volume knob on screen is only for recipes that control volume.
             if recipe.action == Action::Volume {
+                // The overlay draws the device of the recipe it shows: the one driving, else the one armed.
+                let shows = match (wanted, phase) {
+                    (OverlayWanted::Driving, _) => false,
+                    (_, RunnerPhase::Driving) => true,
+                    (OverlayWanted::Armed, _) => false,
+                    (_, RunnerPhase::Armed) => true,
+                    _ => false,
+                };
+                if shows {
+                    wanted_device = recipe.device.kind();
+                }
                 wanted = match (wanted, phase) {
                     (_, RunnerPhase::Driving) | (OverlayWanted::Driving, _) => {
                         OverlayWanted::Driving
@@ -974,6 +1011,10 @@ impl Engine {
         }
         self.model_edges.clear();
         self.driving = driving;
+        if wanted_device != self.overlay_device {
+            self.overlay_device = wanted_device;
+            effects.overlay_device = Some(wanted_device);
+        }
         if wanted != self.overlay {
             self.overlay = wanted;
             effects.overlay = Some(wanted);
@@ -1436,6 +1477,9 @@ pub fn check_locations(recipe: &Recipe, known: &[String]) -> Result<(), String> 
 fn apply_effects(app: &AppHandle, effects: &Effects, max_points_per_second: f64) {
     let overlay = app.state::<OverlayRuntime>();
     let volume = app.state::<VolumeRuntime>();
+    if let Some(device) = effects.overlay_device {
+        overlay.set_device(app, device);
+    }
     if let Some(wanted) = effects.overlay {
         crate::miss_recorder::note(app, "recipe", format!("{wanted:?}"));
         let result = match wanted {
@@ -1500,6 +1544,8 @@ fn apply_effects(app: &AppHandle, effects: &Effects, max_points_per_second: f64)
         crate::miss_recorder::note(app, "recipe", format!("pressed {keys}"));
         actuators.shortcut(app, keys.clone());
     }
+    // Before the endings below, so pointer mode's last moves and clicks come before its reset.
+    actuators.pointer(app, effects.pointer.clone());
     for action in &effects.ended {
         if *action != Action::Volume {
             actuators.reset(app, *action);
@@ -1657,6 +1703,21 @@ mod tests {
         assert_eq!(released.overlay, Some(OverlayWanted::Armed));
         assert!(released.deltas.is_empty());
         assert_eq!(engine.set_head(None).overlay, Some(OverlayWanted::Hidden));
+    }
+
+    #[test]
+    fn a_volume_recipe_with_a_fader_has_the_overlay_draw_a_slider() {
+        let mut recipes = only("lookStemVolume");
+        for recipe in &mut recipes {
+            recipe.device = Device::default_for(DeviceKind::VerticalFader);
+        }
+        let mut engine = Engine::new(recipes, Tuning::default());
+        engine.observe_orientation(about_x(0.0), ts(1), None);
+        let looked = engine.set_head(Some("topRight".into()));
+        assert_eq!(looked.overlay, Some(OverlayWanted::Armed));
+        assert_eq!(looked.overlay_device, Some(DeviceKind::VerticalFader));
+        // Nothing changes about the device while the same recipe stays on screen.
+        assert_eq!(engine.set_stem(true).overlay_device, None);
     }
 
     #[test]
@@ -2437,6 +2498,90 @@ mod tests {
         assert!(again.fired.is_empty());
         let later = engine.set_models(loaded, set(&["snap"]), &[], &[], 900 * MS);
         assert!(later.fired.is_empty());
+    }
+
+    fn heading(degrees: f64) -> [f64; 4] {
+        let half = degrees.to_radians() / 2.0;
+        [half.cos(), 0.0, 0.0, half.sin()]
+    }
+
+    #[test]
+    fn a_snap_switches_pointer_mode_on_the_hand_moves_the_pointer_a_pinch_clicks_and_losing_the_watch_lets_go()
+     {
+        let mut recipe = model_recipe("snap_fingers", ModelHold::OneShot, Action::Pointer);
+        recipe.stages.push(Stage::Pointer {
+            pixels_per_degree: 10.0,
+            press_label: "pinch_in".into(),
+            hold_label: "pinch_hold".into(),
+            release_label: "pinch_out".into(),
+            lookback_ms: 400,
+        });
+        assert_eq!(validate_recipe(&recipe), Ok(()));
+        let mut engine = Engine::new(vec![recipe], Tuning::default());
+        let loaded = set(&["snap_fingers", "pinch_in", "pinch_hold", "pinch_out"]);
+        assert!(engine.state().unavailable.is_empty());
+        engine.observe_orientation(heading(0.0), 0, None);
+        let on = engine.set_models(
+            loaded.clone(),
+            set(&[]),
+            &["snap_fingers".to_string()],
+            &[],
+            0,
+        );
+        assert!(
+            on.activity
+                .iter()
+                .any(|a| a.moment == RecipeMoment::Started)
+        );
+        // Point to the right for a second: the pointer goes right.
+        let mut right = 0.0;
+        for n in 1..=100u64 {
+            for event in engine
+                .observe_orientation(heading(-(n as f64) * 0.2), n * 10 * MS, None)
+                .pointer
+            {
+                if let PointerEvent::Move { dx, .. } = event {
+                    right += dx;
+                }
+            }
+        }
+        assert!(right > 100.0, "{right}");
+        engine.set_models(
+            loaded.clone(),
+            set(&[]),
+            &["pinch_in".to_string()],
+            &[],
+            1010 * MS,
+        );
+        let click = engine.set_models(
+            loaded.clone(),
+            set(&[]),
+            &["pinch_out".to_string()],
+            &[],
+            1100 * MS,
+        );
+        assert!(
+            click.pointer.contains(&PointerEvent::Click),
+            "{:?}",
+            click.pointer
+        );
+        // A held pinch presses the button; the watch going away lets it go and ends pointer mode.
+        engine.set_models(
+            loaded.clone(),
+            set(&[]),
+            &["pinch_in".to_string()],
+            &[],
+            1500 * MS,
+        );
+        let down = engine.set_models(loaded, set(&["pinch_hold"]), &[], &[], 1600 * MS);
+        assert!(down.pointer.contains(&PointerEvent::Press));
+        let lost = engine.watch_lost();
+        assert!(
+            lost.pointer.contains(&PointerEvent::Release),
+            "{:?}",
+            lost.pointer
+        );
+        assert!(lost.ended.contains(&Action::Pointer));
     }
 
     #[test]

@@ -1,7 +1,7 @@
 import { recordingName } from "../model-lab/recordingNames";
 import { datasetLabels } from "../model-lab/types";
 import type { UsageSources } from "./labelUsage";
-import { recipesUsing } from "./labelUsage";
+import { recipesUsing, usageStageLabels } from "./labelUsage";
 
 /**
  * Archiving or deleting a label together with everything that uses it. A plan is the list of steps, worked out from
@@ -81,7 +81,7 @@ export function planCascade(mode: CascadeMode, labelId: string, sources: Cascade
   }
 
   if (mode === "archive") {
-    const recipes = sources.recipes.filter((recipe) => recipe.enabled !== false && recipe.stages.some((stage) => stage.kind === "model" && stage.label === labelId));
+    const recipes = sources.recipes.filter((recipe) => recipe.enabled !== false && recipe.stages.some((stage) => usageStageLabels(stage).includes(labelId)));
     for (const recipe of recipes) steps.push({ kind: "disableRecipe", id: recipe.id, name: recipe.name });
     for (const model of live) steps.push(...archivePath(model));
     steps.push({ kind: "archiveLabel", log: { disabledRecipes: recipes.map((recipe) => recipe.id), archivedModels: live.map((model) => model.id) } });

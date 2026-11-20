@@ -36,6 +36,8 @@ pub struct OverlayState {
     pub rotation_angle: f32,
     pub screen_x: f64,
     pub screen_y: f64,
+    /// What to draw: the device of the volume recipe being shown. A fader is a slider, anything else the knob.
+    pub device: OverlayDevice,
     /// The error string from the most recent failed native volume read or
     /// write, cleared on the next successful one of either kind. `None`
     /// means the last native volume operation (if any) succeeded.
@@ -51,7 +53,29 @@ impl Default for OverlayState {
             rotation_angle: 0.0,
             screen_x: 0.0,
             screen_y: 0.0,
+            device: OverlayDevice::Knob,
             last_native_volume_error: None,
+        }
+    }
+}
+
+/// The shape the overlay draws.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OverlayDevice {
+    Knob,
+    HorizontalFader,
+    VerticalFader,
+}
+
+impl From<automation::DeviceKind> for OverlayDevice {
+    fn from(kind: automation::DeviceKind) -> Self {
+        match kind {
+            automation::DeviceKind::HorizontalFader => OverlayDevice::HorizontalFader,
+            automation::DeviceKind::VerticalFader => OverlayDevice::VerticalFader,
+            automation::DeviceKind::RotationKnob | automation::DeviceKind::StepKnob => {
+                OverlayDevice::Knob
+            }
         }
     }
 }
@@ -294,6 +318,20 @@ impl OverlayRuntime {
         let snapshot = state.clone();
         let _ = app.emit(OVERLAY_STATE_EVENT, &snapshot);
         Ok(snapshot)
+    }
+
+    /// Chooses what the overlay draws, and tells it if that changed.
+    pub(crate) fn set_device(&self, app: &AppHandle, device: automation::DeviceKind) {
+        let Ok(mut state) = self.state.lock() else {
+            return;
+        };
+        let device = OverlayDevice::from(device);
+        if state.device == device {
+            return;
+        }
+        state.device = device;
+        self.state_generation.fetch_add(1, Ordering::AcqRel);
+        let _ = app.emit(OVERLAY_STATE_EVENT, &*state);
     }
 
     /// Shows the knob without grabbing it: the user is looking at its location but has not yet started

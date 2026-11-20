@@ -18,14 +18,73 @@ export const DEVICE_KINDS: ReadonlyArray<{ kind: DeviceKind; label: string; summ
 /** What a recipe can control. `scale` turns the engine's fraction of the range into the unit shown (points, percent, pixels). */
 export const ACTIONS: ReadonlyArray<{ value: RecipeAction; label: string; unit: string; scale: number; trigger: boolean; summary: string }> = [
   { value: "volume", label: "Volume", unit: "pts", scale: 100, trigger: false, summary: "The system output volume. Shows the knob on screen while you use it." },
-  { value: "brightness", label: "Brightness", unit: "%", scale: 100, trigger: false, summary: "Display brightness. On a Mac it moves in sixteenth steps, like the keyboard keys, and needs Accessibility permission." },
+  { value: "brightness", label: "Brightness", unit: "%", scale: 100, trigger: false, summary: "Display brightness. On a Mac's built-in display it moves in one-percent steps; on a display macOS cannot set directly it presses the brightness keys (sixteenth steps), which needs Accessibility permission." },
   { value: "scroll", label: "Scroll", unit: "px", scale: 1000, trigger: false, summary: "Scrolls the window under the pointer. Turn one way to scroll down, the other to scroll up. A Mac needs Accessibility permission." },
   { value: "playPause", label: "Play / pause", unit: "", scale: 1, trigger: true, summary: "Presses the play/pause media key once each time your steps all hold. There is no wrist rotation: it is a button, not a dial." },
   { value: "nextTrack", label: "Next track", unit: "", scale: 1, trigger: true, summary: "Presses the next-track media key once each time your steps all hold." },
   { value: "previousTrack", label: "Previous track", unit: "", scale: 1, trigger: true, summary: "Presses the previous-track media key once each time your steps all hold." },
   { value: "mute", label: "Mute", unit: "", scale: 1, trigger: true, summary: "Toggles the system mute each time your steps all hold." },
   { value: "shortcut", label: "Keyboard shortcut", unit: "", scale: 1, trigger: true, summary: "Presses a keyboard shortcut once each time your steps all hold, so a gesture can do anything a key can. A Mac needs Accessibility permission." },
+  { value: "pointer", label: "Mouse pointer", unit: "px", scale: 1, trigger: false, summary: "Your hand moves the mouse pointer while your steps hold: point your forearm left and right, raise and lower your hand. A quick pinch clicks; a pinch held presses the button for dragging, and the release lets go. A Mac needs Accessibility permission." },
 ];
+
+/** A pointer recipe ends with the pointer step instead of a wrist rotation, and has no virtual device. */
+export function isPointer(action: RecipeAction): boolean {
+  return action === "pointer";
+}
+
+export type PointerStage = Extract<RecipeStage, { kind: "pointer" }>;
+
+export const POINTER_SPEED_SPEC: NumberSpec = {
+  label: "Speed", unit: "px/°", min: 1, max: 200, step: 1, defaultValue: 25,
+  description: "How far the pointer moves for each degree you move your hand at a steady pace. Slow movement moves it less, for precision; fast movement more",
+};
+
+export const POINTER_LOOKBACK_SPEC: NumberSpec = {
+  label: "Click look-back", unit: "ms", min: 0, max: 1500, step: 50, defaultValue: 400,
+  description: "When a pinch is detected, the pointer goes back to where it was this long before, so the click lands where you were pointing and not where the pinch nudged it. About the model's delay; 0 switches it off",
+};
+
+/** The pointer step of a recipe, or a fresh one with the pinch labels. */
+export function pointerStage(recipe: Recipe): PointerStage {
+  const found = recipe.stages.find((stage): stage is PointerStage => stage.kind === "pointer");
+  return found ?? {
+    kind: "pointer",
+    pixelsPerDegree: POINTER_SPEED_SPEC.defaultValue,
+    pressLabel: "pinch_in",
+    holdLabel: "pinch_hold",
+    releaseLabel: "pinch_out",
+    lookbackMs: POINTER_LOOKBACK_SPEC.defaultValue,
+  };
+}
+
+/** The model labels a step needs. */
+export function stageLabels(stage: RecipeStage): string[] {
+  switch (stage.kind) {
+    case "model":
+      return [stage.label];
+    case "modelPair":
+      return [stage.startLabel, stage.endLabel];
+    case "pointer":
+      return [stage.pressLabel, stage.holdLabel, stage.releaseLabel];
+    default:
+      return [];
+  }
+}
+
+/** Why a pointer step's labels cannot be saved, or null. The backend checks the same things. */
+export function pointerLabelsProblem(stage: Pick<PointerStage, "pressLabel" | "holdLabel" | "releaseLabel">): string | null {
+  if (![stage.pressLabel, stage.holdLabel, stage.releaseLabel].every(isValidLabel)) {
+    return "Each click label needs lowercase letters, digits and underscores, starting with a letter.";
+  }
+  if (stage.pressLabel === stage.releaseLabel) return "The press and release labels must be different.";
+  return null;
+}
+
+/** Whether a recipe has a step that needs this model label. */
+export function recipeUsesLabel(recipe: Recipe, label: string): boolean {
+  return recipe.stages.some((stage) => stageLabels(stage).includes(label));
+}
 
 /** A trigger fires once when its steps all hold, instead of following your wrist. It has no wrist rotation or device. */
 export function isTrigger(action: RecipeAction): boolean {
@@ -216,6 +275,8 @@ function stageLabel(stage: RecipeStage, locationName: (id: string) => string, ge
       return `Camera “${gestureName(stage.gesture)}”${stage.hold === "oneShot" ? " (once)" : ""}`;
     case "drive":
       return `${AXES.find((axis) => axis.value === stage.axis)?.label ?? stage.axis} wrist`;
+    case "pointer":
+      return `Hand moves the pointer (${stage.pressLabel} then ${stage.releaseLabel} clicks, ${stage.holdLabel} drags)`;
   }
 }
 
@@ -223,14 +284,16 @@ function stageLabel(stage: RecipeStage, locationName: (id: string) => string, ge
 export function describeRecipe(recipe: Recipe, locationName: (id: string) => string, gestureName: (id: string) => string = (id) => id): string {
   return [
     ...recipe.stages.map((stage) => stageLabel(stage, locationName, gestureName)),
-    ...(isTrigger(recipe.action) ? [] : [deviceLabel(recipe.device.kind)]),
+    ...(isTrigger(recipe.action) || isPointer(recipe.action) ? [] : [deviceLabel(recipe.device.kind)]),
     recipe.action === "shortcut" && recipe.keys ? `Press ${recipe.keys}` : actionInfo(recipe.action).label,
   ].join(" → ") + (recipe.apps && recipe.apps.length > 0 ? ` (only in ${recipe.apps.join(", ")})` : "");
 }
 
-/** The steps before the wrist rotation, which every recipe ends with. */
-export function leadingStages(recipe: Recipe): Exclude<RecipeStage, { kind: "drive" }>[] {
-  return recipe.stages.filter((stage): stage is Exclude<RecipeStage, { kind: "drive" }> => stage.kind !== "drive");
+export type LeadingStage = Exclude<RecipeStage, { kind: "drive" } | { kind: "pointer" }>;
+
+/** The steps before the wrist rotation or pointer step, which every continuous recipe ends with. */
+export function leadingStages(recipe: Recipe): LeadingStage[] {
+  return recipe.stages.filter((stage): stage is LeadingStage => stage.kind !== "drive" && stage.kind !== "pointer");
 }
 
 export function driveStage(recipe: Recipe): Extract<RecipeStage, { kind: "drive" }> {
@@ -257,8 +320,10 @@ export function blankRecipe(locations: CalibrationLocation[], kind: DeviceKind =
 const sameStage = (a: RecipeStage, b: RecipeStage) => JSON.stringify(a) === JSON.stringify(b);
 
 /** Why this chain of steps cannot be saved, or null. The backend checks the same things. */
-export function chainProblem(leading: RecipeStage[], locations: CalibrationLocation[], trigger = false): string | null {
+export function chainProblem(leading: RecipeStage[], locations: CalibrationLocation[], trigger = false, pointer = false): string | null {
   const pairs = leading.filter((s) => s.kind === "modelPair");
+  if (pointer && leading.length === 0) return "Add a step that switches pointer mode on, such as a snap: without one your hand would move the pointer whenever the watch is connected.";
+  if (pointer && pairs.length > 0) return "The pointer clicks with its own pinch labels, so it cannot have a grab/release pair. Remove it.";
   if (pairs.length > 1 || (trigger && pairs.length > 0)) return "Use one grab/release pair with a continuous control.";
   if (pairs.some((p) => !isValidLabel(p.startLabel) || !isValidLabel(p.endLabel) || p.startLabel === p.endLabel)) return "Choose two different valid model labels for grab and release.";
   if (trigger && leading.length === 0) return "Add at least one step: something has to start it.";
@@ -345,6 +410,19 @@ export function nameProblem(name: string): string | null {
   if (trimmed === "") return "Give the recipe a name.";
   if (trimmed.length > MAX_RECIPE_NAME_CHARS) return `Too long: the maximum is ${MAX_RECIPE_NAME_CHARS} characters.`;
   return null;
+}
+
+/** Pointer mode as a ready-to-edit recipe: snap to switch it on, the hand moves the pointer, pinches click and drag. */
+export function snapPointerRecipe(locations: CalibrationLocation[]): Recipe {
+  return {
+    ...blankRecipe(locations),
+    name: "Snap for the mouse pointer",
+    action: "pointer",
+    stages: [
+      { kind: "model", label: "snap_fingers", hold: "oneShot" },
+      pointerStage({ ...blankRecipe(locations), stages: [] }),
+    ],
+  };
 }
 
 /** Ready-to-edit original interaction. Saving never enables it or changes active models. */

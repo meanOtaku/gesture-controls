@@ -11,7 +11,7 @@ import { Switch } from "../../../components/ui/switch";
 import type { AutomationState, CalibrationState, HeuristicGestures, Recipe } from "../../../shared/protocol/events";
 import { CameraArmSwitch } from "../../gestureLibrary/CameraArmSwitch";
 import { listGestureDefinitions } from "../../gestureLibrary/gestureLibraryApi";
-import { pinchVolumeRecipe, blankRecipe, describeRecipe, offGesturesUsed, type DeviceKind } from "../recipeModel";
+import { pinchVolumeRecipe, snapPointerRecipe, blankRecipe, describeRecipe, offGesturesUsed, type DeviceKind } from "../recipeModel";
 import { ConflictAlerts } from "./ConflictAlerts";
 import { RecipeEditor } from "./RecipeEditor";
 import { invoke } from "@tauri-apps/api/core";
@@ -113,6 +113,8 @@ export function RecipesPage({ automation, calibration, pendingRecipeIds, error, 
           {automation && <ConflictAlerts automation={automation} />}
           <Button type="button" variant="outline" disabled={editing !== null || calibration === null} onClick={() => setEditing(pinchVolumeRecipe(locations))}>Set up pinch volume knob</Button>
           <p className="field-hint">Look at the right corner, pinch to grab, turn your wrist, then release. Choose your Pinch In and Pinch Out labels in the setup; enable only one volume recipe.</p>
+          <Button type="button" variant="outline" disabled={editing !== null || calibration === null} onClick={() => setEditing(snapPointerRecipe(locations))}>Set up snap mouse pointer</Button>
+          <p className="field-hint">Snap to switch pointer mode on, point with your hand to move the pointer, pinch in and out quickly to click, or pinch and hold to drag; snap again to switch it off. Uses the snap and pinch models; a Mac needs Accessibility permission.</p>
           {automation?.recipes.some((recipe) => recipe.stages.some((stage) => stage.kind === "camera")) && <CameraArmSwitch armed={automation.cameraArmed === true} />}
           {automation && automation.recipes.length === 0 && (
             <p className="field-hint">No recipes yet. Create one to start controlling the volume with gestures.</p>

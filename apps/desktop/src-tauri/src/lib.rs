@@ -372,6 +372,14 @@ pub fn run() {
                     .set_motion_warning(settings.readiness_motion.into());
             }
             label_registry::prune_legacy_builtins(&handle);
+            // Core Audio and DisplayServices each take seconds on their first call in a process; take that now, off
+            // the main thread, rather than on the first gesture.
+            let _ = std::thread::Builder::new()
+                .name("prepare-controls".to_string())
+                .spawn(|| {
+                    volume_control::prepare_volume();
+                    system_control::prepare_brightness();
+                });
             label_runtime::spawn_timer(handle.clone());
             miss_recorder::register_shortcut(&handle);
             automation::AutomationRuntime::spawn_front_app_watcher(handle.clone());

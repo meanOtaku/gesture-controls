@@ -286,6 +286,22 @@ a { color:var(--ink); }
 .volume-knob__value span { font-family:var(--font-display); }
 html.overlay-document body::before { display:none; }
 
+/* Floating overlay slider, for a volume recipe whose device is a fader: the same flat look as the knob. */
+.volume-slider { position:relative; display:flex; align-items:center; gap:18px; padding:20px; background:var(--surface-2); border:2px solid var(--ink); border-radius:28px; animation:knob-enter .22s cubic-bezier(.2,.9,.3,1.2); transition:border-color .15s ease-out; }
+.volume-slider.grabbed { border-color:var(--yellow); }
+.volume-slider--vertical { flex-direction:row; height:260px; }
+.volume-slider--horizontal { flex-direction:column; width:260px; }
+.volume-slider__track { position:relative; overflow:hidden; border-radius:999px; background:var(--line-soft); }
+.volume-slider--vertical .volume-slider__track { width:14px; height:100%; }
+.volume-slider--horizontal .volume-slider__track { height:14px; width:100%; }
+.volume-slider__fill { position:absolute; border-radius:inherit; background:var(--yellow); transition:height .18s ease-out,width .18s ease-out; }
+.volume-slider--vertical .volume-slider__fill { left:0; right:0; bottom:0; height:calc(var(--volume-progress) * 1%); }
+.volume-slider--horizontal .volume-slider__fill { top:0; bottom:0; left:0; width:calc(var(--volume-progress) * 1%); }
+.volume-slider__value { display:grid; gap:5px; text-align:center; }
+.volume-slider__value strong { font:500 2.6rem/1 var(--font-display); color:var(--ink); }
+.volume-slider__value span { text-transform:uppercase; letter-spacing:.24em; color:var(--muted-foreground); font-size:.68rem; font-weight:700; font-family:var(--font-display); }
+.volume-slider__value small { color:var(--ink-3); max-width:9rem; }
+
 /* Status cards: label, big condensed value, then the detail line, stacked. */
 .overview-grid [data-slot="card-content"] > .label,.overview-grid [data-slot="card-content"] > strong,.overview-grid [data-slot="card-content"] > small { display:block; }
 .overview-grid [data-slot="card-content"] > strong { margin:.35rem 0 .2rem; font-size:2rem; line-height:1; text-transform:uppercase; letter-spacing:.02em; }

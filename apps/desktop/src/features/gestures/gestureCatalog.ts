@@ -1,5 +1,5 @@
 import type { HeuristicGesture, Recipe, RecipeStage } from "../../shared/protocol/events";
-import { heuristicOf } from "../recipes/recipeModel";
+import { heuristicOf, recipeUsesLabel } from "../recipes/recipeModel";
 
 /** One built-in wrist gesture, and the variants the app tells apart. */
 export interface WristGesture {
@@ -36,7 +36,7 @@ export function recipesUsingGesture(recipes: Recipe[], gesture: HeuristicGesture
 
 /** The enabled recipes that have a step on this model label, by name. */
 export function recipesUsingLabel(recipes: Recipe[], label: string): string[] {
-  return recipes.filter((recipe) => recipe.enabled && recipe.stages.some((stage) => stage.kind === "model" && stage.label === label)).map((recipe) => recipe.name);
+  return recipes.filter((recipe) => recipe.enabled && recipeUsesLabel(recipe, label)).map((recipe) => recipe.name);
 }
 
 /** The enabled recipes that use the STEM button, by name. */

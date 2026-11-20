@@ -973,9 +973,33 @@ The **Recipes** tab lists every recipe with an on/off switch, an Edit button and
 
 | Control | What it does | Platform support |
 | --- | --- | --- |
-| Volume | System output volume, with the knob shown on screen | macOS, Windows, Linux |
-| Brightness | Display brightness | macOS (presses the brightness keys, in sixteenth steps; needs **Accessibility** permission), Linux (`brightnessctl`), Windows (built-in displays only, through WMI) |
+| Volume | System output volume, shown on screen while you use it: as a knob for a rotation or step knob, as a slider for a horizontal or vertical fader | macOS (Core Audio, in the app; an output device Core Audio has no volume for falls back to AppleScript), Windows, Linux |
+| Brightness | Display brightness | macOS (the built-in display is set directly, in one-percent steps, with no permission needed; another display falls back to pressing the brightness keys, in sixteenth steps, which needs **Accessibility** permission), Linux (`brightnessctl`), Windows (built-in displays only, through WMI) |
 | Scroll | Scrolls the window under the pointer; turn one way for down, the other for up | macOS (needs **Accessibility** permission), Linux (`xdotool`, X11 only), Windows |
+| Mouse pointer | Your hand moves the pointer, and pinches click and drag (see below) | macOS (needs **Accessibility** permission), Linux (`xdotool`, X11 only), Windows |
+
+### Pointer mode: the mouse from the watch
+
+**Set up snap mouse pointer** on the Recipes tab makes a recipe ready to edit:
+
+1. **Snap** to switch pointer mode on. Snap again to switch it off.
+2. **Point with your hand.** Turn your forearm left and right to move the pointer across, and raise or lower your hand to move it up and down. Rolling the wrist does not move it. Slow movement moves it less, for precision, and fast movement more. Movement slower than a degree a second (tremor) is ignored.
+3. **Pinch in and out quickly** to click.
+4. **Pinch and hold** to press the button down. Move your hand to drag, then pinch out to let go.
+
+A pinch is detected about 0.4 seconds after it starts, and the pinch itself nudges the wrist. So when the press is detected, the pointer stops and goes back to where it was a moment before (**Click look-back**, default 400 ms), and the click lands where you were pointing.
+
+The button is never left down:
+
+- It comes up when pointer mode ends, whether by a snap, after 30 seconds with nothing happening, when the watch disconnects, on Escape, or because a conflict pauses the recipe.
+- It comes up if the hold has not been detected for 1.5 seconds, in case the release was missed.
+- A press with no hold or release within 2 seconds is forgotten.
+
+Pinches in the first 0.4 seconds after pointer mode comes on are ignored, because the snap that switched it on can look like one.
+
+Up and down depend on **Settings → Watch orientation** (which wrist, and which side the crown is on). If the pointer moves the wrong way, check those first.
+
+The recipe uses the snap, pinch-in, pinch-hold and pinch-out models, so they must be loaded and the model runtime in Live. The editor lets you change the speed, the look-back and the three click labels. A pointer recipe needs at least one step to switch it on: without one, your hand would move the pointer whenever the watch is connected.
 
 ### Button actions: media keys and mute
 

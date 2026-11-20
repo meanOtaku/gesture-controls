@@ -21,6 +21,7 @@ import { telemetryStore } from "../features/telemetry/store/telemetryStore";
 import { usePendingActions } from "../shared/hooks/usePendingActions";
 import { useStableCallback } from "../shared/hooks/useStableCallback";
 import { VolumeKnob } from "../features/overlay/components/VolumeKnob";
+import { VolumeSlider } from "../features/overlay/components/VolumeSlider";
 import {
   ACTION_ERROR_EVENT,
   PITCH_DETECTED_EVENT,
@@ -166,11 +167,20 @@ function OverlayApp() {
 
   return (
     <main className="overlay-shell">
-      <VolumeKnob
-        volume={overlay.volume}
-        grabbed={overlay.grabbed}
-        nativeVolumeError={overlay.lastNativeVolumeError}
-      />
+      {overlay.device === "horizontalFader" || overlay.device === "verticalFader" ? (
+        <VolumeSlider
+          volume={overlay.volume}
+          orientation={overlay.device === "verticalFader" ? "vertical" : "horizontal"}
+          grabbed={overlay.grabbed}
+          nativeVolumeError={overlay.lastNativeVolumeError}
+        />
+      ) : (
+        <VolumeKnob
+          volume={overlay.volume}
+          grabbed={overlay.grabbed}
+          nativeVolumeError={overlay.lastNativeVolumeError}
+        />
+      )}
     </main>
   );
 }

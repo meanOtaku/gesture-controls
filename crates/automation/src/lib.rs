@@ -12,6 +12,7 @@ mod flick;
 mod hammer;
 mod heuristics;
 mod pitch;
+mod pointer;
 mod recipe;
 mod roll;
 mod runner;
@@ -25,12 +26,14 @@ pub use device::{Device, DeviceKind, Output};
 pub use hammer::{HammerConfig, HammerDetector};
 pub use heuristics::HeuristicGestures;
 pub use pitch::{PitchConfig, PitchDetector, PitchDirection};
+pub use pointer::{PointerConfig, PointerEvent, PointerInputs, PointerTracker};
 pub use recipe::{
-    Action, Axis, Hold, MAX_APP_NAME_CHARS, MAX_APPS, MAX_KEYS_CHARS, MAX_STAGES, ModelHold,
-    Recipe, RecipeError, Stage, is_valid_gesture_id, is_valid_label, validate_recipe,
+    Action, Axis, Hold, MAX_APP_NAME_CHARS, MAX_APPS, MAX_KEYS_CHARS, MAX_POINTER_LOOKBACK_MS,
+    MAX_POINTER_PIXELS_PER_DEGREE, MAX_STAGES, ModelHold, Recipe, RecipeError, Stage,
+    is_valid_gesture_id, is_valid_label, validate_recipe,
 };
 pub use roll::{RollConfig, RollDetector, RollDirection};
-pub use runner::{RecipeRunner, RunnerPhase, Signals, TOGGLE_IDLE_NS};
+pub use runner::{POINTER_IDLE_NS, RecipeRunner, RunnerPhase, Signals, TOGGLE_IDLE_NS};
 pub use shake::{Shake, ShakeAxis, ShakeConfig, ShakeDetector};
 pub use swipe::{CrownSide, SwipeConfig, SwipeDetector, SwipeDirection, Wrist};
 pub use tap::{TapConfig, TapDetector, TapKind};

@@ -4,6 +4,7 @@ use serde::Serialize;
 
 use crate::device::Output;
 use crate::pitch::PitchDirection;
+use crate::pointer::{PointerConfig, PointerEvent, PointerInputs, PointerTracker};
 use crate::recipe::{Axis, Hold, ModelHold, Recipe, Stage};
 use crate::roll::RollDirection;
 use crate::shake::ShakeAxis;
@@ -47,11 +48,18 @@ pub struct Signals<'a> {
     pub cameras_held: Option<&'a BTreeSet<String>>,
     /// Gesture library gestures the camera first saw a moment ago, which still count as happening.
     pub cameras_pulsed: Option<&'a BTreeSet<String>>,
+    /// Which way along the watch's 3 o'clock axis the hand is: 1 towards it, -1 away (the watch worn so 3 o'clock
+    /// points at the elbow). 0, the default, counts as 1. Pointer mode needs it to tell raising the hand from lowering it.
+    pub hand_sign: f64,
 }
 
 /// A dial that a momentary step switched on switches itself off when it has not moved for this long, so a forgotten
 /// one cannot go on following the wrist.
 pub const TOGGLE_IDLE_NS: u64 = 6_000_000_000;
+
+/// Pointer mode switched on by a momentary step switches itself off after this long with the pointer still and the
+/// button up. Longer than a dial's, because reading what the pointer is on takes a while.
+pub const POINTER_IDLE_NS: u64 = 30_000_000_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -90,6 +98,10 @@ pub struct RecipeRunner {
     /// Total rotation since the chain completed, unwrapped so an endless knob can turn past 180 degrees.
     rotation: f64,
     last_position: f64,
+    /// Pointer mode while it is on.
+    pointer: Option<PointerTracker>,
+    /// What pointer mode has asked of the mouse since [`Self::take_pointer_events`] last looked.
+    pointer_events: Vec<PointerEvent>,
 }
 
 /// Shortest signed angle from `from` to `to`, in degrees, so crossing +/-180 does not jump.
@@ -112,6 +124,40 @@ impl RecipeRunner {
             last_angle: 0.0,
             rotation: 0.0,
             last_position: 0.0,
+            pointer: None,
+            pointer_events: Vec::new(),
+        }
+    }
+
+    /// What a pointer recipe asked of the mouse since the last call, in order.
+    pub fn take_pointer_events(&mut self) -> Vec<PointerEvent> {
+        std::mem::take(&mut self.pointer_events)
+    }
+
+    /// Ends pointer mode, letting the button go if it is down.
+    fn end_pointer(&mut self) {
+        if let Some(mut tracker) = self.pointer.take() {
+            tracker.end();
+            self.pointer_events.extend(tracker.take_events());
+        }
+    }
+
+    fn pointer_config(&self) -> Option<PointerConfig> {
+        match self.recipe.stages.last() {
+            Some(Stage::Pointer {
+                pixels_per_degree,
+                press_label,
+                hold_label,
+                release_label,
+                lookback_ms,
+            }) => Some(PointerConfig {
+                pixels_per_degree: *pixels_per_degree,
+                press_label: press_label.clone(),
+                hold_label: hold_label.clone(),
+                release_label: release_label.clone(),
+                lookback_ns: u64::from(*lookback_ms) * 1_000_000,
+            }),
+            _ => None,
         }
     }
 
@@ -130,6 +176,7 @@ impl RecipeRunner {
 
     /// Ends the interaction and keeps it ended until the user lets go of the chain and starts it again.
     pub fn cancel(&mut self) {
+        self.end_pointer();
         self.paired_grab = false;
         self.toggled = false;
         self.phase = RunnerPhase::Idle;
@@ -138,6 +185,7 @@ impl RecipeRunner {
 
     /// Ends any interaction (the recipe was disabled or is blocked by a conflict, or the link dropped).
     pub fn reset(&mut self) {
+        self.end_pointer();
         self.paired_grab = false;
         self.toggled = false;
         self.phase = RunnerPhase::Idle;
@@ -200,7 +248,7 @@ impl RecipeRunner {
                 ModelHold::OneShot => signals.cameras_pulsed,
             }
             .is_some_and(|gestures| gestures.contains(gesture)),
-            Stage::Drive { .. } => true,
+            Stage::Drive { .. } | Stage::Pointer { .. } => true,
         }
     }
 
@@ -238,6 +286,7 @@ impl RecipeRunner {
             }) => Some((axis, dead_zone_degrees, invert)),
             _ => None,
         };
+        let pointer = self.pointer_config();
         let mut chain_holds = self.recipe.enabled
             && !self.recipe.stages.is_empty()
             && self
@@ -283,7 +332,9 @@ impl RecipeRunner {
             }
             chain_holds &= self.paired_grab;
         }
-        if drive.is_some() && self.recipe.stages.iter().any(Stage::is_momentary) {
+        if (drive.is_some() || pointer.is_some())
+            && self.recipe.stages.iter().any(Stage::is_momentary)
+        {
             // A momentary step cannot be held, so in a dial recipe it is a switch: the dial comes on the first time
             // it happens (with everything else holding) and goes off the next time, when anything else lets go, or
             // when it has not moved for a while.
@@ -298,9 +349,14 @@ impl RecipeRunner {
             }
             let fresh = pulse && !self.pulse_was;
             self.pulse_was = pulse;
+            let idle_after = if pointer.is_some() {
+                POINTER_IDLE_NS
+            } else {
+                TOGGLE_IDLE_NS
+            };
             let idle = matches!(
                 (signals.now_ns, self.toggle_moved_ns),
-                (Some(now), Some(moved)) if now.saturating_sub(moved) > TOGGLE_IDLE_NS
+                (Some(now), Some(moved)) if now.saturating_sub(moved) > idle_after
             );
             if !steady || orientation.is_none() || idle {
                 self.toggled = false;
@@ -316,7 +372,38 @@ impl RecipeRunner {
                 self.latched = false;
             }
             self.paired_grab = false;
+            self.end_pointer();
             self.phase = RunnerPhase::Idle;
+            return None;
+        }
+        if let Some(config) = pointer {
+            let (true, Some(orientation)) = (chain_holds, orientation) else {
+                self.end_pointer();
+                self.phase = if gates_hold {
+                    RunnerPhase::Armed
+                } else {
+                    RunnerPhase::Idle
+                };
+                return None;
+            };
+            self.phase = RunnerPhase::Driving;
+            let tracker = self
+                .pointer
+                .get_or_insert_with(|| PointerTracker::new(config));
+            let hand_sign = if signals.hand_sign < 0.0 { -1.0 } else { 1.0 };
+            let acted = tracker.update(
+                orientation,
+                hand_sign,
+                signals.now_ns,
+                PointerInputs {
+                    edges: signals.model_edges,
+                    held: signals.models_held,
+                },
+            );
+            if acted || tracker.is_pressed() {
+                self.toggle_moved_ns = signals.now_ns;
+            }
+            self.pointer_events.extend(tracker.take_events());
             return None;
         }
         let Some((axis, dead_zone_degrees, invert)) = drive else {

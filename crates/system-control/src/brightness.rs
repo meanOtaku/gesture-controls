@@ -41,16 +41,128 @@ fn macos_key_script(steps: i32) -> Option<String> {
     ))
 }
 
+/// The Mac's built-in display brightness set directly, through macOS's DisplayServices framework: one-percent steps,
+/// no AppleScript, and no Accessibility permission. DisplayServices is not public API, so it is loaded at run time and
+/// the app falls back to pressing the brightness keys when it is missing or the main display is not one it controls
+/// (an external monitor).
 #[cfg(target_os = "macos")]
-struct MacOsBrightness;
+mod display_services {
+    use std::ffi::{c_char, c_void};
+    use std::sync::OnceLock;
+
+    type GetBrightness = unsafe extern "C" fn(display: u32, brightness: *mut f32) -> i32;
+    type SetBrightness = unsafe extern "C" fn(display: u32, brightness: f32) -> i32;
+
+    unsafe extern "C" {
+        fn dlopen(path: *const c_char, mode: i32) -> *mut c_void;
+        fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+    }
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    unsafe extern "C" {
+        fn CGMainDisplayID() -> u32;
+    }
+
+    const RTLD_LAZY: i32 = 1;
+
+    #[derive(Clone, Copy)]
+    pub struct DisplayServices {
+        get: GetBrightness,
+        set: SetBrightness,
+    }
+
+    impl DisplayServices {
+        /// The framework, once per process; `None` when this macOS does not have it.
+        pub fn load() -> Option<Self> {
+            static LOADED: OnceLock<Option<DisplayServices>> = OnceLock::new();
+            *LOADED.get_or_init(|| {
+                // SAFETY: valid C strings; a null result is checked before use, and the symbols have the signatures
+                // DisplayServices has had since macOS 10.12.
+                unsafe {
+                    let handle = dlopen(
+                        c"/System/Library/PrivateFrameworks/DisplayServices.framework/DisplayServices".as_ptr(),
+                        RTLD_LAZY,
+                    );
+                    if handle.is_null() {
+                        return None;
+                    }
+                    let get = dlsym(handle, c"DisplayServicesGetBrightness".as_ptr());
+                    let set = dlsym(handle, c"DisplayServicesSetBrightness".as_ptr());
+                    if get.is_null() || set.is_null() {
+                        return None;
+                    }
+                    Some(DisplayServices {
+                        get: std::mem::transmute::<*mut c_void, GetBrightness>(get),
+                        set: std::mem::transmute::<*mut c_void, SetBrightness>(set),
+                    })
+                }
+            })
+        }
+
+        /// The main display's brightness, 0 to 1.
+        pub fn brightness(&self) -> Option<f32> {
+            let mut value = -1.0f32;
+            // SAFETY: a valid display id and a pointer to an f32.
+            let status = unsafe { (self.get)(CGMainDisplayID(), &mut value) };
+            (status == 0 && value.is_finite() && (0.0..=1.0).contains(&value)).then_some(value)
+        }
+
+        pub fn set_brightness(&self, value: f32) -> bool {
+            // SAFETY: a valid display id and a value in range.
+            unsafe { (self.set)(CGMainDisplayID(), value.clamp(0.0, 1.0)) == 0 }
+        }
+    }
+}
+
+/// Sets the main display's brightness in one-percent steps through DisplayServices when the display allows it, else
+/// presses the brightness keys (a sixteenth of the range each) through AppleScript. Which one is chosen once, when the
+/// controller is made.
+#[cfg(target_os = "macos")]
+struct MacOsBrightness {
+    direct: Option<display_services::DisplayServices>,
+}
+
+#[cfg(target_os = "macos")]
+impl MacOsBrightness {
+    fn new() -> Self {
+        let direct = display_services::DisplayServices::load()
+            .filter(|services| services.brightness().is_some());
+        Self { direct }
+    }
+}
+
+/// The brightness after moving `current` (0 to 1) by `steps` percent.
+#[cfg(any(target_os = "macos", test))]
+fn moved_by_percent(current: f32, steps: i32) -> f32 {
+    (current + steps as f32 / 100.0).clamp(0.0, 1.0)
+}
 
 #[cfg(target_os = "macos")]
 impl BrightnessController for MacOsBrightness {
     fn step_percent(&self) -> f64 {
-        100.0 / 16.0
+        if self.direct.is_some() {
+            1.0
+        } else {
+            100.0 / 16.0
+        }
     }
 
     fn adjust_steps(&self, steps: i32) -> Result<(), ControlError> {
+        if let Some(services) = self.direct {
+            if steps == 0 {
+                return Ok(());
+            }
+            let current = services.brightness().ok_or_else(|| {
+                ControlError::Backend("the main display no longer reports its brightness".into())
+            })?;
+            return if services.set_brightness(moved_by_percent(current, steps)) {
+                Ok(())
+            } else {
+                Err(ControlError::Backend(
+                    "the main display refused the brightness change".into(),
+                ))
+            };
+        }
         let Some(script) = macos_key_script(steps) else {
             return Ok(());
         };
@@ -144,10 +256,20 @@ impl BrightnessController for UnsupportedBrightness {
     }
 }
 
+/// Does the slow once-per-process part of brightness control now: on a Mac, loading DisplayServices and its first
+/// read take several seconds. Call it on a background thread at start-up, so the first gesture does not wait.
+pub fn prepare_brightness() {
+    #[cfg(target_os = "macos")]
+    {
+        let _ =
+            display_services::DisplayServices::load().and_then(|services| services.brightness());
+    }
+}
+
 pub fn platform_brightness_controller() -> Box<dyn BrightnessController> {
     #[cfg(target_os = "macos")]
     {
-        Box::new(MacOsBrightness)
+        Box::new(MacOsBrightness::new())
     }
     #[cfg(target_os = "linux")]
     {
@@ -176,6 +298,34 @@ mod tests {
         assert!(down.contains("repeat 2 times") && down.contains("key code 145"));
         // A runaway request is capped rather than hammering the keyboard.
         assert!(macos_key_script(1000).unwrap().contains("repeat 32 times"));
+    }
+
+    #[test]
+    fn a_direct_change_moves_by_whole_percent_and_stops_at_the_ends() {
+        assert!((moved_by_percent(0.5, 3) - 0.53).abs() < 1e-6);
+        assert!((moved_by_percent(0.5, -10) - 0.40).abs() < 1e-6);
+        assert_eq!(moved_by_percent(0.98, 5), 1.0);
+        assert_eq!(moved_by_percent(0.01, -5), 0.0);
+    }
+
+    /// Reads the real main display's brightness through DisplayServices and sets the same value back.
+    #[cfg(target_os = "macos")]
+    #[test]
+    #[ignore = "touches the real display; run with --ignored"]
+    fn display_services_reads_and_rewrites_the_real_brightness() {
+        let start = std::time::Instant::now();
+        let services = display_services::DisplayServices::load().expect("DisplayServices loads");
+        let value = services
+            .brightness()
+            .expect("the main display reports its brightness");
+        let first = start.elapsed();
+        let start = std::time::Instant::now();
+        assert!(services.set_brightness(value));
+        assert!(services.brightness().is_some());
+        println!(
+            "brightness {value}: loading and the first read {first:?}, then a write and a read {:?}",
+            start.elapsed()
+        );
     }
 
     #[test]

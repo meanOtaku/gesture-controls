@@ -539,6 +539,56 @@ impl<R: AppleScriptRunner> VolumeController for MacOsVolumeController<R> {
     }
 }
 
+#[cfg(target_os = "macos")]
+mod core_audio;
+#[cfg(target_os = "macos")]
+pub use core_audio::CoreAudioVolumeController;
+
+/// Uses `primary` and, for any call it cannot do, `fallback`. On macOS the primary is Core Audio, in process and quick;
+/// the fallback is the AppleScript route, for an output device Core Audio has no volume for. A volume that is out of
+/// range is refused by both, so it is not retried.
+pub struct FallbackVolumeController<P, F> {
+    primary: P,
+    fallback: F,
+}
+
+impl<P, F> FallbackVolumeController<P, F> {
+    pub fn new(primary: P, fallback: F) -> Self {
+        Self { primary, fallback }
+    }
+}
+
+impl<P: VolumeController, F: VolumeController> FallbackVolumeController<P, F> {
+    fn either<T>(
+        &self,
+        call: impl Fn(&dyn VolumeController) -> Result<T, VolumeError>,
+    ) -> Result<T, VolumeError> {
+        match call(&self.primary) {
+            Err(VolumeError::InvalidVolume) => Err(VolumeError::InvalidVolume),
+            Err(_) => call(&self.fallback),
+            ok => ok,
+        }
+    }
+}
+
+impl<P: VolumeController, F: VolumeController> VolumeController for FallbackVolumeController<P, F> {
+    fn get_volume(&self) -> Result<f32, VolumeError> {
+        self.either(|controller| controller.get_volume())
+    }
+
+    fn set_volume(&self, volume: f32) -> Result<(), VolumeError> {
+        self.either(|controller| controller.set_volume(volume))
+    }
+
+    fn get_muted(&self) -> Result<bool, VolumeError> {
+        self.either(|controller| controller.get_muted())
+    }
+
+    fn set_muted(&self, muted: bool) -> Result<(), VolumeError> {
+        self.either(|controller| controller.set_muted(muted))
+    }
+}
+
 /// Windows Core Audio adapter for the current default multimedia render device.
 /// The endpoint is resolved for every operation, so default-device changes do
 /// not leave the application holding a stale COM interface.
@@ -791,6 +841,16 @@ impl VolumeController for UnsupportedVolumeController {
     }
 }
 
+/// Does the slow once-per-process part of volume control now: on a Mac, Core Audio's first call starts the audio
+/// system, which takes several seconds; later calls take under a millisecond. Call it on a background thread at
+/// start-up, so the first gesture does not wait.
+pub fn prepare_volume() {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = CoreAudioVolumeController.get_volume();
+    }
+}
+
 pub fn platform_volume_controller() -> Box<dyn VolumeController> {
     #[cfg(target_os = "windows")]
     {
@@ -798,7 +858,10 @@ pub fn platform_volume_controller() -> Box<dyn VolumeController> {
     }
     #[cfg(target_os = "macos")]
     {
-        Box::new(MacOsVolumeController::default())
+        Box::new(FallbackVolumeController::new(
+            CoreAudioVolumeController,
+            MacOsVolumeController::default(),
+        ))
     }
     #[cfg(target_os = "linux")]
     {

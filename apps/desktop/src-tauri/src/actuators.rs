@@ -1,4 +1,4 @@
-//! Carries out brightness and scroll changes asked for by recipes.
+//! Carries out brightness, scroll and pointer changes asked for by recipes.
 //!
 //! Both are relative: a recipe's device says "move by this fraction of the range", and fractions arriving faster
 //! than the OS can be driven are added together (never dropped) and applied in one go. The native calls can be
@@ -9,13 +9,13 @@ use std::sync::mpsc::{Sender, channel};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use automation::Action;
+use automation::{Action, PointerEvent};
 use serde::Serialize;
 use system_control::{
     Accumulator, BrightnessController, ControlError, KeyCombo, MAX_PIXELS_PER_CALL,
-    MediaController, MediaKey, ScrollController, ShortcutController,
-    platform_brightness_controller, platform_media_controller, platform_scroll_controller,
-    platform_shortcut_controller,
+    MAX_POINTER_PIXELS_PER_CALL, MediaController, MediaKey, PointerController, ScrollController,
+    ShortcutController, platform_brightness_controller, platform_media_controller,
+    platform_pointer_controller, platform_scroll_controller, platform_shortcut_controller,
 };
 use tauri::{AppHandle, Emitter, Manager};
 use tracing::warn;
@@ -46,6 +46,24 @@ enum Command {
     Press(Action),
     /// A keyboard-shortcut recipe fired: press these keys.
     Shortcut(String),
+    /// Pointer mode moved the pointer or changed the button.
+    Pointer(Vec<PointerEvent>),
+}
+
+/// Merges runs of moves into one, keeping every click and button change in its place, so a backlog of moves never
+/// replays one by one and a click never lands before the move that came first.
+pub fn merge_pointer_events(events: impl IntoIterator<Item = PointerEvent>) -> Vec<PointerEvent> {
+    let mut merged: Vec<PointerEvent> = Vec::new();
+    for event in events {
+        match (merged.last_mut(), event) {
+            (Some(PointerEvent::Move { dx, dy }), PointerEvent::Move { dx: x, dy: y }) => {
+                *dx += x;
+                *dy += y;
+            }
+            _ => merged.push(event),
+        }
+    }
+    merged
 }
 
 /// Presses keyboard shortcuts, each at most once per [`KEY_COOLDOWN`].
@@ -85,8 +103,13 @@ pub struct Core {
     brightness: Box<dyn BrightnessController>,
     scroll: Box<dyn ScrollController>,
     media: Box<dyn MediaController>,
+    pointer: Box<dyn PointerController>,
     brightness_acc: Accumulator,
     scroll_acc: Accumulator,
+    pointer_x: Accumulator,
+    pointer_y: Accumulator,
+    /// The left button is down because pointer mode pressed it.
+    pointer_down: bool,
     last_pressed: HashMap<Action, Instant>,
 }
 
@@ -95,14 +118,56 @@ impl Core {
         brightness: Box<dyn BrightnessController>,
         scroll: Box<dyn ScrollController>,
         media: Box<dyn MediaController>,
+        pointer: Box<dyn PointerController>,
     ) -> Self {
         Self {
             brightness,
             scroll,
             media,
+            pointer,
             brightness_acc: Accumulator::default(),
             scroll_acc: Accumulator::default(),
+            pointer_x: Accumulator::default(),
+            pointer_y: Accumulator::default(),
+            pointer_down: false,
             last_pressed: HashMap::new(),
+        }
+    }
+
+    /// Carries out one of pointer mode's requests. Moves carry fractions of a pixel over to the next one.
+    pub fn pointer(&mut self, event: PointerEvent) -> Result<(), ControlError> {
+        match event {
+            PointerEvent::Move { dx, dy } => {
+                let limit = MAX_POINTER_PIXELS_PER_CALL;
+                let x = self.pointer_x.take(dx, 1.0).clamp(-limit, limit);
+                let y = self.pointer_y.take(dy, 1.0).clamp(-limit, limit);
+                if x == 0 && y == 0 {
+                    return Ok(());
+                }
+                self.pointer.move_by(x, y, self.pointer_down)
+            }
+            PointerEvent::Click => {
+                if self.pointer_down {
+                    // A click while the button is down would only let it go: do that, once.
+                    self.pointer_down = false;
+                    return self.pointer.button(false);
+                }
+                self.pointer.click()
+            }
+            PointerEvent::Press => {
+                if self.pointer_down {
+                    return Ok(());
+                }
+                self.pointer_down = true;
+                self.pointer.button(true)
+            }
+            PointerEvent::Release => {
+                if !self.pointer_down {
+                    return Ok(());
+                }
+                self.pointer_down = false;
+                self.pointer.button(false)
+            }
         }
     }
 
@@ -166,6 +231,15 @@ impl Core {
         match action {
             Action::Brightness => self.brightness_acc.clear(),
             Action::Scroll => self.scroll_acc.clear(),
+            Action::Pointer => {
+                self.pointer_x.clear();
+                self.pointer_y.clear();
+                if self.pointer_down {
+                    // Pointer mode ended with the button down: never leave it held.
+                    self.pointer_down = false;
+                    let _ = self.pointer.button(false);
+                }
+            }
             _ => {}
         }
     }
@@ -209,6 +283,12 @@ impl Actuators {
     pub fn shortcut(&self, app: &AppHandle, keys: String) {
         self.send(app, Command::Shortcut(keys));
     }
+
+    pub fn pointer(&self, app: &AppHandle, events: Vec<PointerEvent>) {
+        if !events.is_empty() {
+            self.send(app, Command::Pointer(events));
+        }
+    }
 }
 
 /// Tells the UI once when an action starts failing, and quietly notes when it recovers.
@@ -245,6 +325,7 @@ fn run_worker(app: AppHandle, rx: std::sync::mpsc::Receiver<Command>) {
         platform_brightness_controller(),
         platform_scroll_controller(),
         platform_media_controller(),
+        platform_pointer_controller(),
     );
     let mut shortcuts = ShortcutPresser::new(platform_shortcut_controller());
     let mut failing: Option<Action> = None;
@@ -253,6 +334,7 @@ fn run_worker(app: AppHandle, rx: std::sync::mpsc::Receiver<Command>) {
         let mut pending: Vec<(Action, f64)> = Vec::new();
         let mut presses: Vec<Action> = Vec::new();
         let mut keys: Vec<String> = Vec::new();
+        let mut pointer: Vec<PointerEvent> = Vec::new();
         let mut handle =
             |command: Command, core: &mut Core, pending: &mut Vec<(Action, f64)>| match command {
                 Command::Delta(action, fraction) => {
@@ -261,10 +343,18 @@ fn run_worker(app: AppHandle, rx: std::sync::mpsc::Receiver<Command>) {
                         None => pending.push((action, fraction)),
                     }
                 }
+                Command::Reset(Action::Pointer) => {
+                    // Earlier pointer events still go first, so a release is not overtaken by a press before it.
+                    for event in merge_pointer_events(pointer.drain(..)) {
+                        let _ = core.pointer(event);
+                    }
+                    core.reset(Action::Pointer);
+                }
                 Command::Reset(action) => {
                     pending.retain(|(a, _)| *a != action);
                     core.reset(action);
                 }
+                Command::Pointer(events) => pointer.extend(events),
                 Command::Press(action) => presses.push(action),
                 Command::Shortcut(combo) => keys.push(combo),
             };
@@ -291,6 +381,9 @@ fn run_worker(app: AppHandle, rx: std::sync::mpsc::Receiver<Command>) {
                 report(&app, &mut failing, Action::Shortcut, result);
             }
         }
+        for event in merge_pointer_events(pointer) {
+            report(&app, &mut failing, Action::Pointer, core.pointer(event));
+        }
         for (action, fraction) in pending {
             report(&app, &mut failing, action, core.deliver(action, fraction));
             if action == Action::Scroll {
@@ -311,11 +404,33 @@ mod tests {
         brightness: Vec<i32>,
         scroll: Vec<i32>,
         keys: Vec<MediaKey>,
+        pointer: Vec<String>,
     }
 
     struct FakeBrightness(Arc<Mutex<Log>>, f64);
     struct FakeScroll(Arc<Mutex<Log>>);
     struct FakeMedia(Arc<Mutex<Log>>);
+    struct FakePointer(Arc<Mutex<Log>>);
+
+    impl PointerController for FakePointer {
+        fn move_by(&self, dx: i32, dy: i32, dragging: bool) -> Result<(), ControlError> {
+            let kind = if dragging { "drag" } else { "move" };
+            self.0
+                .lock()
+                .unwrap()
+                .pointer
+                .push(format!("{kind} {dx} {dy}"));
+            Ok(())
+        }
+        fn button(&self, down: bool) -> Result<(), ControlError> {
+            self.0
+                .lock()
+                .unwrap()
+                .pointer
+                .push(if down { "down" } else { "up" }.into());
+            Ok(())
+        }
+    }
 
     impl MediaController for FakeMedia {
         fn press(&self, key: MediaKey) -> Result<(), ControlError> {
@@ -387,9 +502,65 @@ mod tests {
                 Box::new(FakeBrightness(log.clone(), step_percent)),
                 Box::new(FakeScroll(log.clone())),
                 Box::new(FakeMedia(log.clone())),
+                Box::new(FakePointer(log.clone())),
             ),
             log,
         )
+    }
+
+    fn moves(dx: f64, dy: f64) -> PointerEvent {
+        PointerEvent::Move { dx, dy }
+    }
+
+    #[test]
+    fn runs_of_pointer_moves_are_merged_but_clicks_stay_in_their_place() {
+        let merged = merge_pointer_events([
+            moves(1.0, 0.5),
+            moves(2.0, 0.5),
+            PointerEvent::Click,
+            moves(-1.0, 0.0),
+            PointerEvent::Press,
+            PointerEvent::Release,
+        ]);
+        assert_eq!(
+            merged,
+            vec![
+                moves(3.0, 1.0),
+                PointerEvent::Click,
+                moves(-1.0, 0.0),
+                PointerEvent::Press,
+                PointerEvent::Release
+            ]
+        );
+    }
+
+    #[test]
+    fn the_pointer_moves_in_whole_pixels_drags_while_pressed_and_a_reset_lets_go() {
+        let (mut core, log) = core(1.0);
+        core.pointer(moves(0.6, -0.4)).unwrap(); // nothing whole yet
+        core.pointer(moves(0.6, -0.8)).unwrap(); // 1.2, -1.2: one pixel each way
+        core.pointer(PointerEvent::Click).unwrap();
+        core.pointer(PointerEvent::Press).unwrap();
+        core.pointer(PointerEvent::Press).unwrap(); // already down: nothing more
+        core.pointer(moves(5.0, 0.0)).unwrap();
+        core.reset(Action::Pointer);
+        core.reset(Action::Pointer); // already up: nothing more
+        core.pointer(PointerEvent::Release).unwrap();
+        assert_eq!(
+            log.lock().unwrap().pointer,
+            vec!["move 1 -1", "down", "up", "down", "drag 5 0", "up"]
+        );
+    }
+
+    #[test]
+    fn a_glitch_cannot_throw_the_pointer_across_the_screen() {
+        let (mut core, log) = core(1.0);
+        core.pointer(moves(1e6, -1e6)).unwrap();
+        let limit = MAX_POINTER_PIXELS_PER_CALL;
+        assert_eq!(
+            log.lock().unwrap().pointer,
+            vec![format!("move {limit} -{limit}")]
+        );
     }
 
     #[test]

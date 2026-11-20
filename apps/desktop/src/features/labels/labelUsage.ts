@@ -34,14 +34,38 @@ export interface UsageSources {
   models: Pick<LabelModel, "id" | "label" | "state">[];
   /** What the model registry holds about each label, from the desktop. */
   registry?: Record<string, RegistryUsage>;
-  recipes: { id: string; name: string; enabled?: boolean; stages: { kind: string; label?: string; gesture?: string }[] }[];
+  recipes: { id: string; name: string; enabled?: boolean; stages: UsageStage[] }[];
+}
+
+/** A recipe step as far as label usage needs it. */
+export type UsageStage = {
+  kind: string;
+  label?: string;
+  gesture?: string;
+  startLabel?: string;
+  endLabel?: string;
+  pressLabel?: string;
+  holdLabel?: string;
+  releaseLabel?: string;
+};
+
+/** The model labels a step needs: a model step's label, a grab/release pair's two, a pointer step's three. */
+export function usageStageLabels(stage: UsageStage): string[] {
+  const labels = stage.kind === "model"
+    ? [stage.label]
+    : stage.kind === "modelPair"
+      ? [stage.startLabel, stage.endLabel]
+      : stage.kind === "pointer"
+        ? [stage.pressLabel, stage.holdLabel, stage.releaseLabel]
+        : [];
+  return labels.filter((label): label is string => label !== undefined);
 }
 
 /** Recipes with a model step for the label, or a camera step for one of the label's gestures. */
 export function recipesUsing(labelId: string, sources: Pick<UsageSources, "gestures" | "recipes">) {
   const gestureIds = new Set(sources.gestures.filter((gesture) => gesture.labelId === labelId).map((gesture) => gesture.id));
   return sources.recipes.filter((recipe) =>
-    recipe.stages.some((stage) => (stage.kind === "model" && stage.label === labelId) || (stage.kind === "camera" && stage.gesture !== undefined && gestureIds.has(stage.gesture))),
+    recipe.stages.some((stage) => usageStageLabels(stage).includes(labelId) || (stage.kind === "camera" && stage.gesture !== undefined && gestureIds.has(stage.gesture))),
   );
 }
 

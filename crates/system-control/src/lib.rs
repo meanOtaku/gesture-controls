@@ -1,18 +1,20 @@
 //! Controls for the parts of the computer a gesture recipe can drive besides volume: screen brightness,
-//! scrolling, media keys and keyboard shortcuts. Each is a small trait with one adapter per platform, so the recipe engine never knows which OS it
+//! scrolling, the mouse pointer, media keys and keyboard shortcuts. Each is a small trait with one adapter per platform, so the recipe engine never knows which OS it
 //! is on, and so the quantizing logic that sits above them can be tested without touching the real machine.
 
 mod accumulator;
 mod brightness;
 mod front_app;
 mod media;
+mod pointer;
 mod scroll;
 mod shortcut;
 
 pub use accumulator::Accumulator;
-pub use brightness::{BrightnessController, platform_brightness_controller};
+pub use brightness::{BrightnessController, platform_brightness_controller, prepare_brightness};
 pub use front_app::front_app;
 pub use media::{MediaController, MediaKey, platform_media_controller};
+pub use pointer::{MAX_POINTER_PIXELS_PER_CALL, PointerController, platform_pointer_controller};
 pub use scroll::{MAX_PIXELS_PER_CALL, ScrollController, platform_scroll_controller};
 pub use shortcut::{Key, KeyCombo, NamedKey, ShortcutController, platform_shortcut_controller};
 

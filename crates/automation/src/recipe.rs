@@ -21,6 +21,8 @@ pub enum Action {
     Mute,
     /// Press the recipe's keyboard shortcut ([`Recipe::keys`]) once. A trigger.
     Shortcut,
+    /// Move the mouse pointer with the hand and click with a pinch. Its last stage is a [`Stage::Pointer`].
+    Pointer,
 }
 
 impl Action {
@@ -48,6 +50,7 @@ impl Action {
             Action::PreviousTrack => "previousTrack",
             Action::Mute => "mute",
             Action::Shortcut => "shortcut",
+            Action::Pointer => "pointer",
         }
     }
 }
@@ -161,6 +164,20 @@ pub enum Stage {
     /// A gesture from the Gesture library (by id), seen by the camera. Only works while the app is open and its
     /// camera is on; see `report_camera_gestures` in the desktop.
     Camera { gesture: String, hold: ModelHold },
+    /// The hand moving the mouse pointer: pointing the forearm left and right moves it across, raising and lowering
+    /// the hand moves it up and down. The last stage of a [`Action::Pointer`] recipe, and only of one.
+    ///
+    /// Clicks come from three model labels. A fresh `press_label` start freezes the pointer and puts it back where it
+    /// was `lookback_ms` before, undoing the pinch's own movement and the detection's delay. A `release_label` start
+    /// soon after is a click. If `hold_label` is detected first, the button goes down and stays down (dragging as the
+    /// hand moves) until `release_label`, until `hold_label` has been gone a while, or until pointer mode ends.
+    Pointer {
+        pixels_per_degree: f64,
+        press_label: String,
+        hold_label: String,
+        release_label: String,
+        lookback_ms: u32,
+    },
     /// The wrist rotating about an axis, measured from where the hold began. Always the last stage; it
     /// supplies the continuous value. Movement inside `dead_zone_degrees` of the start is ignored, and
     /// `invert` flips the direction for a watch worn the other way round.
@@ -203,6 +220,8 @@ pub struct Recipe {
 }
 
 pub const MAX_KEYS_CHARS: usize = 40;
+pub const MAX_POINTER_PIXELS_PER_DEGREE: f64 = 200.0;
+pub const MAX_POINTER_LOOKBACK_MS: u32 = 1500;
 pub const MAX_APPS: usize = 8;
 pub const MAX_APP_NAME_CHARS: usize = 60;
 
@@ -273,6 +292,18 @@ pub enum RecipeError {
     InvalidDeadZone,
     #[error("the device settings are out of range")]
     InvalidDevice,
+    #[error(
+        "a pointer recipe ends with the pointer step, and has no wrist rotation or grab/release pair"
+    )]
+    PointerNeedsPointerStage,
+    #[error("a pointer recipe needs a step before the pointer that switches it on, such as a snap")]
+    PointerNeedsSwitch,
+    #[error("only a pointer recipe can have the pointer step")]
+    PointerStageOnlyForPointer,
+    #[error(
+        "the pointer step needs a speed of more than 0 and at most {MAX_POINTER_PIXELS_PER_DEGREE} pixels a degree, a look-back of at most {MAX_POINTER_LOOKBACK_MS} ms, and valid model labels, with press and release different"
+    )]
+    InvalidPointer,
 }
 
 /// Checks a recipe is well formed. It does not check that locations exist; the host knows those.
@@ -335,6 +366,56 @@ pub fn validate_recipe(recipe: &Recipe) -> Result<(), RecipeError> {
         })
     {
         return Err(RecipeError::InvalidApps);
+    }
+    let pointer_stages = recipe
+        .stages
+        .iter()
+        .filter(|stage| matches!(stage, Stage::Pointer { .. }))
+        .count();
+    if recipe.action == Action::Pointer {
+        if pointer_stages != 1
+            || !matches!(last, Stage::Pointer { .. })
+            || recipe
+                .stages
+                .iter()
+                .any(|stage| matches!(stage, Stage::Drive { .. } | Stage::ModelPair { .. }))
+        {
+            return Err(RecipeError::PointerNeedsPointerStage);
+        }
+        if rest.is_empty() {
+            // With nothing to switch it on, the hand would drive the mouse whenever the watch is connected.
+            return Err(RecipeError::PointerNeedsSwitch);
+        }
+        if let Stage::Pointer {
+            pixels_per_degree,
+            press_label,
+            hold_label,
+            release_label,
+            lookback_ms,
+        } = last
+            && !(pixels_per_degree.is_finite()
+                && *pixels_per_degree > 0.0
+                && *pixels_per_degree <= MAX_POINTER_PIXELS_PER_DEGREE
+                && *lookback_ms <= MAX_POINTER_LOOKBACK_MS
+                && is_valid_label(press_label)
+                && is_valid_label(hold_label)
+                && is_valid_label(release_label)
+                && press_label != release_label)
+        {
+            return Err(RecipeError::InvalidPointer);
+        }
+        for (index, stage) in rest.iter().enumerate() {
+            if rest[..index].contains(stage) {
+                return Err(RecipeError::RepeatedStage);
+            }
+        }
+        return recipe
+            .device
+            .validate()
+            .map_err(|_| RecipeError::InvalidDevice);
+    }
+    if pointer_stages > 0 {
+        return Err(RecipeError::PointerStageOnlyForPointer);
     }
     if recipe.action == Action::Shortcut
         && !recipe.keys.as_deref().is_some_and(|keys| {

@@ -8,13 +8,15 @@ import { Label } from "../../../components/ui/label";
 import { Switch } from "../../../components/ui/switch";
 import type { NumberSpec } from "../../../shared/forms/numberField";
 import { useNumberDrafts } from "../../../shared/forms/useNumberDrafts";
-import type { CalibrationLocation, ModelHold, Recipe, RecipeAction, RecipeStage } from "../../../shared/protocol/events";
+import type { CalibrationLocation, ModelHold, Recipe, RecipeAction } from "../../../shared/protocol/events";
 import {
   ACTIONS,
   AXES,
   DEAD_ZONE_SPEC,
   DEVICE_KINDS,
   HOLDS,
+  POINTER_LOOKBACK_SPEC,
+  POINTER_SPEED_SPEC,
   MAX_RECIPE_NAME_CHARS,
   MAX_STAGES,
   buildDevice,
@@ -25,7 +27,10 @@ import {
   driveStage,
   holdsFor,
   isMomentaryStage,
+  isPointer,
   isTrigger,
+  pointerLabelsProblem,
+  pointerStage,
   shortcutProblem,
   appsProblem,
   parseApps,
@@ -34,9 +39,8 @@ import {
   type Axis,
   type DeviceKind,
   type HoldKind,
+  type LeadingStage,
 } from "../recipeModel";
-
-type LeadingStage = Exclude<RecipeStage, { kind: "drive" }>;
 
 type RecipeEditorProps = {
   recipe: Recipe;
@@ -72,26 +76,32 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
   const [keys, setKeys] = useState(recipe.keys ?? "");
   const [keysTouched, setKeysTouched] = useState(false);
   const [appsText, setAppsText] = useState((recipe.apps ?? []).join(", "));
+  const initialPointer = useMemo(() => pointerStage(recipe), [recipe]);
+  const [pressLabel, setPressLabel] = useState(initialPointer.pressLabel);
+  const [holdLabel, setHoldLabel] = useState(initialPointer.holdLabel);
+  const [releaseLabel, setReleaseLabel] = useState(initialPointer.releaseLabel);
   const [serverError, setServerError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const initialNumbers = useMemo(() => deviceNumbers(recipe.device, recipe.action), [recipe.device, recipe.action]);
   const specs = useMemo(() => {
     const device = deviceSpecs(kind, action);
-    return { deadZone: DEAD_ZONE_SPEC, a: device.a, b: device.b ?? UNUSED_SPEC };
+    return { deadZone: DEAD_ZONE_SPEC, a: device.a, b: device.b ?? UNUSED_SPEC, speed: POINTER_SPEED_SPEC, lookback: POINTER_LOOKBACK_SPEC };
   }, [kind, action]);
   // Switching device or what it controls resets its two numbers to the defaults for that pair, because the same
   // number means something different in points, percent and pixels. The dead zone is the recipe's own.
   const numbers = kind === initialKind && action === initialAction ? initialNumbers : defaultNumbers(kind, action);
   const committed = useMemo(
-    () => ({ deadZone: initialDrive.deadZoneDegrees, a: numbers.a, b: numbers.b }),
-    [initialDrive.deadZoneDegrees, numbers.a, numbers.b],
+    () => ({ deadZone: initialDrive.deadZoneDegrees, a: numbers.a, b: numbers.b, speed: initialPointer.pixelsPerDegree, lookback: initialPointer.lookbackMs }),
+    [initialDrive.deadZoneDegrees, numbers.a, numbers.b, initialPointer.pixelsPerDegree, initialPointer.lookbackMs],
   );
   const drafts = useNumberDrafts(specs, committed);
 
   const nameError = nameTouched ? nameProblem(name) : null;
   const trigger = isTrigger(action);
-  const problem = chainProblem(steps, locations, trigger);
+  const pointer = isPointer(action);
+  const problem = chainProblem(steps, locations, trigger, pointer);
+  const pointerError = pointer ? pointerLabelsProblem({ pressLabel, holdLabel, releaseLabel }) : null;
   const keysError = action === "shortcut" ? shortcutProblem(keys) : null;
   const apps = parseApps(appsText);
   const appsError = appsProblem(apps);
@@ -105,7 +115,7 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
   const setStep = (index: number, next: LeadingStage) => setSteps((current) => current.map((s, i) => (i === index ? next : s)));
   const removeStep = (index: number) => setSteps((current) => current.filter((_, i) => i !== index));
 
-  const field = (key: "deadZone" | "a" | "b") => (
+  const field = (key: "deadZone" | "a" | "b" | "speed" | "lookback") => (
     <NumberField
       id={`${uid}-${key}`}
       spec={specs[key]}
@@ -124,7 +134,7 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
       document.getElementById(nameId)?.focus();
       return;
     }
-    if (problem !== null) return;
+    if (problem !== null || pointerError !== null) return;
     if (appsError !== null) {
       document.getElementById(`${uid}-apps`)?.focus();
       return;
@@ -140,17 +150,27 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
       document.getElementById(`${uid}-${result.firstInvalid}`)?.focus();
       return;
     }
-    const { deadZone, a, b } = result?.values ?? { deadZone: DEAD_ZONE_SPEC.defaultValue, ...defaultNumbers("rotationKnob") };
+    const { deadZone, a, b, speed, lookback } = result?.values ?? {
+      deadZone: DEAD_ZONE_SPEC.defaultValue,
+      ...defaultNumbers("rotationKnob"),
+      speed: POINTER_SPEED_SPEC.defaultValue,
+      lookback: POINTER_LOOKBACK_SPEC.defaultValue,
+    };
+    const last = pointer
+      ? [{ kind: "pointer" as const, pixelsPerDegree: speed, pressLabel, holdLabel, releaseLabel, lookbackMs: Math.round(lookback) }]
+      : trigger
+        ? []
+        : [{ kind: "drive" as const, axis, deadZoneDegrees: deadZone, invert }];
     setSaving(true);
     setServerError(null);
     const error = await onSave({
       ...recipe,
       name: name.trim(),
-      stages: trigger ? steps : [...steps, { kind: "drive", axis, deadZoneDegrees: deadZone, invert }],
+      stages: [...steps, ...last],
       action,
       keys: action === "shortcut" ? keys.trim() : undefined,
       apps: apps.length > 0 ? apps : undefined,
-      device: trigger ? buildDevice("rotationKnob", defaultNumbers("rotationKnob")) : buildDevice(kind, { a, b }, action),
+      device: trigger || pointer ? buildDevice("rotationKnob", defaultNumbers("rotationKnob")) : buildDevice(kind, { a, b }, action),
     });
     setSaving(false);
     if (error !== null) setServerError(error);
@@ -208,7 +228,7 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
                   <option value="headAt">Look at</option>
                   <option value="hold">Gesture</option>
                   <option value="model">Model label</option>
-                  {!trigger && <option value="modelPair">Grab / release</option>}
+                  {!trigger && !pointer && <option value="modelPair">Grab / release</option>}
                   <option value="camera">Camera gesture</option>
                 </select>
                 {step.kind === "headAt" ? (
@@ -284,7 +304,7 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
                       onChange={(event) => setStep(index, { ...step, hold: event.target.value as ModelHold })}
                     >
                       <option value="held">While detected</option>
-                      {(trigger || step.hold === "oneShot") && <option value="oneShot">Once, when detected</option>}
+                      {(trigger || pointer || step.hold === "oneShot") && <option value="oneShot">Once, when detected</option>}
                     </select>
                   </>
                 ) : (
@@ -306,7 +326,7 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
             );
           })}
         </ol>
-        {steps.length === 0 && !trigger && <p className="field-hint">No steps: the wrist rotation below starts the moment the watch has an orientation. Add a step to gate it.</p>}
+        {steps.length === 0 && !trigger && !pointer && <p className="field-hint">No steps: the wrist rotation below starts the moment the watch has an orientation. Add a step to gate it.</p>}
         <div className="recipe-step-add">
           <Button
             type="button"
@@ -366,7 +386,10 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
         {steps.some((step) => step.kind === "hold" && step.hold === "hammer") && (
           <p className="field-hint">A hammer is your fist brought down on your other palm (a clap works too): the moving arm stopping dead, then resting. It fires about a quarter of a second after the blow.</p>
         )}
-        {!trigger && steps.some(isMomentaryStage) && (
+        {pointer && steps.some(isMomentaryStage) && (
+          <p className="field-hint">In a pointer recipe a momentary step is a switch: do it once (a snap, say) to turn pointer mode on, and again to turn it off. Pointer mode also turns itself off after 30 seconds with the pointer still, or when another step lets go, and the mouse button is never left down when it does. Pinches in the first 0.4 seconds after it comes on are ignored, because a snap can look like one.</p>
+        )}
+        {!trigger && !pointer && steps.some(isMomentaryStage) && (
           <p className="field-hint">In a dial recipe a momentary step is a switch: do it once to turn the dial on, turn your wrist, then do it again to turn the dial off. The dial also turns itself off after six seconds without moving, or when another step lets go. A tap or double tap disturbs the wrist least.</p>
         )}
         {steps.some((step) => step.kind === "model" || step.kind === "modelPair") && (
@@ -439,7 +462,25 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
         )}
       </fieldset>
 
-      {!trigger && (
+      {pointer && (
+        <fieldset className="recipe-steps">
+          <legend>Then point with your hand</legend>
+          <p className="field-hint">Point your forearm left and right to move the pointer across, and raise or lower your hand to move it up and down; rolling the wrist does not move it. Which way is up depends on Settings → Watch orientation (which wrist, and which side the crown is on).</p>
+          <div className="recipe-row">
+            {field("speed")}
+            {field("lookback")}
+          </div>
+          <div className="recipe-row">
+            <label>Press label<input className={NATIVE_SELECT} aria-label="Press label" list={`${uid}-labels`} value={pressLabel} spellCheck={false} onChange={(e) => setPressLabel(e.target.value.trim().toLowerCase())} /></label>
+            <label>Hold label<input className={NATIVE_SELECT} aria-label="Hold label" list={`${uid}-labels`} value={holdLabel} spellCheck={false} onChange={(e) => setHoldLabel(e.target.value.trim().toLowerCase())} /></label>
+            <label>Release label<input className={NATIVE_SELECT} aria-label="Release label" list={`${uid}-labels`} value={releaseLabel} spellCheck={false} onChange={(e) => setReleaseLabel(e.target.value.trim().toLowerCase())} /></label>
+          </div>
+          <p className="field-hint">A press start followed soon by a release is a click. If the hold is detected first, the button goes down and the hand drags until the release; the button also comes up if the hold is gone for 1.5 seconds, in case the release is missed. A press with nothing after it for 2 seconds is forgotten.</p>
+          {pointerError && <p className="field-error" role="alert">{pointerError}</p>}
+        </fieldset>
+      )}
+
+      {!trigger && !pointer && (
         <>
       <fieldset className="recipe-steps">
         <legend>Then turn your wrist</legend>

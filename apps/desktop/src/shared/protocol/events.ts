@@ -62,7 +62,7 @@ export type WatchWrist = "left" | "right";
 /** Which side of the watch face the crown is on, as you read it. */
 export type CrownSide = "right" | "left";
 
-export type RecipeAction = "volume" | "brightness" | "scroll" | "playPause" | "nextTrack" | "previousTrack" | "mute" | "shortcut";
+export type RecipeAction = "volume" | "brightness" | "scroll" | "playPause" | "nextTrack" | "previousTrack" | "mute" | "shortcut" | "pointer";
 
 /** One step of a recipe's chain. A recipe ends with a `drive` stage, which supplies the continuous value. */
 export type RecipeStage =
@@ -72,7 +72,12 @@ export type RecipeStage =
   | { kind: "modelPair"; startLabel: string; endLabel: string }
   /** A Gesture library gesture (by id) seen by the camera. Only works while the app is open with its camera on. */
   | { kind: "camera"; gesture: string; hold: ModelHold }
-  | { kind: "drive"; axis: "roll" | "pitch" | "yaw"; deadZoneDegrees: number; invert: boolean };
+  | { kind: "drive"; axis: "roll" | "pitch" | "yaw"; deadZoneDegrees: number; invert: boolean }
+  /**
+   * The last step of a "pointer" recipe: the hand moves the mouse pointer. A fresh `pressLabel` start freezes it (and
+   * puts it back `lookbackMs` earlier); `releaseLabel` soon after clicks; `holdLabel` first presses the button for a drag.
+   */
+  | { kind: "pointer"; pixelsPerDegree: number; pressLabel: string; holdLabel: string; releaseLabel: string; lookbackMs: number };
 
 /** `held` counts while the label stays detected; `oneShot` for a moment after it is first detected (buttons only). */
 export type ModelHold = "held" | "oneShot";
@@ -118,6 +123,8 @@ export interface OverlayState {
   rotationAngle: number;
   screenX: number;
   screenY: number;
+  /** What to draw: the device of the volume recipe being shown. A fader is a slider; absent means the knob. */
+  device?: "knob" | "horizontalFader" | "verticalFader";
   /** The most recent failed native volume read/write's error text; `null` once the last native volume operation succeeded. */
   lastNativeVolumeError: string | null;
 }
