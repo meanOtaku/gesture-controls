@@ -90,6 +90,7 @@ const Dashboard = lazy(() => import("../features/dashboard/components/Dashboard"
 // registry, lifecycle controls) re-rendered 15 times a second while merely open.
 const RecorderPage = memo(lazy(() => import("../features/telemetry/components/RecorderPage").then((m) => ({ default: m.RecorderPage }))));
 const LabellingPage = memo(lazy(() => import("../features/labelling/LabellingPage").then((m) => ({ default: m.LabellingPage }))));
+const DuplicatesPage = memo(lazy(() => import("../features/duplicates/DuplicatesPage").then((m) => ({ default: m.DuplicatesPage }))));
 const DatasetsPage = memo(lazy(() => import("../features/model-lab/components/DatasetsPage").then((m) => ({ default: m.DatasetsPage }))));
 const ModelLab = memo(lazy(() => import("../features/model-lab/components/ModelLab").then((m) => ({ default: m.ModelLab }))));
 const RecipesPage = memo(lazy(() => import("../features/recipes/components/RecipesPage").then((m) => ({ default: m.RecipesPage }))));
@@ -722,6 +723,7 @@ function MainApp() {
     )}
     {activeTab === "recorder" && <RecorderPage />}
     {activeTab === "datasets" && <DatasetsPage />}
+    {activeTab === "duplicates" && <DuplicatesPage />}
     {activeTab === "labelling" && <LabellingPage />}
     {activeTab === "labels" && <LabelsPage onOpen={setActiveTab} />}
     {activeTab === "gestureLibrary" && <GestureLibraryPage />}

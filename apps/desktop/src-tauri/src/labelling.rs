@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 
 use crate::dataset_files::{self, NO_LABEL, Pair};
+use crate::export_copies;
 use crate::model_lab::{self, DatasetSummary, ModelLabRuntime};
 
 /// The largest file opened for labelling: a long session at the watch's rates is well under this.
@@ -625,12 +626,13 @@ pub fn export_labelling_recording(
     source: LabellingSource,
     intervals: Vec<ManualInterval>,
     target: ExportTarget,
+    existing: Option<export_copies::ExistingCopies>,
     app: AppHandle,
-) -> Result<String, String> {
+) -> Result<export_copies::ExportOutcome, String> {
     let (pair, _) = load(&app, &source)?;
     let (ppg_csv, imu_csv) = with_manual(&pair, &intervals)?;
     let evidence = export_evidence_dirs(&app, &source)?;
-    let (parent, name, csv_path) = match target {
+    let (parent, requested_name, requested_csv) = match target {
         ExportTarget::Folder { parent, name } => (PathBuf::from(parent), name, None),
         ExportTarget::Csv { path } => {
             let requested = PathBuf::from(path);
@@ -641,26 +643,67 @@ pub fn export_labelling_recording(
             let stem = requested
                 .file_stem()
                 .and_then(|n| n.to_str())
-                .ok_or("invalid CSV filename")?;
-            let mut path = requested.clone();
-            let mut name = format!("{stem}-files");
-            let mut number = 2;
-            while path.exists() || parent.join(&name).exists() {
-                path = parent.join(format!("{stem}-{number}.csv"));
-                name = format!("{stem}-{number}-files");
-                number += 1;
-            }
-            (parent, name, Some(path))
+                .ok_or("invalid CSV filename")?
+                .to_string();
+            (parent, stem, Some(requested))
         }
     };
     if !parent.is_dir() {
         return Err("choose an existing export folder".into());
     }
+    // Earlier exports of this recording in the folder are replaced, unless one may hold newer hand labels: then ask.
+    let source_path = match &source {
+        LabellingSource::File { path } => Some(PathBuf::from(path)),
+        LabellingSource::Dataset { .. } => None,
+    };
+    let replacing = match export_copies::plan(
+        &parent,
+        &ppg_csv,
+        &imu_csv,
+        source_path.as_deref(),
+        existing.unwrap_or_default(),
+    )? {
+        Ok(copies) => copies,
+        Err(copies) => {
+            return Ok(export_copies::ExportOutcome {
+                needs_choice: copies,
+                ..Default::default()
+            });
+        }
+    };
+    // The names this export takes: the ones asked for, or numbered when another folder holds them. A copy about to be
+    // replaced does not count as holding its name.
+    let names = |free: &dyn Fn(&Path) -> bool| -> (String, Option<PathBuf>) {
+        match &requested_csv {
+            None => {
+                let mut name = requested_name.clone();
+                let mut number = 2;
+                while !free(&parent.join(&name)) {
+                    name = format!("{requested_name}-{number}");
+                    number += 1;
+                }
+                (name, None)
+            }
+            Some(requested) => {
+                let stem = &requested_name;
+                let mut path = requested.clone();
+                let mut name = format!("{stem}-files");
+                let mut number = 2;
+                while !free(&path) || !free(&parent.join(&name)) {
+                    path = parent.join(format!("{stem}-{number}.csv"));
+                    name = format!("{stem}-{number}-files");
+                    number += 1;
+                }
+                (name, Some(path))
+            }
+        }
+    };
+    let (name, _) = names(&|p: &Path| export_copies::is_free(p, &replacing));
     // A private staging folder keeps failed evidence copies from leaving an incomplete export.
     let staging = parent.join(format!(".{}.exporting", uuid::Uuid::new_v4()));
     fs::create_dir(&staging).map_err(|e| e.to_string())?;
-    let result = (|| -> Result<String, String> {
-        let folder = PathBuf::from(model_lab::export_dataset_folder(
+    let result = (|| -> Result<export_copies::ExportOutcome, String> {
+        let folder = PathBuf::from(model_lab::write_dataset_folder(
             staging.display().to_string(),
             name.clone(),
             ppg_csv.clone(),
@@ -669,33 +712,35 @@ pub fn export_labelling_recording(
             None,
         )?);
         copy_export_evidence(&evidence, &folder, &intervals)?;
-        let mut destination = parent.join(&name);
-        if csv_path.is_some() && destination.exists() {
-            return Err("the CSV companion folder already exists".into());
-        }
-        let mut number = 2;
-        while destination.exists() {
-            destination = parent.join(format!("{name}-{number}"));
-            number += 1;
-        }
-        if let Some(path) = &csv_path {
+        let temporary = staging.join("recording.csv");
+        if requested_csv.is_some() {
             let single = dataset_files::merge_to_single(&ppg_csv, &imu_csv)?;
-            let temporary = staging.join("recording.csv");
             fs::write(&temporary, single).map_err(|e| e.to_string())?;
-            fs::rename(&folder, &destination).map_err(|e| e.to_string())?;
+        }
+        // Only now, with the new copy complete, do the old ones go; then the names are taken again as they now are.
+        let (replaced, warning) = export_copies::trash_copies(&replacing);
+        let (name, csv_path) = names(&|p: &Path| !p.exists());
+        let destination = parent.join(&name);
+        fs::rename(&folder, &destination).map_err(|e| e.to_string())?;
+        let written = if let Some(path) = &csv_path {
             if let Err(e) = fs::rename(&temporary, path) {
                 let _ = fs::remove_dir_all(&destination);
                 return Err(e.to_string());
             }
-            Ok(format!(
+            format!(
                 "{} (supporting files: {})",
                 path.display(),
                 destination.display()
-            ))
+            )
         } else {
-            fs::rename(&folder, &destination).map_err(|e| e.to_string())?;
-            Ok(destination.display().to_string())
-        }
+            destination.display().to_string()
+        };
+        Ok(export_copies::ExportOutcome {
+            written: Some(written),
+            replaced,
+            needs_choice: Vec::new(),
+            warning,
+        })
     })();
     let _ = fs::remove_dir_all(staging);
     result

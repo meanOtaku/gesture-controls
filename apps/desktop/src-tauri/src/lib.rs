@@ -13,6 +13,7 @@ mod calibration;
 mod dataset_files;
 mod detector_events;
 mod drone;
+mod export_copies;
 mod gesture_library;
 mod gesture_samples;
 mod head_pose;
@@ -300,6 +301,8 @@ pub fn run() {
             model_lab::import_model_dataset,
             model_lab::import_model_dataset_folder,
             model_lab::export_dataset_folder,
+            export_copies::scan_export_copies,
+            export_copies::trash_export_copies,
             labelling::open_labelling_recording,
             labelling::labelling_camera_evidence,
             labelling::labelling_haptics,

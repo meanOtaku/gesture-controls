@@ -6,6 +6,7 @@ import { OperationFeedback } from "../../../components/app/OperationFeedback";
 import { chooseExportFolder, exportCsvToFolder, isTauriDesktop, type ExportCsvResult } from "../../../shared/tauri/exportCsv";
 import { saveRecordingBundle, type SaveRecordingBundleResult, type StopReason } from "../../../shared/tauri/recordingBundle";
 import { cameraAssist } from "../../gestureLibrary/cameraAssist";
+import { exportReplacingEarlierCopies, replacedLine, type ExportOutcome } from "../../../shared/tauri/exportCopies";
 import { exportFolderStore } from "../store/exportFolderStore";
 import { telemetryStore } from "../store/telemetryStore";
 
@@ -90,9 +91,17 @@ export function useTelemetryExport() {
     // The camera's landmarks go too when it recorded; the desktop puts them on the watch clock.
     const cameraFiles = Object.keys(files.cameraFiles).length > 0 ? files.cameraFiles : null;
     try {
-      const written = await invoke<string>("export_dataset_folder", { parent: datasetExportFolder, name, ppgCsv: files.ppgCsv, imuCsv: files.imuCsv, ppgClockCsv: files.ppgClockCsv, cameraFiles });
+      // An earlier export of this session in the folder is replaced; asked first if its hand labels may be newer.
+      const outcome = await exportReplacingEarlierCopies((existing) =>
+        invoke<ExportOutcome | string>("export_dataset_folder", { parent: datasetExportFolder, name, ppgCsv: files.ppgCsv, imuCsv: files.imuCsv, ppgClockCsv: files.ppgClockCsv, cameraFiles, ...(existing ? { existing } : {}) }),
+      );
+      if (!outcome?.written) {
+        OperationFeedback.info(operation, "Export cancelled: the earlier copy is as it was.");
+        return;
+      }
       const camera = cameraFiles ? ", hand landmarks" : "";
-      OperationFeedback.success(operation, `Saved ${basename(written)} (${files.ppgRows.toLocaleString()} pulse rows, ${files.imuRows.toLocaleString()} motion rows${camera})`);
+      OperationFeedback.success(operation, `Saved ${basename(outcome.written)} (${files.ppgRows.toLocaleString()} pulse rows, ${files.imuRows.toLocaleString()} motion rows${camera}).${replacedLine(outcome)}`);
+      if (outcome.warning) OperationFeedback.error(operation, outcome.warning);
     } catch (error) {
       OperationFeedback.error(operation, `Could not save: ${String(error)}`);
     }

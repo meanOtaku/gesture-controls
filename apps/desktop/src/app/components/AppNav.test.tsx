@@ -54,7 +54,7 @@ const renderNav = (props: Partial<Parameters<typeof AppNav>[0]> = {}) => {
 
 describe("AppNav", () => {
   it("orders the pages with what is used every day first: use, devices, then record, label and train, then settings", () => {
-    expect(NAV_ORDER).toEqual(["main", "gestures", "recipes", "watch", "headphone", "drone", "recorder", "datasets", "labelling", "labels", "gestureLibrary", "modelLab", "settings"]);
+    expect(NAV_ORDER).toEqual(["main", "gestures", "recipes", "watch", "headphone", "drone", "recorder", "datasets", "duplicates", "labelling", "labels", "gestureLibrary", "modelLab", "settings"]);
   });
 
   it("folds the pages for making a model away, remembers it, and never hides the page you are on", () => {

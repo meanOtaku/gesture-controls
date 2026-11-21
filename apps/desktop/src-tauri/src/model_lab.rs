@@ -9,6 +9,7 @@ use tracing::warn;
 use uuid::Uuid;
 
 use crate::dataset_files::{self, GapReport, Meta, Pair};
+use crate::export_copies;
 
 const DATASETS_DIR_NAME: &str = "datasets";
 pub(crate) const MODEL_LAB_DIR_NAME: &str = "model-lab";
@@ -799,6 +800,7 @@ fn write_folder(
             labels: pair.labels.clone(),
             original_sha256,
             context: pair.context.clone(),
+            exported_at_ms: None,
         };
         fs::write(
             staging.join(dataset_files::META_FILE),
@@ -822,15 +824,79 @@ pub fn import_model_dataset_folder(
     ingest_folder(&app, &runtime, std::path::Path::new(&path))
 }
 
+/// Exports a Recorder session as a folder of two dense files in `parent` (see [`write_dataset_folder`]). An earlier export of
+/// the same recording there (an earlier export of this session, whatever it was named) is replaced: moved to the Trash once
+/// the new folder is written. When one of those copies may hold newer hand labels than this export, nothing is written and
+/// the outcome lists them, so the person can choose (`existing`: replace them, or keep both). See `export_copies`.
+#[tauri::command]
+pub fn export_dataset_folder(
+    parent: String,
+    name: String,
+    ppg_csv: String,
+    imu_csv: String,
+    ppg_clock_csv: Option<String>,
+    camera_files: Option<std::collections::BTreeMap<String, String>>,
+    existing: Option<export_copies::ExistingCopies>,
+) -> Result<export_copies::ExportOutcome, String> {
+    validate_filename(&name)?;
+    let parent_dir = PathBuf::from(&parent);
+    if !parent_dir.is_dir() {
+        return Err("the export folder does not exist: choose another".into());
+    }
+    let replacing = match export_copies::plan(
+        &parent_dir,
+        &ppg_csv,
+        &imu_csv,
+        None,
+        existing.unwrap_or_default(),
+    )? {
+        Ok(copies) => copies,
+        Err(copies) => {
+            return Ok(export_copies::ExportOutcome {
+                needs_choice: copies,
+                ..Default::default()
+            });
+        }
+    };
+    let staging = parent_dir.join(format!(".{}.exporting", uuid::Uuid::new_v4().simple()));
+    fs::create_dir(&staging).map_err(|e| e.to_string())?;
+    let result = (|| -> Result<export_copies::ExportOutcome, String> {
+        let folder = PathBuf::from(write_dataset_folder(
+            staging.display().to_string(),
+            name.clone(),
+            ppg_csv,
+            imu_csv,
+            ppg_clock_csv,
+            camera_files,
+        )?);
+        // Only now, with the new copy complete, do the old ones go.
+        let (replaced, warning) = export_copies::trash_copies(&replacing);
+        let mut target = parent_dir.join(&name);
+        let mut number = 2;
+        while target.exists() {
+            target = parent_dir.join(format!("{name}-{number}"));
+            number += 1;
+        }
+        fs::rename(&folder, &target).map_err(|e| e.to_string())?;
+        Ok(export_copies::ExportOutcome {
+            written: Some(target.display().to_string()),
+            replaced,
+            needs_choice: Vec::new(),
+            warning,
+        })
+    })();
+    let _ = fs::remove_dir_all(&staging);
+    result
+}
+
 /// Writes a dataset exported from the Recorder as a folder of two dense files in `parent`, named after the session. A name that
-/// is taken gets a number after it, so an export never overwrites another. Nothing is required of the labels here: an export
+/// is taken gets a number after it, so this never overwrites another folder. Nothing is required of the labels here: an export
 /// is for keeping and sharing, and Model Lab checks them when the folder is imported. Returns where it was written.
 ///
 /// `camera_files` is the session's camera evidence as the recording bundle saves it (`hand_landmarks.csv`, optionally
 /// `hand_landmarks_2.csv`, and `clock_sync.csv`). Each landmarks file is written with its frames also on the watch's clock
 /// (`recording_bundle::landmarks_on_watch_clock`), and `clock_sync.csv` beside them, so the conversion can be redone.
-#[tauri::command]
-pub fn export_dataset_folder(
+pub(crate) fn write_dataset_folder(
     parent: String,
     name: String,
     ppg_csv: String,
@@ -867,6 +933,7 @@ pub fn export_dataset_folder(
         labels,
         original_sha256: None,
         context,
+        exported_at_ms: Some(export_copies::now_ms()),
     };
     let staging = parent.join(format!(
         ".{}.exporting",
@@ -2211,7 +2278,7 @@ mod tests {
     fn an_exported_folder_never_overwrites_another_and_what_it_holds_can_be_imported_back() {
         let parent = temp_dir("export");
         let pair = dataset_files::split_legacy(LEGACY).unwrap();
-        let first = export_dataset_folder(
+        let first = write_dataset_folder(
             parent.display().to_string(),
             "session".into(),
             pair.ppg_csv.clone(),
@@ -2220,7 +2287,7 @@ mod tests {
             None,
         )
         .unwrap();
-        let second = export_dataset_folder(
+        let second = write_dataset_folder(
             parent.display().to_string(),
             "session".into(),
             pair.ppg_csv.clone(),
@@ -2253,7 +2320,7 @@ mod tests {
             "no staging folder is left"
         );
         assert!(
-            export_dataset_folder(
+            write_dataset_folder(
                 parent.display().to_string(),
                 "../escape".into(),
                 String::new(),
@@ -2264,7 +2331,7 @@ mod tests {
             .is_err()
         );
         assert!(
-            export_dataset_folder(
+            write_dataset_folder(
                 "/no/such/folder".into(),
                 "x".into(),
                 String::new(),
@@ -2274,6 +2341,61 @@ mod tests {
             )
             .is_err()
         );
+        let _ = fs::remove_dir_all(&parent);
+    }
+
+    #[test]
+    fn exporting_a_recording_again_replaces_its_earlier_copy_and_keeps_other_recordings() {
+        let parent = temp_dir("export-again");
+        let pair = dataset_files::split_legacy(LEGACY).unwrap();
+        let export = |name: &str, ppg: &str, existing| {
+            export_dataset_folder(
+                parent.display().to_string(),
+                name.into(),
+                ppg.to_string(),
+                pair.imu_csv.clone(),
+                None,
+                None,
+                existing,
+            )
+            .unwrap()
+        };
+        let first = export("session-1", &pair.ppg_csv, None);
+        assert!(first.replaced.is_empty());
+        // The same session again, under another name and with a row relabelled by hand: the first copy goes.
+        let relabelled = pair.ppg_csv.replacen(",pinch,", ",pinch,snap", 1);
+        assert_ne!(relabelled, pair.ppg_csv);
+        let second = export("session-2", &relabelled, None);
+        assert_eq!(second.replaced, [first.written.clone().unwrap()]);
+        assert!(!PathBuf::from(first.written.unwrap()).exists());
+        let written = PathBuf::from(second.written.clone().unwrap());
+        assert!(
+            fs::read_to_string(written.join("ppg.csv"))
+                .unwrap()
+                .contains("pinch,snap")
+        );
+        // Labels changed in the copy after it was exported: nothing is written until the person chooses.
+        let meta_path = written.join("dataset.json");
+        let mut meta: Meta = serde_json::from_slice(&fs::read(&meta_path).unwrap()).unwrap();
+        meta.exported_at_ms = Some(0);
+        fs::write(&meta_path, serde_json::to_vec(&meta).unwrap()).unwrap();
+        let asked = export("session-3", &pair.ppg_csv, None);
+        assert_eq!(
+            (asked.written.as_deref(), asked.needs_choice.len()),
+            (None, 1)
+        );
+        let kept = export(
+            "session-3",
+            &pair.ppg_csv,
+            Some(export_copies::ExistingCopies::KeepBoth),
+        );
+        assert!(kept.replaced.is_empty() && written.exists());
+        // A different recording is never replaced.
+        let other = pair.ppg_csv.replace("100,1,", "101,1,");
+        let different = export("other", &other, None);
+        assert!(different.replaced.is_empty());
+        let copies = export_copies::scan(&parent).unwrap();
+        assert_eq!(copies.len(), 3);
         let _ = fs::remove_dir_all(&parent);
     }
 
@@ -2298,7 +2420,7 @@ mod tests {
                     .collect(),
             )
         };
-        let written = export_dataset_folder(
+        let written = write_dataset_folder(
             parent.display().to_string(),
             "session".into(),
             pair.ppg_csv.clone(),
@@ -2368,7 +2490,7 @@ mod tests {
             files(&[("notes.txt", "hello"), (CLOCK_SYNC_FILE_NAME, &sync)]),
         ] {
             assert!(
-                export_dataset_folder(
+                write_dataset_folder(
                     parent.display().to_string(),
                     "refused".into(),
                     pair.ppg_csv.clone(),

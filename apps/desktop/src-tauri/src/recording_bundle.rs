@@ -3356,7 +3356,7 @@ mod tests {
         lines.push(csv);
         let pair = crate::dataset_files::split_legacy(&lines.join("\n")).unwrap();
         let clock = fs::read_to_string(dir.join(PPG_CLOCK_FILE_NAME)).ok();
-        let written = crate::model_lab::export_dataset_folder(
+        let written = crate::model_lab::write_dataset_folder(
             std::env::var("EXPORT_PARENT").expect("EXPORT_PARENT"),
             std::env::var("EXPORT_NAME").expect("EXPORT_NAME"),
             pair.ppg_csv,

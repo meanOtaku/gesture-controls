@@ -114,6 +114,10 @@ pub struct Meta {
     /// How the session was recorded (see [`CONTEXT_PREFIX`]).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub context: BTreeMap<String, String>,
+    /// When an exported folder was written (ms since 1970), so a later export can tell whether its labels were changed
+    /// after it was exported (`export_copies`). Recordings in the app have none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exported_at_ms: Option<u64>,
 }
 
 /// How dense one stream is.

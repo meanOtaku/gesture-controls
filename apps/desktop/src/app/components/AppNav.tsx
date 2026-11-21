@@ -1,4 +1,4 @@
-import { Brain, ChevronDown, ChevronRight, CircleDot, Database, Highlighter, Hand, Headphones, Shapes, Tags, Radar, LayoutDashboard, Plane, Settings as SettingsIcon, Watch, Workflow } from "lucide-react";
+import { Brain, ChevronDown, ChevronRight, CircleDot, Copy, Database, Highlighter, Hand, Headphones, Shapes, Tags, Radar, LayoutDashboard, Plane, Settings as SettingsIcon, Watch, Workflow } from "lucide-react";
 import { memo, useEffect, useState } from "react";
 import {
   Sidebar,
@@ -17,7 +17,7 @@ import { MissMarker } from "../../features/misses/MissMarker";
 import { ReadinessLight } from "../../features/model-lab/components/ReadinessLight";
 import { RuntimeSwitch } from "../../features/model-lab/components/RuntimeSwitch";
 
-export type AppTab = "main" | "headphone" | "watch" | "recipes" | "drone" | "gestures" | "recorder" | "datasets" | "labelling" | "labels" | "gestureLibrary" | "modelLab" | "settings";
+export type AppTab = "main" | "headphone" | "watch" | "recipes" | "drone" | "gestures" | "recorder" | "datasets" | "duplicates" | "labelling" | "labels" | "gestureLibrary" | "modelLab" | "settings";
 
 type NavItem = { id: AppTab; label: string; icon: typeof LayoutDashboard };
 
@@ -45,6 +45,7 @@ const GROUPS: { title: string; items: NavItem[]; lab?: boolean }[] = [
     items: [
       { id: "recorder", label: "Recorder", icon: CircleDot },
       { id: "datasets", label: "Recordings", icon: Database },
+      { id: "duplicates", label: "Duplicates", icon: Copy },
     ],
   },
   {

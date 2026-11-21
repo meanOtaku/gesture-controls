@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { ExistingCopies, ExportOutcome } from "../../shared/tauri/exportCopies";
 import type { DatasetSummary } from "../model-lab/types";
 import type { CameraEvidenceFiles } from "../../shared/tauri/recordingBundle";
 import type { Span } from "./labellingModel";
@@ -84,9 +85,12 @@ export function saveLabellingVersion(source: LabellingSource, spans: Span[]): Pr
   return invoke<DatasetSummary>("save_labelling_version", { source, intervals: toIntervals(spans) });
 }
 
-/** Exports the recording with the hand labels; returns where it was written. */
-export function exportLabellingRecording(source: LabellingSource, spans: Span[], target: ExportTarget): Promise<string> {
-  return invoke<string>("export_labelling_recording", { source, intervals: toIntervals(spans), target });
+/**
+ * Exports the recording with the hand labels. An earlier export of it in the folder is replaced (`existing` says what to do
+ * when one may hold newer hand labels: unset, the outcome lists them and nothing is written).
+ */
+export function exportLabellingRecording(source: LabellingSource, spans: Span[], target: ExportTarget, existing?: ExistingCopies): Promise<ExportOutcome | string> {
+  return invoke<ExportOutcome | string>("export_labelling_recording", { source, intervals: toIntervals(spans), target, ...(existing ? { existing } : {}) });
 }
 
 /** One active model run over the recording as the app runs it live (`labelling.rs`). */

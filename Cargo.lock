@@ -3549,6 +3549,7 @@ dependencies = [
  "label-inference",
  "model-lab-core",
  "native-head-tracking",
+ "objc2-foundation",
  "serde",
  "serde_json",
  "sha2 0.11.0",

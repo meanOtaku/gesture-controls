@@ -35,6 +35,7 @@ import { listGestureDefinitions } from "../gestureLibrary/gestureLibraryApi";
 import { cameraTrack, contactOnsets, contactThreshold, handsAt, type CameraTrack } from "./cameraTrack";
 import { inImportOrder, type DatasetLabel, type DatasetSummary } from "../model-lab/types";
 import { describeContext } from "../telemetry/sessionContext";
+import { exportReplacingEarlierCopies, replacedLine } from "../../shared/tauri/exportCopies";
 import { exportLabellingRecording, hapticSpans, labellingCameraEvidence, labellingHaptics, openLabellingRecording, replayActiveModels, saveLabellingOriginal, saveLabellingVersion, type LabellingRecording, type LabellingSource, type ModelReplay } from "./labellingApi";
 import { appNavigation, type LabellingFocus } from "../../shared/navigation/appNavigation";
 import { labelColor } from "../labels/labelColor";
@@ -439,8 +440,14 @@ export function LabellingPage() {
           ? { kind: "folder", parent, name: base }
           : { kind: "csv", path: `${parent.replace(/[\\/]+$/, "")}/${base}.csv` };
       setBusy(true);
-      const where = await exportLabellingRecording(recording.source, spans, target);
-      OperationFeedback.success("Exported", where);
+      // An earlier export of this recording in the folder is replaced; asked first if its hand labels may be newer.
+      const outcome = await exportReplacingEarlierCopies((existing) => exportLabellingRecording(recording.source, spans, target, existing));
+      if (!outcome?.written) {
+        setMessage({ tone: "ok", text: "Not exported: the earlier copy is as it was." });
+        return;
+      }
+      OperationFeedback.success("Exported", `${outcome.written}${replacedLine(outcome)}`);
+      if (outcome.warning) setMessage({ tone: "error", text: outcome.warning });
     } catch (error) {
       setMessage({ tone: "error", text: `Not exported: ${String(error)}` });
     } finally {

@@ -893,6 +893,50 @@ threshold, on the rail, in the summary and among the places to check. It changes
   card, shown here too): a **folder of two files** (`ppg.csv`, `imu.csv` and `dataset.json`, numbered if the name is taken),
   or **one CSV** with both `label` and `manual_label`, stamped with the time so it never overwrites another. With no export
   folder chosen yet, it asks for one and keeps it. **Export to a folder…** asks where for this export alone. Either form can be opened here again or imported on the Datasets tab.
+  - **Exporting a recording again replaces its earlier copy.** When the folder already holds an export of the same
+    recording (from here or from the Recorder, whatever it was named), the new export takes its place and the old copy is
+    moved to the Trash once the new one is written; the message names what it replaced. Two copies are of the same recording
+    when they hold the same sensor samples: relabelling changes only the `label` and `manual_label` columns, so every
+    export of one recording matches, and two different recordings never do. A folder that only shares the name is a
+    different recording and is kept; the new export is numbered instead.
+  - Hand labels are never lost by this. If an earlier copy has hand labels that differ from the ones you are exporting and
+    it may have been labelled after it was exported (you opened the exported folder here and saved to it, or it is an
+    export from before this change, which cannot tell), nothing is written until you choose: **Replace** (the old copy
+    goes to the Trash), **Keep both** (another copy is added) or **Cancel**. Exporting the copy you opened from that same
+    folder replaces it without asking, since your labels started from it.
+  - **Find duplicate copies…** (in the Exports card) scans the export folder, or **In another folder…** one you pick, for
+    copies of the same recording already there. It lists each recording's copies newest first (the one changed last, by an
+    export or by labels saved to it) with when each was last changed, how many rows have hand labels and its labels. The
+    newest is kept unless you pick another. Old exports work too: they are matched by their samples, and need nothing the
+    new exports record. Which copy is newest is worked out from the files, and each recording says why:
+    1. its files were changed more than 2 seconds after the other's (an export, or labels saved to it; `exportedAtMs` in
+       `dataset.json` too);
+    2. when the copies were written at the same moment (copied into the folder together, so the file times are of the
+       copy, not of the export): a later number an export added to the same name in the same folder (`name-2` after
+       `name`);
+    3. a Labelling-page export (its folder holds `manual_labels.json`) after a Recorder export (written when the recording
+       stopped, so before it could be labelled);
+    4. of two Recorder exports, the one with the later time in its name (the Recorder names an export by when it was made).
+
+    When none of these tells two copies with different labels apart, nothing is chosen for that recording and none of its
+    copies is touched until you pick the one to keep. Each copy also shows which page exported it. When a copy going to the Trash has
+    more hand-labelled rows than the one kept, it says so (fine if you tightened the labels). Nothing is removed until
+    you press **Move … to the Trash**, and the copies go
+    to the Trash, where you can get them back. A single-CSV export's CSV goes with its `-files` folder. Only exported
+    copies directly in that folder are looked at: never subfolders, and never the app's own recordings (a folder inside the
+    app's data is refused). Every recording always keeps at least one copy.
+  - The **Duplicates** tab (under Record, after Recordings) does the same for a whole datasets folder: choose the folder
+    (the export folder to begin with), leave **Include subfolders** ticked to look in every folder below it too, and press
+    **Scan**. It reads exported folders and older single-CSV recordings (a CSV with the dataset columns), never follows
+    links, and never looks inside a recording's own folder. Each recording with more than one copy is listed as above,
+    with its copies' paths below the folder; when they are in different folders it says so, since one may be there on
+    purpose (a relabelled set, say). **Move … to the Trash** asks once more before anything goes, then scans again. A
+    scan reads every file, so a folder of a gigabyte takes a little while; it changes nothing. If the folder is tracked
+    by git or listed in a manifest (`data/recordings.manifest.json`, `scripts/recordings_manifest.py write`), update them
+    after a clean-up.
+  - Exported folders now record when they were exported (`exportedAtMs` in `dataset.json`), which is how a later export
+    tells whether a copy was relabelled after it. Moving to the Trash is macOS only; elsewhere the clean-up reports that it
+    could not move a copy, and nothing is deleted.
 
 **Review.** Once you have looked through a recording, say where its labels stand: **Labels are right**, or **Needs work** with
 what still needs doing. Save your labels first: the review is of the recording as saved. Model Lab shows it beside the

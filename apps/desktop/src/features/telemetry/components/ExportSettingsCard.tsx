@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader } from "../../../components/ui/card";
 import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
 import { chooseExportFolder, isTauriDesktop } from "../../../shared/tauri/exportCsv";
 import { exportFolderStore, type ExportFormat } from "../store/exportFolderStore";
+import { ExportCopiesCleanup } from "./ExportCopiesCleanup";
 
 /**
  * Where exports go and in what form: one setting for every export (the Recorder's Export button, the export at the end of a
@@ -40,6 +41,7 @@ export function ExportSettingsCard({ compact = false }: { compact?: boolean }) {
         <label className="flex items-center gap-2"><RadioGroupItem value="folder" disabled={!desktop} /> Folder of two files (ppg.csv, imu.csv)</label>
         <label className="flex items-center gap-2"><RadioGroupItem value="csv" disabled={!desktop} /> One CSV</label>
       </RadioGroup>
+      {desktop ? <ExportCopiesCleanup folder={folder} /> : null}
     </div>
   );
 
@@ -52,7 +54,7 @@ export function ExportSettingsCard({ compact = false }: { compact?: boolean }) {
           description="Where exports go, and as a folder or one CSV."
           help={{
             label: "About exports",
-            content: "One setting for every export: the Export button, the export when a timed or guided recording ends, and the Labelling page's Export. A folder of two files is what Model Lab imports; one CSV is the older format. Recordings are also saved in the app either way.",
+            content: "One setting for every export: the Export button, the export when a timed or guided recording ends, and the Labelling page's Export. A folder of two files is what Model Lab imports; one CSV is the older format. Recordings are also saved in the app either way. Exporting a recording again replaces its earlier copy in the folder (asking first if that copy's hand labels may be newer), and Find duplicate copies clears out older copies already there, to the Trash.",
           }}
         />
       </CardHeader>
