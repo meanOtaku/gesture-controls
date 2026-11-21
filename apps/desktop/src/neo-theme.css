@@ -295,6 +295,7 @@ html[data-theme="neo"] [data-slot="sheet-content"] { background: var(--surface);
 html[data-theme="neo"] [data-slot="alert-dialog-title"],
 html[data-theme="neo"] [data-slot="sheet-title"] { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.01em; }
 html[data-theme="neo"] [data-sonner-toast] { border: var(--neo-border); border-radius: 12px; box-shadow: var(--neo-shadow-sm); background: var(--surface); color: var(--ink); font-weight: 600; }
+html[data-theme="neo"] [data-sonner-toaster] [data-sonner-toast] [data-close-button] { background: var(--yellow); color: var(--ink); border: 2px solid var(--ink); }
 html[data-theme="neo"] [data-slot="tabs-list"] { background: var(--surface); border: 2.5px solid var(--ink); border-radius: 12px; box-shadow: var(--neo-shadow-sm); padding: 3px; }
 html[data-theme="neo"] [data-slot="tabs-trigger"] { font-weight: 700; color: var(--ink); border: 2px solid transparent; border-radius: 9px; }
 html[data-theme="neo"] [data-slot="tabs-trigger"][data-state="active"],

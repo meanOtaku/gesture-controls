@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { ChevronRightIcon } from "lucide-react";
 import { useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { SectionHeader } from "../../../components/app/SectionHeader";
+import { SuggestInput } from "../../../components/app/SuggestInput";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -423,8 +424,7 @@ export function DatasetManager({ desktopAvailable, datasets, loading, importing,
                   });
                 }}
               >
-                <Input aria-label="Group name" placeholder="Group name" list="recording-groups" maxLength={MAX_GROUP_NAME} className="h-8 w-40" value={groupName} onChange={(event) => setGroupName(event.target.value)} />
-                <datalist id="recording-groups">{groups.map((group) => <option key={group} value={group} />)}</datalist>
+                <SuggestInput aria-label="Group name" placeholder="Group name" maxLength={MAX_GROUP_NAME} className="h-8 w-40" value={groupName} onValueChange={setGroupName} suggestions={groups} />
                 <Button type="submit" size="sm" variant="outline" disabled={working || !groupName.trim()}>Move to group</Button>
               </form>
             )}

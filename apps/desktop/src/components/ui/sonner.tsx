@@ -11,6 +11,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      // Every message can be dismissed by hand, not only by waiting.
+      closeButton
       icons={{
         success: (
           <CircleCheckIcon className="size-4" />

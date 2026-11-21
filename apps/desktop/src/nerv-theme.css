@@ -366,6 +366,9 @@ html[data-theme="nerv"] .field-error { color: var(--eva-red); }
 html[data-theme="nerv"] [data-slot="select-content"],
 html[data-theme="nerv"] [data-slot="popover-content"],
 html[data-theme="nerv"] [data-slot="tooltip-content"] { background: #000; color: var(--eva-text); border: 1px solid var(--eva-orange); border-radius: 0; }
+/* A toast's close button: square, like everything else here. */
+html[data-theme="nerv"] [data-sonner-toaster] [data-sonner-toast] [data-close-button] { background: #000; color: var(--eva-orange); border: 1px solid var(--eva-orange); border-radius: 0; }
+html[data-theme="nerv"] [data-sonner-toaster] [data-sonner-toast] [data-close-button]:hover { background: var(--eva-orange); color: #000; }
 
 /* Status badges: a symbol and the words as well as the colour. */
 html[data-theme="nerv"] [data-slot="badge"] {

@@ -2,6 +2,7 @@ import { PlusIcon, Trash2Icon } from "lucide-react";
 import { useId, useMemo, useState, type FormEvent } from "react";
 import { NumberField } from "../../../components/app/NumberField";
 import { SegmentedControl } from "../../../components/app/SegmentedControl";
+import { SuggestInput } from "../../../components/app/SuggestInput";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
@@ -318,20 +319,21 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
                         {heldGestures.map((gesture) => <option key={gesture.id} value={gesture.id}>{gesture.name}</option>)}
                       </select>
                     )}
-                    <label>Grab label<input className={NATIVE_SELECT} aria-label={`${label} grab label`} list={`${uid}-labels`} value={step.startLabel} onChange={(e) => setStep(index, { ...step, startLabel: e.target.value.trim().toLowerCase() })} /></label>
-                    <label>Release label<input className={NATIVE_SELECT} aria-label={`${label} release label`} list={`${uid}-labels`} value={step.endLabel} onChange={(e) => setStep(index, { ...step, endLabel: e.target.value.trim().toLowerCase() })} /></label>
+                    <label>Grab label<SuggestInput plain className={NATIVE_SELECT} aria-label={`${label} grab label`} suggestions={modelLabels} value={step.startLabel} onValueChange={(value) => setStep(index, { ...step, startLabel: value.trim().toLowerCase() })} /></label>
+                    <label>Release label<SuggestInput plain className={NATIVE_SELECT} aria-label={`${label} release label`} suggestions={modelLabels} value={step.endLabel} onValueChange={(value) => setStep(index, { ...step, endLabel: value.trim().toLowerCase() })} /></label>
                     <p className="field-hint">The gesture's start grabs (pinch in, for pinch); turn left to decrease, right to increase; its end releases. Choose any held gesture (one with start and end phases, made on the Labels page), or type the two labels. Use Reverse direction if your watch orientation reverses the movement.</p>
                   </>
                 ) : step.kind === "model" ? (
                   <>
-                    <input
+                    <SuggestInput
+                      plain
                       className={NATIVE_SELECT}
                       aria-label={`${label} model label`}
-                      list={`${uid}-labels`}
+                      suggestions={modelLabels}
                       value={step.label}
                       placeholder="label, e.g. snap_fingers"
                       spellCheck={false}
-                      onChange={(event) => setStep(index, { ...step, label: event.target.value.trim().toLowerCase() })}
+                      onValueChange={(value) => setStep(index, { ...step, label: value.trim().toLowerCase() })}
                     />
                     <select
                       className={NATIVE_SELECT}
@@ -397,9 +399,6 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
           >
             <PlusIcon aria-hidden="true" /> Add a camera gesture
           </Button>
-          <datalist id={`${uid}-labels`}>
-            {modelLabels.map((label) => <option key={label} value={label} />)}
-          </datalist>
         </div>
         {steps.some((step) => step.kind === "hold" && step.hold.startsWith("swipe")) && (
           <p className="field-hint">Swipes are read from the watch's acceleration and orientation. Left and right run along your forearm, so set which side the watch's crown is on under Settings → Watch orientation; up and down follow gravity.</p>
@@ -552,9 +551,9 @@ export function RecipeEditor({ recipe, locations, modelLabels = [], cameraGestur
             {field("lookback")}
           </div>
           <div className="recipe-row">
-            <label>Press label<input className={NATIVE_SELECT} aria-label="Press label" list={`${uid}-labels`} value={pressLabel} spellCheck={false} onChange={(e) => setPressLabel(e.target.value.trim().toLowerCase())} /></label>
-            <label>Hold label<input className={NATIVE_SELECT} aria-label="Hold label" list={`${uid}-labels`} value={holdLabel} spellCheck={false} onChange={(e) => setHoldLabel(e.target.value.trim().toLowerCase())} /></label>
-            <label>Release label<input className={NATIVE_SELECT} aria-label="Release label" list={`${uid}-labels`} value={releaseLabel} spellCheck={false} onChange={(e) => setReleaseLabel(e.target.value.trim().toLowerCase())} /></label>
+            <label>Press label<SuggestInput plain className={NATIVE_SELECT} aria-label="Press label" suggestions={modelLabels} value={pressLabel} spellCheck={false} onValueChange={(value) => setPressLabel(value.trim().toLowerCase())} /></label>
+            <label>Hold label<SuggestInput plain className={NATIVE_SELECT} aria-label="Hold label" suggestions={modelLabels} value={holdLabel} spellCheck={false} onValueChange={(value) => setHoldLabel(value.trim().toLowerCase())} /></label>
+            <label>Release label<SuggestInput plain className={NATIVE_SELECT} aria-label="Release label" suggestions={modelLabels} value={releaseLabel} spellCheck={false} onValueChange={(value) => setReleaseLabel(value.trim().toLowerCase())} /></label>
           </div>
           <p className="field-hint">A press start followed soon by a release is a click. If the hold is detected first, the button goes down and the hand drags until the release; the button also comes up if the hold is gone for 1.5 seconds, in case the release is missed. A press with nothing after it for 2 seconds is forgotten.</p>
           {pointerError && <p className="field-error" role="alert">{pointerError}</p>}
