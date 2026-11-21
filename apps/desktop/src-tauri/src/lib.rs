@@ -17,6 +17,7 @@ mod export_copies;
 mod gesture_library;
 mod gesture_samples;
 mod head_pose;
+mod keep_awake;
 mod label_registry;
 mod label_runtime;
 mod label_training;
@@ -216,6 +217,7 @@ pub fn run() {
         .manage(watch_power::WatchPower::default())
         .manage(model_lab::ModelLabRuntime::default())
         .manage(miss_recorder::MissRecorder::default())
+        .manage(keep_awake::KeepAwake::default())
         .manage(label_registry::LabelRegistryRuntime::default())
         .manage(gesture_library::GestureLibraryRuntime::default())
         .manage(gesture_samples::GestureSamplesRuntime::default())
@@ -447,6 +449,16 @@ pub fn run() {
                 info!(?transport, "watch bridge started");
 
                 let runtime = watch_handle.state::<watch::WatchRuntime>();
+                // While watch data flows the Mac must not idle-sleep: sleep switches Bluetooth off and drops the watch.
+                let awake_handle = watch_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    let mut ticker = tokio::time::interval(keep_awake::TICK_INTERVAL);
+                    loop {
+                        ticker.tick().await;
+                        awake_handle.state::<keep_awake::KeepAwake>().tick();
+                    }
+                });
+                let keep_awake = watch_handle.state::<keep_awake::KeepAwake>();
                 // The watch repeats its wear state every few seconds; only a change is worth a log line.
                 let mut last_worn: Option<bool> = None;
                 loop {
@@ -478,6 +490,7 @@ pub fn run() {
                                 WatchEvent::Disconnected => {
                                     miss_recorder::note(&watch_handle, "watch", "disconnected");
                                     last_worn = None;
+                                    keep_awake.release();
                                     watch_handle.state::<drone::DroneRuntime>().watch_lost();
                                     watch_handle
                                         .state::<automation::AutomationRuntime>()
@@ -487,6 +500,7 @@ pub fn run() {
                                         .watch_lost(&watch_handle);
                                 }
                                 WatchEvent::Orientation(sample) => {
+                                    keep_awake.note_data();
                                     watch_handle
                                         .state::<miss_recorder::MissRecorder>()
                                         .observe_orientation(sample);
@@ -501,6 +515,7 @@ pub fn run() {
                                         .observe_orientation(&watch_handle, sample);
                                 }
                                 WatchEvent::Ppg(sample) => {
+                                    keep_awake.note_data();
                                     watch_handle
                                         .state::<miss_recorder::MissRecorder>()
                                         .observe_ppg(sample);

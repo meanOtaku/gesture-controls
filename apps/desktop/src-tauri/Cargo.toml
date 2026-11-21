@@ -36,7 +36,8 @@ tauri-plugin-dialog = "2.7.3"
 tauri-plugin-fs = "2.5.2"
 tauri-plugin-global-shortcut = "~2.3"
 
-# Moving old exported copies to the Trash (`export_copies::move_to_trash`), already in the build through Tauri.
+# Moving old exported copies to the Trash (`export_copies::move_to_trash`) and the strings for the keep-awake assertion
+# (`keep_awake`); already in the build through Tauri.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSError", "NSFileManager", "NSString", "NSURL"] }
 
